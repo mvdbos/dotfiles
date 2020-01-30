@@ -25,7 +25,7 @@ set smartcase
 set gdefault
 set hlsearch      " highlight search terms
 "This unsets the 'last search pattern' register by hitting return
-nnoremap <CR> :noh<CR><CR>o
+nnoremap <CR> :noh<CR><CR>
 
 " Disabling the arrow keys to help do things the 'right' way
 nnoremap <up> <nop>
@@ -45,6 +45,10 @@ imap jj <Esc>
 " Easier moving to start and end of line
 nnoremap H ^
 nnoremap L $
+
+" Disable realtime gitgutter for better interaction between plugins
+let g:gitgutter_realtime = 0
+let g:gitgutter_eager = 0
 
 set backupdir=~/.vim/tmp/backup//
 set backup
@@ -66,10 +70,28 @@ au BufReadPost,BufNewFile *.md setlocal formatoptions=tron
 au BufReadPost,BufNewFile *.md setlocal formatlistpat=^\\s*\\d\\+\\.\\s\\+\\\\|^\\s*[+-\\*]\\s\\+
 au BufReadPost,BufNewFile *.md setlocal nolist
 au BufReadPost,BufNewFile *.md setlocal nolisp
-au BufReadPost,BufNewFile *.md setlocal spell! spelllang=en_us,nl
 
+" enable completion from spell dict in spell mode
+au BufReadPost,BufNewFile *.md setlocal complete+=kspell
+" makes completions match case with typed text
+au BufReadPost,BufNewFile *.md setlocal infercase
 
-" Completion popup settings
+" Markdown folding: ensure performance by setting manual in insert mode
+function! s:setFoldManual()
+    let w:last_fdm = &foldmethod
+    setlocal foldmethod=manual
+endfunction
+function! s:resFoldMethod()
+    let &l:foldmethod = w:last_fdm
+    silent! foldopen
+endfunction
+augroup fold
+    autocmd!
+    autocmd InsertEnter * call s:setFoldManual()
+    autocmd InsertLeave * call s:resFoldMethod()
+augroup END
+
+" Completion pop-up settings
 set completeopt=menu,longest
 
 " Make <Enter> select item (C-y) instead of inserting new line if menu is open
@@ -99,7 +121,6 @@ let g:airline#extensions#tabline#buffer_min_count = 0
 let g:airline#extensions#tabline#buffer_idx_mode = 1
 let g:airline_theme='dracula'
 nmap <leader>1 <Plug>AirlineSelectTab1
-
 nmap <leader>2 <Plug>AirlineSelectTab2
 nmap <leader>3 <Plug>AirlineSelectTab3
 nmap <leader>4 <Plug>AirlineSelectTab4
@@ -133,6 +154,10 @@ nnoremap <C-h> <C-w>h
 nnoremap <C-j> <C-w>j
 nnoremap <C-k> <C-w>k
 nnoremap <C-l> <C-w>l
+
+
+set spelllang=en
+nmap <silent> <leader>s :setlocal spell! <CR>
 
 " Whitespace fixes
 highlight ExtraWhitespace ctermbg=red guibg=red
@@ -177,4 +202,10 @@ endfun
 "autocmd FileType c,cpp,python,ruby,java,php,text,vim autocmd BufWritePre * :call TrimWhitespace()
 :noremap <Leader>sw :call TrimWhitespace()<CR>
 
+"superscript mapping ---------------------- {{{
+execute "digraphs xS " . 0x02E3
+"}}}
 
+" Do we have local vimrc?
+" If so, go ahead and load it.
+execute "silent! source ~/.vimrc.local"
