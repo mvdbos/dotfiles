@@ -6,7 +6,7 @@ else
 fi
 
 brew update
-brew install git vim stow wget curl htop tree
+brew install git vim stow wget curl htop tree coreutils bash-completion
 brew upgrade
 brew cleanup -s
 brew analytics off
