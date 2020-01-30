@@ -1,0 +1,21 @@
+[submodule "vim/.vim/pack/my-plugins/start/nerdtree"]
+	path = vim/.vim/pack/my-plugins/start/nerdtree
+	url = https://github.com/preservim/nerdtree.git
+[submodule "vim/.vim/pack/my-plugins/start/vim-sensible"]
+	path = vim/.vim/pack/my-plugins/start/vim-sensible
+	url = https://github.com/tpope/vim-sensible.git
+[submodule "vim/.vim/pack/my-plugins/start/vim-surround"]
+	path = vim/.vim/pack/my-plugins/start/vim-surround
+	url = https://github.com/tpope/vim-surround.git
+[submodule "vim/.vim/pack/my-themes/start/dracula"]
+	path = vim/.vim/pack/my-themes/start/dracula
+	url = https://github.com/dracula/vim.git
+[submodule "vim/.vim/pack/my-plugins/start/vim-airline"]
+	path = vim/.vim/pack/my-plugins/start/vim-airline
+	url = https://github.com/vim-airline/vim-airline.git
+[submodule "vim/.vim/pack/my-plugins/start/vim-gitgutter"]
+	path = vim/.vim/pack/my-plugins/start/vim-gitgutter
+	url = https://github.com/airblade/vim-gitgutter.git
+[submodule "vim/.vim/pack/my-plugins/start/vim-fugitive"]
+	path = vim/.vim/pack/my-plugins/start/vim-fugitive
+	url = https://github.com/tpope/vim-fugitive.git
