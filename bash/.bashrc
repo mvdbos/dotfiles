@@ -97,7 +97,8 @@ alias ps="ps fax"
 alias psg="ps aux | grep -v grep | grep -i -e VSZ -e"
 
 # Git prompt settings
-source /etc/bash_completion.d/git-prompt
+test -f /etc/bash_completion.d/git-prompt && source /etc/bash_completion.d/git-prompt
+test -f /usr/local/etc/bash_completion.d/git-prompt.sh && source /usr/local/etc/bash_completion.d/git-prompt.sh
 export GIT_PS1_SHOWDIRTYSTATE=true
 export GIT_PS1_SHOWUNTRACKEDFILES=true
 export GIT_PS1_SHOWUPSTREAM=auto
@@ -108,7 +109,8 @@ else
     PROMPT_COMMAND='__git_ps1 "${debian_chroot:+($debian_chroot)}\u@\h:\w" "\\\$ "'
 fi
 
-source /usr/share/bash-completion/completions/git
+test -f /usr/local/etc/bash_completion.d/git-completion.bash && source /usr/local/etc/bash_completion.d/git-completion.bash
+test -f /usr/share/bash-completion/completions/git && source /usr/share/bash-completion/completions/git
 # enable git completion on 'g' alias in addition to 'git'
 __git_complete g __git_main
 __git_complete ga _git_add

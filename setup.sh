@@ -4,7 +4,7 @@ PLATFORM_NAME=`uname`
 
 if [ "$PLATFORM_NAME" == "Darwin" ]; then
     echo "Detected OS X install, proceeding with OS X setup..."
-    bash setup_linux.bash
+    bash setup_osx.bash
 else
     echo "Detected Linux install, proceeding with Linux setup..."
     bash setup_linux.bash
