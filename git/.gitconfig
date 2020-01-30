@@ -1,0 +1,40 @@
+[user]
+    name = Matthijs van den Bos
+    email = matthijs@vandenbos.org
+[credential]
+    helper = store
+[push]
+    default = current
+[alias]
+    co = checkout
+    ci = commit
+    lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr)%Creset %C(blue)(%an)%Creset'  --abbrev-commit --date=relative
+    st = status -s -b
+    br = branch
+    pr = pull-request
+    ctags = !.git/hooks/ctags
+    gr = grep -i -n -0 --heading --break
+[color]
+    ui = auto # covers diff = true, status = auto, branch = auto
+    interactive = auto
+[core]
+    editor = vim
+    excludesfile = /Users/matthijs/.gitignore-global
+[diff]
+    tool = vimdiff
+[merge]
+    tool = vimdiff
+[filter "media"]
+    clean = git-media-clean %f
+    smudge = git-media-smudge %f
+[filter "lfs"]
+    clean = git-lfs clean %f
+    smudge = git-lfs smudge %f
+    required = true
+[color "diff"]
+    whitespace = red reverse
+[fetch]
+    prune = true
+[status]
+    submodulesummary = 1
+

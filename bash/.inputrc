@@ -1,0 +1,22 @@
+set editing-mode vi
+# set keymap vi
+
+set show-all-if-ambiguous on
+set skip-completed-text on
+
+set keymap vi-command
+# these are for vi-command mode
+"\e[A": history-search-backward
+"\e[B": history-search-forward
+"\e.": yank-last-arg
+"\e0": "\C-p0ea "
+"\es": menu-complete
+
+set keymap vi-insert
+# these are for vi-insert mode
+"\e[A": history-search-backward
+"\e[B": history-search-forward
+"\e.": yank-last-arg
+Control-l: clear-screen
+"\es": menu-complete
+
