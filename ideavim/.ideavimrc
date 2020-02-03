@@ -1,0 +1,43 @@
+let mapleader = ","
+
+" search settings
+set ignorecase
+set smartcase
+set gdefault
+set hlsearch      " highlight search terms
+"This unsets the 'last search pattern' register by hitting return
+nnoremap <CR> :noh<CR><CR>
+
+set surround
+
+set cursorline
+set number
+set scrolljump=5              " Jump 5 lines when running out of the screen
+
+" Disabling the arrow keys to help do things the 'right' way
+nnoremap <up> <nop>
+nnoremap <down> <nop>
+nnoremap <left> <nop>
+nnoremap <right> <nop>
+inoremap <up> <nop>
+inoremap <down> <nop>
+inoremap <left> <nop>
+inoremap <right> <nop>
+nnoremap j gj
+nnoremap k gk
+
+" map jj to Esc
+imap jj <Esc>
+
+" Easier moving to start and end of line
+nnoremap H ^
+nnoremap L $
+
+" Mappings
+map <Leader>/ :action FindInPath<CR>
+map <Leader>t :action ActivateStructureToolWindow<CR>
+map <Leader>n :action ActivateProjectToolWindow<CR>
+map <C-p> :action SearchEverywhere<CR>
+
+nnoremap ]s :action GotoNextError<CR>
+nnoremap [s :action GotoPreviousError<CR>

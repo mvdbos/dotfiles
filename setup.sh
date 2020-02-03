@@ -24,4 +24,5 @@ if [ "$PLATFORM_NAME" == "Darwin" ]; then
     echo "Restowing Mac apps..."
     stow -v -R phoenix
     stow -v -R iterm2
+    stow -v -R ideavim
 fi
