@@ -46,18 +46,29 @@ if [ -n "$force_color_prompt" ]; then
     fi
 fi
 
+# load platform-dependent aliases
+if [ "$PLATFORM_NAME" == "Darwin" ]; then
+    alias ls='gls -F1B --group-directories-first --color=auto'
+    alias rm='grm -I'
+    alias mv='gmv -iu --strip-trailing-slashes'
+    alias df='gdf -h --total'
+    alias dircolors='gdircolors'
+    alias dir='gdir'
+else
+    alias ls='ls -F1B --group-directories-first --color=auto'
+    alias rm='rm -I'
+    alias mv='mv -iu --strip-trailing-slashes'
+    alias df='df -h --total'
+fi
+
 
 # enable color support of ls and also add handy aliases
-if [ -x /usr/bin/dircolors ]; then
-    test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
-    alias ls='ls --color=auto'
-    alias dir='dir --color=auto'
-    alias vdir='vdir --color=auto'
-
-    alias grep='grep --color=auto'
-    alias fgrep='fgrep --color=auto'
-    alias egrep='egrep --color=auto'
-fi
+test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
+alias dir='dir --color=auto'
+alias vdir='vdir --color=auto'
+alias grep='grep --color=auto'
+alias fgrep='fgrep --color=auto'
+alias egrep='egrep --color=auto'
 
 # colored GCC warnings and errors
 export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
@@ -71,19 +82,12 @@ export SVN_EDITOR="vim"
 # Note: this is also done by the settings in .inputrc already. This is extra
 set -o vi
 
-# load aliases
-if [ "$PLATFORM_NAME" == "Darwin" ]; then
-    alias ls='gls -F1B --group-directories-first --color=auto'
-    alias rm='grm -I'
-    alias mv='gmv -iu --strip-trailing-slashes'
-    alias df='gdf -h --total'
-else
-    alias ls='ls -F1B --group-directories-first --color=auto'
-    alias rm='rm -I'
-    alias mv='mv -iu --strip-trailing-slashes'
-    alias df='df -h --total'
-fi
 
+alias cp='cp -i'
+alias mkdir='mkdir -pv'
+alias diff='colordiff'
+alias du='du -hc'
+alias tree='tree -F'
 function cdls () { builtin cd "$@" && ls; }
 alias cd='cdls'
 alias l='ls'
@@ -103,6 +107,9 @@ else
     #test -f /usr/share/bash-completion/completions/git && source /usr/share/bash-completion/completions/git
     test -f /usr/share/bash-completion/bash_completion && source /usr/share/bash-completion/bash_completion
 fi
+
+# Set the truncation length of \w (current working dir) in prompt
+export PROMPT_DIRTRIM=3
 
 # Git prompt settings
 export GIT_PS1_SHOWDIRTYSTATE=true
