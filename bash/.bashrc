@@ -62,17 +62,6 @@ fi
 # colored GCC warnings and errors
 export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
-# enable programmable completion features (you don't need to enable
-# this, if it's already enabled in /etc/bash.bashrc and /etc/profile
-# sources /etc/bash.bashrc).
-if ! shopt -oq posix; then
-    if [ -f /usr/share/bash-completion/bash_completion ]; then
-        . /usr/share/bash-completion/bash_completion
-    elif [ -f /etc/bash_completion ]; then
-        . /etc/bash_completion
-    fi
-fi
-
 # we always want to use Vim
 export EDITOR="vim"
 export VISUAL="vim"
@@ -88,30 +77,34 @@ if [ "$PLATFORM_NAME" == "Darwin" ]; then
     alias rm='grm -I'
     alias mv='gmv -iu --strip-trailing-slashes'
     alias df='gdf -h --total'
-
 else
     alias ls='ls -F1B --group-directories-first --color=auto'
     alias rm='rm -I'
     alias mv='mv -iu --strip-trailing-slashes'
     alias df='df -h --total'
-
 fi
-
 
 function cdls () { builtin cd "$@" && ls; }
 alias cd='cdls'
-
 alias l='ls'
 alias lrt='ls -rt'
 alias ll='ls -ohgBv --group-directories-first'
 alias la='ls -lAhvG --group-directories-first'
-
 alias ps="ps fax"
 alias psg="ps aux | grep -v grep | grep -i -e VSZ -e"
 
+# load source files
+if [ "$PLATFORM_NAME" == "Darwin" ]; then
+    test -f  ~/.iterm2_shell_integration.bash && source ~/.iterm2_shell_integration.bash
+    test -f /usr/local/etc/bash_completion.d/git-prompt.sh && source /usr/local/etc/bash_completion.d/git-prompt.sh
+    test -f /usr/local/etc/bash_completion && source /usr/local/etc/bash_completion
+else
+    test -f /etc/bash_completion.d/git-prompt && source /etc/bash_completion.d/git-prompt
+    #test -f /usr/share/bash-completion/completions/git && source /usr/share/bash-completion/completions/git
+    test -f /usr/share/bash-completion/bash_completion && source /usr/share/bash-completion/bash_completion
+fi
+
 # Git prompt settings
-test -f /etc/bash_completion.d/git-prompt && source /etc/bash_completion.d/git-prompt
-test -f /usr/local/etc/bash_completion.d/git-prompt.sh && source /usr/local/etc/bash_completion.d/git-prompt.sh
 export GIT_PS1_SHOWDIRTYSTATE=true
 export GIT_PS1_SHOWUNTRACKEDFILES=true
 export GIT_PS1_SHOWUPSTREAM=auto
@@ -122,8 +115,6 @@ else
     PROMPT_COMMAND='__git_ps1 "${debian_chroot:+($debian_chroot)}\u@\h:\w" "\\\$ "'
 fi
 
-test -f /usr/local/etc/bash_completion.d/git-completion.bash && source /usr/local/etc/bash_completion.d/git-completion.bash
-test -f /usr/share/bash-completion/completions/git && source /usr/share/bash-completion/completions/git
 # enable git completion on 'g' alias in addition to 'git'
 __git_complete g __git_main
 __git_complete ga _git_add
@@ -159,4 +150,10 @@ alias gs='g st'
 alias gw="g log --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %C(white)%s %Cgreen(%cr)%Creset %C(blue)(%an)%Creset %n%+b' --stat --no-merges  --date=relative --ignore-all-space --ignore-blank-lines  --ignore-space-at-eol  --ignore-space-change"
 alias gwip="git add . && git commit -m 'WIP' --no-verify  && git push"
 
+
+export LC_ALL=en_GB.UTF-8
+export LANG=en_GB.UTF-8
+
 test -f ~/.bashrc.local && source ~/.bashrc.local
+
+
