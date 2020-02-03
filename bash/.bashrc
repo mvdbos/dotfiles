@@ -1,3 +1,4 @@
+PATH="/usr/local/bin:$PATH"
 PLATFORM_NAME=`uname`
 
 # If not running interactively, don't do anything
@@ -84,8 +85,16 @@ set -o vi
 # load aliases
 if [ "$PLATFORM_NAME" == "Darwin" ]; then
     alias ls='gls -F1B --group-directories-first --color=auto'
+    alias rm='grm -I'
+    alias mv='gmv -iu --strip-trailing-slashes'
+    alias df='gdf -h --total'
+
 else
     alias ls='ls -F1B --group-directories-first --color=auto'
+    alias rm='rm -I'
+    alias mv='mv -iu --strip-trailing-slashes'
+    alias df='df -h --total'
+
 fi
 
 
@@ -97,11 +106,6 @@ alias lrt='ls -rt'
 alias ll='ls -ohgBv --group-directories-first'
 alias la='ls -lAhvG --group-directories-first'
 
-alias df='df -h --total'
-
-alias mv='mv -iu --strip-trailing-slashes'
-
-alias rm='rm -I'
 alias ps="ps fax"
 alias psg="ps aux | grep -v grep | grep -i -e VSZ -e"
 
@@ -155,3 +159,4 @@ alias gs='g st'
 alias gw="g log --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %C(white)%s %Cgreen(%cr)%Creset %C(blue)(%an)%Creset %n%+b' --stat --no-merges  --date=relative --ignore-all-space --ignore-blank-lines  --ignore-space-at-eol  --ignore-space-change"
 alias gwip="git add . && git commit -m 'WIP' --no-verify  && git push"
 
+test -f ~/.bashrc.local && source ~/.bashrc.local

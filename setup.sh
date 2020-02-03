@@ -15,9 +15,12 @@ git submodule init
 git submodule update
 git submodule foreach git pull origin master
 
-echo "Restowing all apps..."
-for dir in */
-do
-    echo Restowing $dir
-    stow -R $dir
-done
+echo "Restowing common apps..."
+stow -v -R bash
+stow -v -R git
+stow -v -R vim
+
+if [ "$PLATFORM_NAME" == "Darwin" ]; then
+    echo "Restowing Mac apps..."
+    stow -v -R phoenix
+fi
