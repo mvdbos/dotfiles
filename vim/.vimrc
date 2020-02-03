@@ -110,8 +110,12 @@ set pumheight=5
 inoremap <expr> <C-n> pumvisible() ? '<C-n>' :
   \ '<C-n><C-r>=pumvisible() ? "\<lt>Down>" : ""<CR>'
 
+" Set compat settings before Dracula colorscheme is loaded
+let g:dracula_colorterm = 0
+let g:dracula_italic = 0
+
 colorscheme dracula
-highlight Normal ctermbg=None
+"highlight Normal ctermbg=None
 
 let g:airline_powerline_fonts = 0
 let g:airline#extensions#tabline#enabled = 1
