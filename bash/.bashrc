@@ -66,6 +66,8 @@ else
     alias df='df -h --total'
 fi
 
+export WGETRC="${HOME}/.config/wget/wgetrc"
+alias wget='wget --execute ca_certificate=~/.config/certs/insg3_b64.cer --hsts-file=~/.config/wget/wget-hsts-db'
 
 # enable color support of ls and also add handy aliases
 test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"

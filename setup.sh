@@ -19,11 +19,12 @@ echo "Restowing common apps..."
 stow -v -R bash
 stow -v -R git
 stow -v -R vim
+stow -v -R certs
+stow -v -R wget 
 
 if [ "$PLATFORM_NAME" == "Darwin" ]; then
     echo "Restowing Mac apps..."
     stow -v -R phoenix
-    stow -v -R iterm2
     stow -v -R ideavim
 fi
 
