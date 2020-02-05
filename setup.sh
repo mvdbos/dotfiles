@@ -26,3 +26,9 @@ if [ "$PLATFORM_NAME" == "Darwin" ]; then
     stow -v -R iterm2
     stow -v -R ideavim
 fi
+
+# Add Dracula theme for bat
+echo "Adding Dracula theme for bat..."
+mkdir -p "$(bat --config-dir)/themes"
+git clone https://github.com/dracula/sublime.git $(bat --config-dir)/themes/dracula
+bat cache --build

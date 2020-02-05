@@ -1,4 +1,6 @@
 PATH="/usr/local/bin:$PATH"
+PATH="~/.bin:$PATH"
+
 PLATFORM_NAME=`uname`
 
 # If not running interactively, don't do anything
@@ -21,6 +23,9 @@ HISTFILESIZE=2000
 # check the window size after each command and, if necessary,
 # update the values of LINES and COLUMNS.
 shopt -s checkwinsize
+
+# Add autocorrect to dirnames
+shopt -s cdspell
 
 # make less more friendly for non-text input files, see lesspipe(1)
 [ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
@@ -83,6 +88,13 @@ export SVN_EDITOR="vim"
 set -o vi
 
 
+# Set bat as cat alias and a pager for the man command
+alias cat=bat
+export MANPAGER="sh -c 'col -bx | bat -l man -p'"
+export BAT_THEME="Dracula"
+#It might also be necessary to set MANROFFOPT="-c" if you experience formatting problems.
+
+alias top='htop'
 alias cp='cp -i'
 alias mkdir='mkdir -pv'
 alias diff='colordiff'
@@ -162,5 +174,3 @@ export LC_ALL=en_GB.UTF-8
 export LANG=en_GB.UTF-8
 
 test -f ~/.bashrc.local && source ~/.bashrc.local
-
-
