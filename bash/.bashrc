@@ -111,7 +111,7 @@ alias psg="ps aux | grep -v grep | grep -i -e VSZ -e"
 
 # load source files
 if [ "$PLATFORM_NAME" == "Darwin" ]; then
-    test -f  ~/.iterm2_shell_integration.bash && source ~/.iterm2_shell_integration.bash
+    test -f  ~/.config/iterm2/.iterm2_shell_integration.bash && source ~/.config/iterm2/.iterm2_shell_integration.bash
     test -f /usr/local/etc/bash_completion.d/git-prompt.sh && source /usr/local/etc/bash_completion.d/git-prompt.sh
     test -f /usr/local/etc/bash_completion && source /usr/local/etc/bash_completion
 else
