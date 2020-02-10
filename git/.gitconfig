@@ -20,9 +20,13 @@
 [core]
     editor = vim
     excludesfile = /Users/matthijs/.gitignore-global
-    pager = diff-so-fancy | less -RFXS
+    pager = ~/.bin/diff-so-fancy | less -RFXS
+[pager]
+    add = true
 [diff]
     tool = vimdiff
+[difftool]
+    prompt = false
 [merge]
     tool = vimdiff
     conflictstyle = diff3
