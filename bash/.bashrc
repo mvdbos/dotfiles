@@ -172,7 +172,13 @@ alias gw="g log --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %C(white)%s
 alias gwip="git add . && git commit -m 'WIP' --no-verify  && git push"
 
 
-export LC_ALL=en_GB.UTF-8
-export LANG=en_GB.UTF-8
+# load source files
+if [ "$PLATFORM_NAME" == "Darwin" ]; then
+    export LC_ALL=en_US.UTF-8
+    export LANG=en_US.UTF-8
+else
+    export LC_ALL=en_US.utf8
+    export LANG=en_US.utf8
+fi
 
 test -f ~/.bashrc.local && source ~/.bashrc.local
