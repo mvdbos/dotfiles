@@ -118,8 +118,8 @@ if [ "$PLATFORM_NAME" == "Darwin" ]; then
     test -f /usr/local/etc/bash_completion && source /usr/local/etc/bash_completion
 else
     test -f /etc/bash_completion.d/git-prompt && source /etc/bash_completion.d/git-prompt
-    #test -f /usr/share/bash-completion/completions/git && source /usr/share/bash-completion/completions/git
     test -f /usr/share/bash-completion/bash_completion && source /usr/share/bash-completion/bash_completion
+    test -f /usr/share/bash-completion/completions/git && source /usr/share/bash-completion/completions/git
 fi
 
 # Set the truncation length of \w (current working dir) in prompt
@@ -178,6 +178,7 @@ if [ "$PLATFORM_NAME" == "Darwin" ]; then
     export LANG=en_US.UTF-8
 else
     export LC_ALL=en_US.utf8
+    export LANGUAGE=en_US.utf8
     export LANG=en_US.utf8
 fi
 
