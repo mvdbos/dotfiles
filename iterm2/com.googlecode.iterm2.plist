@@ -1144,6 +1144,10 @@
 	<integer>37</integer>
 	<key>NoSyncNeverAskAboutSettingAlternateMouseScroll</key>
 	<true/>
+	<key>NoSyncNeverRemindPrefsChangesLostForFile</key>
+	<true/>
+	<key>NoSyncNeverRemindPrefsChangesLostForFile_selection</key>
+	<integer>0</integer>
 	<key>NoSyncNextAnnoyanceTime</key>
 	<real>591870662.30763996</real>
 	<key>NoSyncOnboardingWindowHasBeenShown</key>
@@ -1870,6 +1874,8 @@
 	<false/>
 	<key>OpenTmuxWindowsIn</key>
 	<integer>0</integer>
+	<key>PerPaneBackgroundImage</key>
+	<false/>
 	<key>PointerActions</key>
 	<dict>
 		<key>Button,1,1,,</key>
@@ -1925,8 +1931,12 @@
 	<true/>
 	<key>SeparateStatusBarsPerPane</key>
 	<false/>
+	<key>ShowPaneTitles</key>
+	<false/>
 	<key>SoundForEsc</key>
 	<false/>
+	<key>SplitPaneDimmingAmount</key>
+	<real>0.48527260638297876</real>
 	<key>StatusBarPosition</key>
 	<integer>0</integer>
 	<key>SuppressRestartAnnouncement</key>
