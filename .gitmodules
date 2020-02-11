@@ -19,3 +19,9 @@
 [submodule "vim/.vim/pack/my-plugins/start/vim-fugitive"]
 	path = vim/.vim/pack/my-plugins/start/vim-fugitive
 	url = https://github.com/tpope/vim-fugitive.git
+[submodule "vim/.vim/pack/my-plugins/start/vim-markdown"]
+	path = vim/.vim/pack/my-plugins/start/vim-markdown
+	url = https://github.com/plasticboy/vim-markdown
+[submodule "vim/.vim/pack/my-plugins/start/vim-airline-clock"]
+	path = vim/.vim/pack/my-plugins/start/vim-airline-clock
+	url = https://github.com/enricobacis/vim-airline-clock
