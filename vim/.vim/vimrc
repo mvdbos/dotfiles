@@ -6,6 +6,8 @@ set viminfo+=n~/.vim/viminfo
 
 let mapleader = ","
 
+set columns=80
+
 set nowrap
 set enc=utf-8
 set hidden
@@ -58,25 +60,37 @@ set undodir=~/.vim/tmp/undo//   " set the undo dir
 set undofile                    " enable undo
 set directory=~/.vim/tmp/swap//
 
+" Better side scrolling, without the irritating jumps
+set sidescroll=5
+
 " Markdown settings
-" au BufReadPost,BufNewFile *.md setlocal linebreak wrap
-au BufReadPost,BufNewFile *.md setlocal autoindent
+" Please note that some settings are being set in ~/.vim/after/markdown.vim,
+" because settings from vim core and loaded plugins are loaded after vimrc and
+" will override settings form vimrc. Everything in `after` is loaded last.
+let g:vim_markdown_no_default_key_mappings = 1
+let g:vim_markdown_toc_autofit = 1
+let g:vim_markdown_auto_insert_bullets=0
+let g:vim_markdown_new_list_item_indent=0
+
+au BufReadPost,BufNewFile *.md setlocal nonumber
+au BufReadPost,BufNewFile *.md setlocal textwidth=0 wrapmargin=0
+
+" These settings are for soft wrap
+au BufReadPost,BufNewFile *.md setlocal linebreak wrap
 au BufReadPost,BufNewFile *.md setlocal breakindent breakindentopt=shift:2
-au BufReadPost,BufNewFile *.md setlocal textwidth=0 wrapmargin=0 colorcolumn=
-au BufReadPost,BufNewFile *.md setlocal filetype=markdown
+"au BufReadPost,BufNewFile *.md let &showbreak='> '
+
 au BufReadPost,BufNewFile *.md setlocal conceallevel=2
 au BufReadPost,BufNewFile *.md setlocal foldlevel=3
 au BufReadPost,BufNewFile *.md setlocal ts=4 sw=4 expandtab smarttab
-au BufReadPost,BufNewFile *.md setlocal comments=b:*,b:-,b:+,n:>,se:``` commentstring=>\ %s
-au BufReadPost,BufNewFile *.md setlocal formatoptions=tron
-au BufReadPost,BufNewFile *.md setlocal formatlistpat=^\\s*\\d\\+\\.\\s\\+\\\\|^\\s*[+-\\*]\\s\\+
-au BufReadPost,BufNewFile *.md setlocal nolist
-au BufReadPost,BufNewFile *.md setlocal nolisp
 
 " enable completion from spell dict in spell mode
 au BufReadPost,BufNewFile *.md setlocal complete+=kspell
 " makes completions match case with typed text
 au BufReadPost,BufNewFile *.md setlocal infercase
+
+"au FileType markdown set columns=80
+"autocmd VimResized,BufWinEnter,BufReadPost,BufNewFile *.md set columns=80
 
 " Markdown folding: ensure performance by setting manual in insert mode
 function! s:setFoldManual()
@@ -116,16 +130,46 @@ inoremap <expr> <C-n> pumvisible() ? '<C-n>' :
 let g:dracula_colorterm = 0
 let g:dracula_italic = 0
 
+" gv keeps visual selection after indent operation
+vnoremap > >gv
+vnoremap < <gv
+
 colorscheme dracula
-"highlight Normal ctermbg=None
 
 let g:airline_powerline_fonts = 0
+
+if !exists('g:airline_symbols')
+    let g:airline_symbols = {}
+endif
+let g:airline_section_z = '%p%% %l/%L:%v'
+let g:airline#extensions#wordcount#formatter#default#fmt = '%sW'
+let g:airline#extensions#wordcount#formatter#default#fmt_short = '%sW'
+" Only show file format if it is NOT unix UTF-8
+let g:airline#parts#ffenc#skip_expected_string='utf-8[unix]'
+
+" Uncomment to enable tabs as buffers
+"set switchbuf=newtab,usetab
+"au BufNewFile,BufReadPost * setlocal bufhidden=delete
+
 let g:airline#extensions#tabline#enabled = 1
+let g:airline#extensions#tabline#fnamemod = ':t'
 let g:airline#extensions#tabline#tab_nr_type = 1
 let g:airline#extensions#tabline#show_buffers = 1
 let g:airline#extensions#tabline#buffer_min_count = 0
 let g:airline#extensions#tabline#buffer_idx_mode = 1
+let g:airline#extensions#clock#auto = 1
+let g:airline#extensions#clock#format = '◷ %H:%M'
+let g:airline#extensions#tabline#formatter = 'unique_tail_improved'
+
 let g:airline_theme='dracula'
+
+cnoremap q qa
+nnoremap <leader>q :bp <BAR> bd #<CR>
+cnoremap bd :bp <BAR> bd #<CR>
+nnoremap <leader>b :ls<CR>:b<space>
+nnoremap ]b :bnext<CR>
+nnoremap [b :bprevious<CR>
+
 nmap <leader>1 <Plug>AirlineSelectTab1
 nmap <leader>2 <Plug>AirlineSelectTab2
 nmap <leader>3 <Plug>AirlineSelectTab3
@@ -145,10 +189,31 @@ cmap w!! %!sudo tee > /dev/null %
 
 " NerdTree settings
 map <Leader>n <ESC>:NERDTreeToggle<CR>
-let g:NERDTreeShowHidden=0
+let NERDTreeShowHidden=0
 let NERDTreeMinimalUI=1
 let NERDTreeQuitOnOpen=1
 let NERDTreeRespectWildIgnore=1
+let NERDTreeAutoDeleteBuffer=1
+let NERDTreeShowBookmarks=1
+" Uncomment this to always open in a new tab
+"let NERDTreeCustomOpenArgs={'file': {'reuse': 'all', 'where': 't'}, 'dir': {}}
+
+" auto open NERDTree if vim is called with no args or dir arg
+function! NERDTreeStartUp()
+    if !argc() && !exists("s:std_in")
+        NERDTreeFocus
+    end
+    if argc() && isdirectory(argv()[0]) && !exists("s:std_in")
+        exe 'NERDTree' argv()[0]
+        wincmd p
+        ene
+        exe 'cd '.argv()[0]
+        NERDTreeFocus
+    end
+endfunction
+
+autocmd StdinReadPre * let s:std_in=1
+autocmd VimEnter * call NERDTreeStartUp()
 
 "close vim if the only window left open is a NERDTree
 autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isTabTree()) | q | endif
@@ -179,7 +244,8 @@ augroup END
 " Bclose() {{{2
 " delete buffer without closing window
 " We need this to prevent tagbar closing vim on :bd
-cmap bd call Bclose()
+
+"cmap bd call Bclose()
 function! Bclose()
     let curbufnr = bufnr("%")
     let altbufnr = bufnr("#")
