@@ -22,7 +22,7 @@
     excludesfile = /Users/matthijs/.gitignore-global
     pager = ~/.bin/diff-so-fancy | less -RFXS
 [pager]
-    add = true
+    #add= ~/.bin/diff-so-fancy
 [diff]
     tool = vimdiff
 [difftool]
