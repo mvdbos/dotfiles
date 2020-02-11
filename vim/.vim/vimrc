@@ -22,6 +22,7 @@ set shiftwidth=4  " number of spaces to use for autoindenting
 set cursorline
 
 set mouse=a
+set clipboard=unnamed
 
 " search settings
 set ignorecase
