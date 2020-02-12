@@ -138,6 +138,16 @@ function prompt_clock {
     fi
     echo -n "[$(date +%H:%M)]"
     tput rc
+    }
+
+function prompt_hostname {
+    if [ -n "$SSH_CLIENT" ] || [ -n "$SSH_TTY" ]; then
+        if [ "$color_prompt" = yes ]; then
+            echo "\[\033[00;90m\]\h\[\033[00m\]:"
+        else
+            echo "\h:"
+        fi
+    fi
 }
 
 # Set the truncation length of \w (current working dir) in prompt
@@ -149,9 +159,9 @@ export GIT_PS1_SHOWUNTRACKEDFILES=true
 export GIT_PS1_SHOWUPSTREAM=auto
 export GIT_PS1_SHOWCOLORHINTS=true
 if [ "$color_prompt" = yes ]; then
-    PROMPT_COMMAND='prompt_clock; __git_ps1 "\n${debian_chroot:+($debian_chroot)}\[\033[00;90m\]\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]" "\\\$ "'
+    PROMPT_COMMAND='prompt_clock; __git_ps1 "\n${debian_chroot:+($debian_chroot)}\[\033[00;90m\]${prompt_hostname}\[\033[00m\]\[\033[01;34m\]\w\[\033[00m\]" "\\\$ "'
 else
-    PROMPT_COMMAND='__git_ps1 "\n${debian_chroot:+($debian_chroot)}\h:\w" "\\\$ "'
+    PROMPT_COMMAND='__git_ps1 "\n${debian_chroot:+($debian_chroot)}${prompt_hostname}\w" "\\\$ "'
 fi
 
 # enable git completion on 'g' alias in addition to 'git'
