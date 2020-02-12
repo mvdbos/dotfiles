@@ -128,29 +128,63 @@ else
     test -f /usr/share/bash-completion/completions/git && source /usr/share/bash-completion/completions/git
 fi
 
-function prompt_clock {
-    #  prompt_x is where to position the cursor to write the clock
-    let prompt_x=$(tput cols)-7
-    #  Move up one; not sure why we need to do this, but without this, I always
-    #  got an extra blank line between prompts
-    tput cuu1
-    tput sc
-    tput cup 0 ${prompt_x}
-    if [ "$color_prompt" = yes ]; then
-        tput setaf 240
-    fi
-    echo -n "[$(date +%H:%M)]"
-    tput rc
-    }
 
-function prompt_hostname {
-    if [ -n "$SSH_CLIENT" ] || [ -n "$SSH_TTY" ]; then
-        if [ "$color_prompt" = yes ]; then
-            echo "\[\033[00;90m\]\h\[\033[00m\]:"
-        else
-            echo "\h:"
+#function bash_clock {
+#    FG_GRAY="$(tput setaf 240)"
+#    let clock_x=$(($(tput cols)-8))
+#
+#    tput sc                       # saved the cursor position
+#    tput cud1                     # up one line
+#    tput cuf $clock_x                 # move $COL characters left
+#    echo "${FG_GRAY}[$(date +%H:%M)]" # set the colour and print the date
+#    tput rc                       # restore the cursor positionVkk
+#}
+
+function git_prompt_pre() {
+    local exit_code="$?"
+
+    prompt_string="\n"
+
+    local RCol='\[\e[0m\]'
+
+    local Gry='\[\e[0;90m\]'
+    local Red='\[\e[0;31m\]'
+    local Yel='\[\e[0;33m\]'
+    local BBlu='\[\e[1;34m\]'
+    local Mag='\[\e[0;35m\]'
+
+    # Show current time
+    prompt_string+="${Gry}[$(date +%H:%M)] ${RCol}"
+
+    # Show exit code if non-zero
+    if [ $exit_code != 0 ]; then
+        prompt_string+="${Red}(${exit_code}) ${RCol}"
+    fi
+
+    # Check Jobs
+    type jobs &>/dev/null
+    if [ $? == "0" ]; then
+        ## Backgrounded running jobs
+        local jobs=$(jobs -r | wc -l | tr -d ' ')
+        ## Stopped Jobs
+        local jobs=$((jobs + $(jobs -s | wc -l | tr -d ' ')))
+
+        if [ ${jobs} -gt 0 ]; then
+            prompt_string+="${Yel}jobs:${jobs}${RCol} "
         fi
     fi
+
+    # Only show hostname if not on localhost
+    if [ -n "$SSH_CLIENT" ] || [ -n "$SSH_TTY" ]; then
+        prompt_string+="${Mag}\h${RCol}:"
+    fi
+
+    prompt_string+="${BBlu}\w${RCol}"
+    echo -n $prompt_string
+}
+
+function git_prompt_post() {
+    echo -n "\\\$ "
 }
 
 # Set the truncation length of \w (current working dir) in prompt
@@ -161,11 +195,7 @@ export GIT_PS1_SHOWDIRTYSTATE=true
 export GIT_PS1_SHOWUNTRACKEDFILES=true
 export GIT_PS1_SHOWUPSTREAM=auto
 export GIT_PS1_SHOWCOLORHINTS=true
-if [ "$color_prompt" = yes ]; then
-    PROMPT_COMMAND='prompt_clock; __git_ps1 "\n${debian_chroot:+($debian_chroot)}\[\033[00;90m\]${prompt_hostname}\[\033[00m\]\[\033[01;34m\]\w\[\033[00m\]" "\\\$ "'
-else
-    PROMPT_COMMAND='__git_ps1 "\n${debian_chroot:+($debian_chroot)}${prompt_hostname}\w" "\\\$ "'
-fi
+PROMPT_COMMAND='__git_ps1 "$(git_prompt_pre)" "$(git_prompt_post)"'
 
 # enable git completion on 'g' alias in addition to 'git'
 __git_complete g __git_main
