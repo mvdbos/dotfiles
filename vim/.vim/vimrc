@@ -6,8 +6,6 @@ set viminfo+=n~/.vim/viminfo
 
 let mapleader = ","
 
-set columns=80
-
 set nowrap
 set enc=utf-8
 set hidden
