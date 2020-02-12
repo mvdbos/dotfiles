@@ -311,7 +311,7 @@
 	<key>NSWindow Frame SharedPreferences</key>
 	<string>625 150 918 498 0 0 1920 1058 </string>
 	<key>NSWindow Frame iTerm Window 0</key>
-	<string>0 24 1280 776 0 0 1280 800 </string>
+	<string>0 0 1190 800 0 0 1280 800 </string>
 	<key>NSWindow Frame iTerm Window 1</key>
 	<string>0 0 1279 799 0 0 1280 800 </string>
 	<key>NSWindow Frame iTerm Window 2</key>
@@ -938,7 +938,7 @@
 			<key>Show Mark Indicators</key>
 			<false/>
 			<key>Show Status Bar</key>
-			<true/>
+			<false/>
 			<key>Silence Bell</key>
 			<true/>
 			<key>Status Bar Layout</key>

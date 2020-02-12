@@ -125,6 +125,24 @@ else
     test -f /usr/share/bash-completion/completions/git && source /usr/share/bash-completion/completions/git
 fi
 
+function prompt_clock {
+    #  prompt_x is where to position the cursor to write the clock
+    let prompt_x=$(tput cols)-7
+    #  Move up one; not sure why we need to do this, but without this, I always
+    #  got an extra blank line between prompts
+    tput cuu1
+    tput sc
+    tput cup 0 ${prompt_x}
+    tput setaf 240
+    #tput setaf 4 ; tput bold
+    echo -n "["
+    #tput setaf 1
+    echo -n "$(date +%H:%M)"
+    #tput setaf 4 ; tput bold
+    echo -n "]"
+    tput rc
+}
+
 # Set the truncation length of \w (current working dir) in prompt
 export PROMPT_DIRTRIM=3
 
@@ -134,9 +152,9 @@ export GIT_PS1_SHOWUNTRACKEDFILES=true
 export GIT_PS1_SHOWUPSTREAM=auto
 export GIT_PS1_SHOWCOLORHINTS=true
 if [ "$color_prompt" = yes ]; then
-    PROMPT_COMMAND='__git_ps1 "\n${debian_chroot:+($debian_chroot)}\[\033[00;90m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]" "\\\$ "'
+    PROMPT_COMMAND='prompt_clock; __git_ps1 "\n${debian_chroot:+($debian_chroot)}\[\033[00;90m\]\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]" "\\\$ "'
 else
-    PROMPT_COMMAND='__git_ps1 "\n${debian_chroot:+($debian_chroot)}\u@\h:\w" "\\\$ "'
+    PROMPT_COMMAND='__git_ps1 "\n${debian_chroot:+($debian_chroot)}\h:\w" "\\\$ "'
 fi
 
 # enable git completion on 'g' alias in addition to 'git'
