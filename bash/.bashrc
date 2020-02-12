@@ -133,13 +133,10 @@ function prompt_clock {
     tput cuu1
     tput sc
     tput cup 0 ${prompt_x}
-    tput setaf 240
-    #tput setaf 4 ; tput bold
-    echo -n "["
-    #tput setaf 1
-    echo -n "$(date +%H:%M)"
-    #tput setaf 4 ; tput bold
-    echo -n "]"
+    if [ "$color_prompt" = yes ]; then
+        tput setaf 240
+    fi
+    echo -n "[$(date +%H:%M)]"
     tput rc
 }
 
