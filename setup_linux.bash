@@ -1,6 +1,6 @@
 echo "Installing packages..."
 sudo apt-get update
-sudo apt-get install \
+sudo apt-get install -qy \
     bash bash-completion colordiff curl git git-extras htop markdown silversearcher-ag stow tree vim wget
 sudo apt autoremove
 

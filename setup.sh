@@ -11,25 +11,26 @@ else
 fi
 
 echo "Updating submodules..."
-git submodule init
-git submodule update
-git submodule foreach git pull origin master
+git submodule init --quiet
+git submodule update --quiet
+git submodule foreach --quiet git pull --quiet origin master
 
 echo "Restowing common apps..."
-stow -v -R bash
-stow -v -R git
-stow -v -R vim
-stow -v -R certs
-stow -v -R wget 
+stow -R bash
+stow -R git
+stow -R vim
+stow -R certs
+stow -R wget 
 
 if [ "$PLATFORM_NAME" == "Darwin" ]; then
     echo "Restowing Mac apps..."
-    stow -v -R phoenix
-    stow -v -R ideavim
+    stow -R phoenix
+    stow -R ideavim
 fi
 
 # Add Dracula theme for bat
 echo "Adding Dracula theme for bat..."
-mkdir -p "$(bat --config-dir)/themes"
-git clone https://github.com/dracula/sublime.git $(bat --config-dir)/themes/dracula
+theme_dir="$(bat --config-dir)/themes/dracula"
+mkdir -p "$theme_dir"
+wget https://raw.githubusercontent.com/dracula/sublime/master/Dracula.tmTheme -q --directory-prefix="$theme_dir"
 bat cache --build
