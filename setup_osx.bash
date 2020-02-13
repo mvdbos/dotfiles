@@ -6,7 +6,7 @@ else
 fi
 
 brew install \
-    bash bash-completion bat coreutils colordiff curl git git-extras htop the_silver_searcher stow tree vim wget
+    bash bash-completion bat coreutils colordiff curl git git-extras htop markdown the_silver_searcher stow tree vim wget
 brew cleanup -s
 brew analytics off
 
