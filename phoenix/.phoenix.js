@@ -21,9 +21,9 @@ var setupHandlers = function(useSizeUpDefaults){
         down:        new Key('down',  screenKeys, minimize()),
         left:        new Key('left',  screenKeys, putWindow('left')),
         right:       new Key('right', screenKeys, putWindow('right')),
-        up:          new Key('up',    thirdScreenKeys, putWindow('centreThird')),
-        left:        new Key('left',  thirdScreenKeys, putWindow('leftThird')),
-        right:       new Key('right', thirdScreenKeys, putWindow('rightThird')),
+        upThird:          new Key('up',    thirdScreenKeys, putWindow('centreThird')),
+        leftThird:        new Key('left',  thirdScreenKeys, putWindow('leftThird')),
+        rightThird:       new Key('right', thirdScreenKeys, putWindow('rightThird')),
     };
 };
 
