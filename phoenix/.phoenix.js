@@ -12,6 +12,7 @@ var config = {
 
 var setupHandlers = function(useSizeUpDefaults){
     var screenKeys = ['ctrl', 'alt'];
+    var thirdScreenKeys = ['ctrl', 'alt', 'command'];
 
     var quarters;
 
@@ -20,6 +21,9 @@ var setupHandlers = function(useSizeUpDefaults){
         down:        new Key('down',  screenKeys, minimize()),
         left:        new Key('left',  screenKeys, putWindow('left')),
         right:       new Key('right', screenKeys, putWindow('right')),
+        up:          new Key('up',    thirdScreenKeys, putWindow('centreThird')),
+        left:        new Key('left',  thirdScreenKeys, putWindow('leftThird')),
+        right:       new Key('right', thirdScreenKeys, putWindow('rightThird')),
     };
 };
 
