@@ -12,7 +12,8 @@ var config = {
 
 var setupHandlers = function(useSizeUpDefaults){
     var screenKeys = ['ctrl', 'alt'];
-    var thirdScreenKeys = ['ctrl', 'alt', 'command'];
+    var thirdScreenKeys = ['ctrl', 'command'];
+    var twoThirdScreenKeys = ['ctrl', 'alt', 'command'];
 
     var quarters;
 
@@ -24,6 +25,8 @@ var setupHandlers = function(useSizeUpDefaults){
         upThird:          new Key('up',    thirdScreenKeys, putWindow('centreThird')),
         leftThird:        new Key('left',  thirdScreenKeys, putWindow('leftThird')),
         rightThird:       new Key('right', thirdScreenKeys, putWindow('rightThird')),
+        leftTwoThirds:        new Key('left',  twoThirdScreenKeys, putWindow('left2Thirds')),
+        rightTowThirds:       new Key('right', twoThirdScreenKeys, putWindow('right2Thirds')),
     };
 };
 
