@@ -1,3 +1,5 @@
+source error_handler.bash
+
 echo "Installing packages..."
 sudo apt-get update -qq
 sudo apt-get install -qqy \
