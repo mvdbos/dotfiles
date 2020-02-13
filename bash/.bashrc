@@ -244,3 +244,7 @@ else
 fi
 
 test -f ~/.bashrc.local && source ~/.bashrc.local
+
+# Make this the last return value,
+# so we don't have an exit status of the test command
+true
