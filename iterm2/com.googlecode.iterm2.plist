@@ -315,7 +315,7 @@
 	<key>NSWindow Frame SharedPreferences</key>
 	<string>537 407 796 486 0 0 2560 1080 </string>
 	<key>NSWindow Frame iTerm Window 0</key>
-	<string>0 138 1190 1302 0 0 3440 1440 </string>
+	<string>0 116 910 1324 0 0 3440 1440 </string>
 	<key>NSWindow Frame iTerm Window 1</key>
 	<string>0 0 1308 1050 0 0 1680 1050 </string>
 	<key>New Bookmarks</key>
@@ -908,7 +908,7 @@
 			<key>Rows</key>
 			<integer>60</integer>
 			<key>Screen</key>
-			<integer>0</integer>
+			<integer>-1</integer>
 			<key>Scrollback Lines</key>
 			<integer>0</integer>
 			<key>Scrollback With Status Bar</key>
@@ -938,7 +938,7 @@
 			<key>Shortcut</key>
 			<string></string>
 			<key>Show Mark Indicators</key>
-			<false/>
+			<true/>
 			<key>Show Status Bar</key>
 			<false/>
 			<key>Silence Bell</key>
@@ -1166,7 +1166,7 @@
 	<key>NoSyncInstallationId</key>
 	<string>8A584D67-ABFD-4A3A-AC68-2E6007574751</string>
 	<key>NoSyncLaunchExperienceControllerRunCount</key>
-	<integer>92</integer>
+	<integer>95</integer>
 	<key>NoSyncNeverRemindPrefsChangesLostForFile</key>
 	<true/>
 	<key>NoSyncNeverRemindPrefsChangesLostForFile_selection</key>
@@ -1959,7 +1959,7 @@
 	<key>ShowPaneTitles</key>
 	<false/>
 	<key>SmartPlacement</key>
-	<true/>
+	<false/>
 	<key>SoundForEsc</key>
 	<false/>
 	<key>SplitPaneDimmingAmount</key>
