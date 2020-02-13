@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+source error_handler.bash
+
 PLATFORM_NAME=`uname`
 
 if [ "$PLATFORM_NAME" == "Darwin" ]; then
