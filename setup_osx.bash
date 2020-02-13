@@ -5,10 +5,7 @@ else
     ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
 fi
 
-brew install \
-    bash bash-completion bat coreutils colordiff curl git git-extras htop markdown the_silver_searcher stow tree vim wget
-brew cleanup -s
-brew analytics off
+brew bundle install --no-upgrade --file=Brewfile
 
 echo "Setting iTerm preference file location"
 # Specify the preferences directory
