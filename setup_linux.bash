@@ -1,7 +1,7 @@
 echo "Installing packages..."
 sudo apt-get update
 sudo apt-get install \
-    bash bash-completion colordiff curl git git-extras htop silversearcher-ag stow tree vim wget
+    bash bash-completion colordiff curl git git-extras htop markdown silversearcher-ag stow tree vim wget
 sudo apt autoremove
 
 echo "Setting timezone to Europe/Amsterdam"

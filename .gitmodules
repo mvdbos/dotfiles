@@ -25,3 +25,6 @@
 [submodule "vim/.vim/pack/my-plugins/start/vim-airline-clock"]
 	path = vim/.vim/pack/my-plugins/start/vim-airline-clock
 	url = https://github.com/enricobacis/vim-airline-clock
+[submodule "vim/.vim/pack/my-plugins/start/vim-markdown-preview"]
+	path = vim/.vim/pack/my-plugins/start/vim-markdown-preview
+	url = https://github.com/JamshedVesuna/vim-markdown-preview.git
