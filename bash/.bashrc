@@ -92,15 +92,16 @@ export SVN_EDITOR="vim"
 # Note: this is also done by the settings in .inputrc already. This is extra
 set -o vi
 
-# set vim alias so it opens all args in tabs
-#alias vim='vim -p'
-#alias vi='vim -p'
-
 # Set bat as cat alias and a pager for the man command
 alias cat='bat --style=snip'
 export MANPAGER="sh -c 'col -bx | bat -l man -p'"
 export BAT_THEME="Dracula"
 #It might also be necessary to set MANROFFOPT="-c" if you experience formatting problems.
+
+alias j='jobs'
+alias k1='kill %1'
+alias k2='kill %2'
+alias k3='kill %3'
 
 alias top='htop'
 alias cp='cp -i'
