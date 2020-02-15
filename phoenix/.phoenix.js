@@ -25,6 +25,7 @@ var setupHandlers = function(useSizeUpDefaults){
         upThird:          new Key('up',    thirdScreenKeys, putWindow('centreThird')),
         leftThird:        new Key('left',  thirdScreenKeys, putWindow('leftThird')),
         rightThird:       new Key('right', thirdScreenKeys, putWindow('rightThird')),
+        centreTwoThirds:        new Key('up',  twoThirdScreenKeys, putWindow('centre2Thirds')),
         leftTwoThirds:        new Key('left',  twoThirdScreenKeys, putWindow('left2Thirds')),
         rightTowThirds:       new Key('right', twoThirdScreenKeys, putWindow('right2Thirds')),
     };
@@ -170,6 +171,7 @@ var getSubFrame = function(parentFrame, direction) {
         leftThird:    { x: x(),                 y: y(),                 width: parentThird,    height: parentHeight   },
         centreThird:  { x: x(parentThird),      y: y(),                 width: parentThird,    height: parentHeight   },
         rightThird:   { x: x(parentTwoThirds),  y: y(),                 width: parentThird,    height: parentHeight   },
+        centre2Thirds:{ x: x(parentThird/2),    y: y(),                 width: parentTwoThirds, height: parentHeight  },
         left2Thirds:  { x: x(),                 y: y(),                 width: parentTwoThirds, height: parentHeight  },
         right2Thirds: { x: x(parentThird),      y: y(),                 width: parentTwoThirds, height: parentHeight  },
         topLeftSix:   { x: x(),                 y: y(),                 width: parentThird,    height: parentHalfHigh },
