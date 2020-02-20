@@ -244,8 +244,12 @@ else
     export LANG=en_US.utf8
 fi
 
+# Settings for go
+export GOPATH=$HOME/.go
+PATH=$PATH:$GOPATH/bin
+
 test -f ~/.bashrc.local && source ~/.bashrc.local
 
 # Make this the last return value,
-# so we don't have an exit status of the test command
+# so we don't have an exit status of the test command on our prompt
 true
