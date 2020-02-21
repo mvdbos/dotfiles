@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+message='WIP'
+
+if [ ! -z ${1+x} ]; then message="WIP ${1}"; fi
+
+git add . && git commit -m "${message}" --no-verify  && git push
+
