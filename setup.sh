@@ -38,6 +38,6 @@ curl --silent --show-error -o $theme_dir/Dracula.tmTheme https://raw.githubuserc
 bat cache --build
 
 # Downloading latest autocompletion for Hub
-hub_dir=$HOME/.config/hub
+hub_dir=$HOME/.config/completions
 mkdir -p "$hub_dir"
 curl --silent --show-error -o $hub_dir/hub.bash_completion.sh https://raw.githubusercontent.com/github/hub/master/etc/hub.bash_completion.sh
