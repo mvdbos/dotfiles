@@ -1,10 +1,13 @@
 source error_handler.bash
 
-echo "Installing packages..."
+echo "Installing Apt packages..."
 sudo apt-get update -qq
 sudo apt-get install -qqy \
-    bash bash-completion colordiff curl git git-extras htop hub markdown silversearcher-ag stow tree vim wget
+    bash bash-completion colordiff curl git git-extras htop markdown silversearcher-ag stow tree vim wget
 sudo apt autoremove -qq
+
+echo "Installing Snap packages..."
+sudo snap install hub --classic
 
 echo "Setting timezone to Europe/Amsterdam"
 sudo timedatectl set-timezone Europe/Amsterdam
