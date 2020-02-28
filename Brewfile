@@ -15,6 +15,8 @@ brew "colordiff"
 brew "coreutils"
 # Get a file from an HTTP, HTTPS or FTP server
 brew "curl"
+# GitHub CLI
+brew "gh"
 # Distributed revision control system
 brew "git"
 # Small git utilities
@@ -22,7 +24,7 @@ brew "git-extras"
 # Improved top (interactive process viewer)
 brew "htop"
 # GitHub CLI
-brew "gh"
+brew "hub"
 # Text-to-HTML conversion tool
 brew "markdown"
 # Organize software neatly under a single directory tree (e.g. /usr/local)
