@@ -120,14 +120,16 @@ alias psg="ps aux | grep -v grep | grep -i -e VSZ -e"
 
 # load source files
 if [ "$PLATFORM_NAME" == "Darwin" ]; then
-    #test -f  ~/.iterm2_shell_integration.bash && source ~/.iterm2_shell_integration.bash
     test -f /usr/local/etc/bash_completion.d/git-prompt.sh && source /usr/local/etc/bash_completion.d/git-prompt.sh
     test -f /usr/local/etc/bash_completion && source /usr/local/etc/bash_completion
+    # We don't need hub autocompletion set up on OS X: HomeBrew does that for us
 else
+    test -f $HOME/.config/hub/hub.bash_completion.sh && source $HOME/.config/hub/hub.bash_completion.sh
     test -f /etc/bash_completion.d/git-prompt && source /etc/bash_completion.d/git-prompt
     test -f /usr/share/bash-completion/bash_completion && source /usr/share/bash-completion/bash_completion
     test -f /usr/share/bash-completion/completions/git && source /usr/share/bash-completion/completions/git
 fi
+
 
 
 #function bash_clock {
