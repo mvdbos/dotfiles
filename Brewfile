@@ -20,6 +20,8 @@ brew "git"
 brew "git-extras"
 # Improved top (interactive process viewer)
 brew "htop"
+# GitHub CLI
+brew "hub"
 # Text-to-HTML conversion tool
 brew "markdown"
 # Organize software neatly under a single directory tree (e.g. /usr/local)
