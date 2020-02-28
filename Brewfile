@@ -1,5 +1,6 @@
 tap "homebrew/bundle"
 tap "homebrew/core"
+tap "github/gh"
 # Bourne-Again SHell, a UNIX command interpreter
 brew "bash"
 # Programmable completion for Bash 3.2
@@ -21,7 +22,7 @@ brew "git-extras"
 # Improved top (interactive process viewer)
 brew "htop"
 # GitHub CLI
-brew "hub"
+brew "gh"
 # Text-to-HTML conversion tool
 brew "markdown"
 # Organize software neatly under a single directory tree (e.g. /usr/local)

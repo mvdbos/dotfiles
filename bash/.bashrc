@@ -121,27 +121,23 @@ alias psg="ps aux | grep -v grep | grep -i -e VSZ -e"
 # load source files
 if [ "$PLATFORM_NAME" == "Darwin" ]; then
     test -f /usr/local/etc/bash_completion.d/git-prompt.sh && source /usr/local/etc/bash_completion.d/git-prompt.sh
-    test -f /usr/local/etc/bash_completion && source /usr/local/etc/bash_completion
+
     # We don't need hub autocompletion set up on OS X: HomeBrew does that for us
+    if type brew &>/dev/null; then
+        HOMEBREW_PREFIX="$(brew --prefix)"
+        if [[ -r "${HOMEBREW_PREFIX}/etc/profile.d/bash_completion.sh" ]]; then
+            source "${HOMEBREW_PREFIX}/etc/profile.d/bash_completion.sh"
+        else
+            for COMPLETION in "${HOMEBREW_PREFIX}/etc/bash_completion.d/"*; do
+                [[ -r "$COMPLETION" ]] && source "$COMPLETION"
+            done
+        fi
+    fi
 else
-    test -f $HOME/.config/completions/hub.bash_completion.sh && source $HOME/.config/completions/hub.bash_completion.sh
     test -f /etc/bash_completion.d/git-prompt && source /etc/bash_completion.d/git-prompt
     test -f /usr/share/bash-completion/bash_completion && source /usr/share/bash-completion/bash_completion
     test -f /usr/share/bash-completion/completions/git && source /usr/share/bash-completion/completions/git
 fi
-
-
-
-#function bash_clock {
-#    FG_GRAY="$(tput setaf 240)"
-#    let clock_x=$(($(tput cols)-8))
-#
-#    tput sc                       # saved the cursor position
-#    tput cud1                     # up one line
-#    tput cuf $clock_x                 # move $COL characters left
-#    echo "${FG_GRAY}[$(date +%H:%M)]" # set the colour and print the date
-#    tput rc                       # restore the cursor positionVkk
-#}
 
 function git_prompt_pre() {
     local exit_code="$?"
@@ -201,6 +197,7 @@ export GIT_PS1_SHOWCOLORHINTS=true
 PROMPT_COMMAND='__git_ps1 "$(git_prompt_pre)" "$(git_prompt_post)"'
 
 # enable git completion on 'g' alias in addition to 'git'
+__git_complete gh __git_list_all_commands
 __git_complete g __git_main
 __git_complete ga _git_add
 __git_complete gb _git_branch

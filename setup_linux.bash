@@ -7,7 +7,7 @@ sudo apt-get install -qqy \
 sudo apt autoremove -qq
 
 echo "Installing Snap packages..."
-sudo snap install hub --classic
+sudo snap install gh --classic
 
 echo "Setting timezone to Europe/Amsterdam"
 sudo timedatectl set-timezone Europe/Amsterdam
