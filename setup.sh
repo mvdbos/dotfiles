@@ -22,7 +22,7 @@ stow -R bash
 stow -R git
 stow -R vim
 stow -R certs
-stow -R wget 
+stow -R wget
 
 if [ "$PLATFORM_NAME" == "Darwin" ]; then
     echo "Restowing Mac apps..."
@@ -34,5 +34,10 @@ fi
 echo "Adding Dracula theme for bat..."
 theme_dir="$(bat --config-dir)/themes/dracula"
 mkdir -p "$theme_dir"
-wget https://raw.githubusercontent.com/dracula/sublime/master/Dracula.tmTheme -q --directory-prefix="$theme_dir"
+curl --silent --show-error -o $theme_dir/Dracula.tmTheme https://raw.githubusercontent.com/dracula/sublime/master/Dracula.tmTheme
 bat cache --build
+
+# Downloading latest autocompletion for Hub
+hub_dir=$HOME/.config/hub
+mkdir -p "$hub_dir"
+curl --silent --show-error -o $hub_dir/hub.bash_completion.sh https://raw.githubusercontent.com/github/hub/master/etc/hub.bash_completion.sh
