@@ -124,7 +124,7 @@ if [ "$PLATFORM_NAME" == "Darwin" ]; then
     test -f /usr/local/etc/bash_completion && source /usr/local/etc/bash_completion
     # We don't need hub autocompletion set up on OS X: HomeBrew does that for us
 else
-    test -f $HOME/.config/hub/hub.bash_completion.sh && source $HOME/.config/hub/hub.bash_completion.sh
+    test -f $HOME/.config/completions/hub.bash_completion.sh && source $HOME/.config/completions/hub.bash_completion.sh
     test -f /etc/bash_completion.d/git-prompt && source /etc/bash_completion.d/git-prompt
     test -f /usr/share/bash-completion/bash_completion && source /usr/share/bash-completion/bash_completion
     test -f /usr/share/bash-completion/completions/git && source /usr/share/bash-completion/completions/git
