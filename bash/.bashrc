@@ -171,7 +171,7 @@ function git_prompt_pre() {
 }
 
 function git_prompt_post() {
-    echo -n "\\\$ "
+    echo -n " \\\$ "
 }
 
 # Set the truncation length of \w (current working dir) in prompt
