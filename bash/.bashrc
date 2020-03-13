@@ -1,7 +1,7 @@
 PATH="/usr/local/bin:$PATH"
 PATH="~/.bin:$PATH"
 
-PLATFORM_NAME=`uname`
+source ~/.dotfiles/platform_detector.bash
 
 # If not running interactively, don't do anything
 case $- in
@@ -38,24 +38,8 @@ if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then
     debian_chroot=$(cat /etc/debian_chroot)
 fi
 
-# uncomment for a colored prompt, if the terminal has the capability; turned
-# off by default to not distract the user: the focus in a terminal window
-# should be on the output of commands, not on the prompt
-force_color_prompt=yes
-
-if [ -n "$force_color_prompt" ]; then
-    if [ -x /usr/bin/tput ] && tput setaf 1 >&/dev/null; then
-        # We have color support; assume it's compliant with Ecma-48
-        # (ISO/IEC-6429). (Lack of such support is extremely rare, and such
-        # a case would tend to support setf rather than setaf.)
-        color_prompt=yes
-    else
-        color_prompt=
-    fi
-fi
-
 # load platform-dependent aliases
-if [ "$PLATFORM_NAME" == "Darwin" ]; then
+if [[ $PLATFORM_IS_DARWIN -eq 1 ]]; then
     alias ls='gls -F1B --group-directories-first --color=auto'
     alias rm='grm -I'
     alias mv='gmv -iu --strip-trailing-slashes'
@@ -119,7 +103,7 @@ alias ps="ps fax"
 alias psg="ps aux | grep -v grep | grep -i -e VSZ -e"
 
 # load source files
-if [ "$PLATFORM_NAME" == "Darwin" ]; then
+if [ "$PLATFORM_IS_DARWIN" -eq 1 ]; then
     test -f /usr/local/etc/bash_completion.d/git-prompt.sh && source /usr/local/etc/bash_completion.d/git-prompt.sh
 
     # We don't need hub autocompletion set up on OS X: HomeBrew does that for us
@@ -133,10 +117,14 @@ if [ "$PLATFORM_NAME" == "Darwin" ]; then
             done
         fi
     fi
-else
+elif [ "$PLATFORM_IS_UBUNTU" -eq 1 ]; then
     test -f /etc/bash_completion.d/git-prompt && source /etc/bash_completion.d/git-prompt
     test -f /usr/share/bash-completion/bash_completion && source /usr/share/bash-completion/bash_completion
     test -f /usr/share/bash-completion/completions/git && source /usr/share/bash-completion/completions/git
+elif [ "$PLATFORM_IS_ANDROID" -eq 1 ]; then
+    test -f $PREFIX/etc/bash_completion.d/git-prompt && source $PREFIX/etc/bash_completion.d/git-prompt
+    test -f $PREFIX/usr/share/bash-completion/bash_completion && source $PREFIX/usr/share/bash-completion/bash_completion
+    test -f $PREFIX/usr/share/bash-completion/completions/git && source $PREFIX/usr/share/bash-completion/completions/git
 fi
 
 function git_prompt_pre() {
@@ -234,10 +222,10 @@ alias gwip="git add . && git commit -m 'WIP' --no-verify  && git push"
 
 
 # load source files
-if [ "$PLATFORM_NAME" == "Darwin" ]; then
+if [[ $PLATFORM_IS_DARWIN -eq 1 ]]; then
     export LC_ALL=en_US.UTF-8
     export LANG=en_US.UTF-8
-else
+elif [[ $PLATFORM_IS_UBUNTU -eq 1 ]]; then
     export LC_ALL=en_US.utf8
     export LANGUAGE=en_US.utf8
     export LANG=en_US.utf8
