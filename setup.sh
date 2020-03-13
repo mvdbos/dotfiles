@@ -1,15 +1,27 @@
 #!/usr/bin/env bash
 
 source error_handler.bash
+source platform_detector.bash
 
-PLATFORM_NAME=`uname`
-
-if [ "$PLATFORM_NAME" == "Darwin" ]; then
+if [[ $PLATFORM_IS_DARWIN -eq 1 ]]; then
     echo "Detected OS X install, proceeding with OS X setup..."
     bash setup_osx.bash
-else
-    echo "Detected Linux install, proceeding with Linux setup..."
+elif [[ $PLATFORM_IS_LINUX -eq 1 ]]; then
+
+    if [[ $PLATFORM_IS_UBUNTU -eq 1 ]]; then 
+        bash setup_ubuntu.bash
+    elif [[ $PLATFORM_IS_ANDROID -eq 1 ]]; then
+        bash setup_android.bash
+    else 
+        echo "Unknown Linux detected, aborting."
+        exit 1
+    fi
+
+    # Remaining generic linux setup
     bash setup_linux.bash
+else
+    echo "Unknown OS detected, aborting."
+    exit 1
 fi
 
 echo "Updating submodules..."
