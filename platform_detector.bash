@@ -34,3 +34,5 @@ function detect_platform() {
 
     return 0
 }
+
+detect_platform
