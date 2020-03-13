@@ -9,25 +9,25 @@ function __uname_contains() {
 }
 
 function detect_platform() {
-    local uname=$(uname)
 
-    if [ "$uname" == "Darwin" ]; then
+    if __uname_contains "Darwin" ; then
         PLATFORM_NAME="Darwin"
         PLATFORM_IS_DARWIN=1
-    elif [ "$uname" == "Linux" ]; then
+    elif  __uname_contains "Linux" ; then
         PLATFORM_IS_LINUX=1
 
-        if [ __uname_contains "Ubuntu" ]; then
+        if __uname_contains "Ubuntu" ; then
             PLATFORM_NAME="Ubuntu"
             PLATFORM_IS_UBUNTU=1
-        elif [ __uname_contains "Android" ]; then
+        elif  __uname_contains "Android" ; then
             PLATFORM_NAME="Android"
             PLATFORM_IS_ANDROID=1
         else
             echo "Unknown Linux: ${uname}"
+            return 1
         fi
 
-    else 
+    else
             echo "Unknown platform: ${uname}"
         return 1
     fi
