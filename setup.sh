@@ -4,15 +4,17 @@ source error_handler.bash
 source platform_detector.bash
 
 if [[ $PLATFORM_IS_DARWIN -eq 1 ]]; then
-    echo "Detected OS X install, proceeding with OS X setup..."
+    echo "Detected OS X, proceeding with setup..."
     bash setup_osx.bash
 elif [[ $PLATFORM_IS_LINUX -eq 1 ]]; then
 
-    if [[ $PLATFORM_IS_UBUNTU -eq 1 ]]; then 
+    if [[ $PLATFORM_IS_UBUNTU -eq 1 ]]; then
+        echo "Detected $PLATFORM_NAME, proceeding with setup..."
         bash setup_ubuntu.bash
     elif [[ $PLATFORM_IS_ANDROID -eq 1 ]]; then
+        echo "Detected $PLATFORM_NAME, proceeding with setup..."
         bash setup_android.bash
-    else 
+    else
         echo "Unknown Linux detected, aborting."
         exit 1
     fi
