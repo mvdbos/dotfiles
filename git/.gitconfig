@@ -13,18 +13,19 @@
     br = branch
     pr = pull-request
     gr = grep -i -n -0 --heading --break
-    dsf = "!f() { [ -z \"$GIT_PREFIX\" ] || cd \"$GIT_PREFIX\" && git diff --color \"$@\" | diff-so-fancy  | less RFXS; }; f"
 [color]
     ui = true
     interactive = auto
 [core]
     editor = vim
     excludesfile = /Users/matthijs/.gitignore-global
-    pager = ~/.bin/diff-so-fancy | less -RFX
+[pager]
+	log = diff-highlight | less -RFX
+	show = diff-highlight | less -RFX
+    diff = diff-highlight | less -RFX
 [interactive]
     singleKey = true
-    # Does not work due to https://github.com/so-fancy/diff-so-fancy/issues/35#issuecomment-578392987
-    #diffFilter = ~/.bin/diff-so-fancy
+    diffFilter = diff-highlight
 [diff]
     tool = vimdiff
 [difftool]
@@ -48,6 +49,9 @@
     new = green
 [fetch]
     prune = true
+    parallel = 2
+[submodule]
+    fetchJobs = 2
 [status]
     submodulesummary = 1
 [color "diff-highlight"]
@@ -55,7 +59,3 @@
     oldHighlight = red bold 52
     newNormal = green
     newHighlight = green bold 22
-[diff-so-fancy]
-    first-run = false
-    markEmptyLines = false
-    #stripLeadingSymbols = false
