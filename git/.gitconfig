@@ -20,12 +20,12 @@
     editor = vim
     excludesfile = /Users/matthijs/.gitignore-global
 [pager]
-	log = diff-highlight | less -RFX
-	show = diff-highlight | less -RFX
-    diff = diff-highlight | less -RFX
+    log = ~/.bin/diff-highlight | less -RFX
+    show = ~/.bin/diff-highlight | less -RFX
+    diff = ~/.bin/diff-highlight | less -RFX
 [interactive]
     singleKey = true
-    diffFilter = diff-highlight
+    diffFilter = ~/.bin/diff-highlight
 [diff]
     tool = vimdiff
 [difftool]
