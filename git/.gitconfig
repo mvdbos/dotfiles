@@ -52,6 +52,7 @@
     parallel = 2
 [submodule]
     fetchJobs = 2
+    recurse = true
 [status]
     submodulesummary = 1
 [color "diff-highlight"]
