@@ -185,7 +185,6 @@ export GIT_PS1_SHOWCOLORHINTS=true
 PROMPT_COMMAND='__git_ps1 "$(git_prompt_pre)" "$(git_prompt_post)"'
 
 # enable git completion on 'g' alias in addition to 'git'
-__git_complete gh __git_list_all_commands
 __git_complete g __git_main
 __git_complete ga _git_add
 __git_complete gb _git_branch
