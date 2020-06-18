@@ -50,6 +50,8 @@
 [fetch]
     prune = true
     parallel = 2
+[pull]
+    ff = only
 [submodule]
     fetchJobs = 2
     recurse = true

@@ -315,7 +315,7 @@
 	<key>NSWindow Frame SharedPreferences</key>
 	<string>537 407 796 486 0 0 2560 1080 </string>
 	<key>NSWindow Frame iTerm Window 0</key>
-	<string>0 24 1720 1416 0 0 3440 1440 </string>
+	<string>533 5 1140 1040 0 0 3440 1440 </string>
 	<key>NSWindow Frame iTerm Window 1</key>
 	<string>0 0 1308 1050 0 0 1680 1050 </string>
 	<key>New Bookmarks</key>
@@ -888,7 +888,7 @@
 				<real>0.0</real>
 			</dict>
 			<key>Mouse Reporting</key>
-			<true/>
+			<false/>
 			<key>Name</key>
 			<string>Default</string>
 			<key>Non Ascii Font</key>
@@ -1130,9 +1130,11 @@
 	<array>
 		<string>3.3.6</string>
 		<string>3.3.8</string>
+		<string>3.3.11</string>
 		<string>3.3.3</string>
 		<string>3.3.5</string>
 		<string>3.3.7</string>
+		<string>3.3.9</string>
 		<string>3.2.9</string>
 		<string>3.3.0</string>
 		<string>3.3.4</string>
@@ -1146,7 +1148,7 @@
 	<key>NoSyncFrame_SessionsPreferences</key>
 	<dict>
 		<key>screenFrame</key>
-		<string>{{0, 0}, {3440, 1440}}</string>
+		<string>{{0, 0}, {2560, 1080}}</string>
 		<key>topLeft</key>
 		<string>{269, 595}</string>
 	</dict>
@@ -1166,7 +1168,9 @@
 	<key>NoSyncInstallationId</key>
 	<string>8A584D67-ABFD-4A3A-AC68-2E6007574751</string>
 	<key>NoSyncLaunchExperienceControllerRunCount</key>
-	<integer>97</integer>
+	<integer>135</integer>
+	<key>NoSyncNeverPromptToChangeOption</key>
+	<true/>
 	<key>NoSyncNeverRemindPrefsChangesLostForFile</key>
 	<true/>
 	<key>NoSyncNeverRemindPrefsChangesLostForFile_selection</key>
@@ -1949,7 +1953,7 @@
 	<key>SUHasLaunchedBefore</key>
 	<true/>
 	<key>SULastCheckTime</key>
-	<date>2020-02-13T09:57:25Z</date>
+	<date>2020-06-13T09:40:47Z</date>
 	<key>SUSendProfileInfo</key>
 	<false/>
 	<key>SUUpdateRelaunchingMarker</key>
@@ -1992,7 +1996,7 @@
 	<key>findMode_iTerm</key>
 	<integer>0</integer>
 	<key>iTerm Version</key>
-	<string>3.3.8</string>
+	<string>3.3.11</string>
 	<key>kCPKSelectionViewPreferredModeKey</key>
 	<integer>1</integer>
 	<key>kCPKSelectionViewShowHSBTextFieldsKey</key>
