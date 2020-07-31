@@ -1,4 +1,4 @@
-PATH="/usr/local/bin:$PATH"
+PATH="/usr/local/bin:/usr/local/sbin:$PATH"
 PATH="~/.bin:$PATH"
 
 source ~/.dotfiles/platform_detector.bash
