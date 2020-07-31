@@ -28,3 +28,6 @@
 [submodule "vim/.vim/pack/my-plugins/start/vim-markdown-preview"]
 	path = vim/.vim/pack/my-plugins/start/vim-markdown-preview
 	url = https://github.com/JamshedVesuna/vim-markdown-preview.git
+[submodule "vim/.vim/pack/my-plugins/start/terminus"]
+	path = vim/.vim/pack/my-plugins/start/terminus
+	url = https://github.com/wincent/terminus.git
