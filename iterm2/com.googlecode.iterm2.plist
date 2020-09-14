@@ -315,9 +315,9 @@
 	<key>NSWindow Frame SharedPreferences</key>
 	<string>537 407 796 486 0 0 2560 1080 </string>
 	<key>NSWindow Frame iTerm Window 0</key>
-	<string>533 5 1140 1040 0 0 3440 1440 </string>
+	<string>0 6 1680 1038 0 0 1680 1050 </string>
 	<key>NSWindow Frame iTerm Window 1</key>
-	<string>0 0 1308 1050 0 0 1680 1050 </string>
+	<string>0 0 910 1324 0 0 3440 1440 </string>
 	<key>New Bookmarks</key>
 	<array>
 		<dict>
@@ -1131,6 +1131,7 @@
 		<string>3.3.6</string>
 		<string>3.3.8</string>
 		<string>3.3.11</string>
+		<string>3.3.12</string>
 		<string>3.3.3</string>
 		<string>3.3.5</string>
 		<string>3.3.7</string>
@@ -1148,7 +1149,7 @@
 	<key>NoSyncFrame_SessionsPreferences</key>
 	<dict>
 		<key>screenFrame</key>
-		<string>{{0, 0}, {2560, 1080}}</string>
+		<string>{{0, 0}, {3440, 1440}}</string>
 		<key>topLeft</key>
 		<string>{269, 595}</string>
 	</dict>
@@ -1157,7 +1158,7 @@
 		<key>screenFrame</key>
 		<string>{{0, 0}, {3440, 1440}}</string>
 		<key>topLeft</key>
-		<string>{269, 595}</string>
+		<string>{892, 739}</string>
 	</dict>
 	<key>NoSyncHaveUsedCopyMode</key>
 	<true/>
@@ -1168,7 +1169,7 @@
 	<key>NoSyncInstallationId</key>
 	<string>8A584D67-ABFD-4A3A-AC68-2E6007574751</string>
 	<key>NoSyncLaunchExperienceControllerRunCount</key>
-	<integer>135</integer>
+	<integer>163</integer>
 	<key>NoSyncNeverPromptToChangeOption</key>
 	<true/>
 	<key>NoSyncNeverRemindPrefsChangesLostForFile</key>
@@ -1953,7 +1954,7 @@
 	<key>SUHasLaunchedBefore</key>
 	<true/>
 	<key>SULastCheckTime</key>
-	<date>2020-06-13T09:40:47Z</date>
+	<date>2020-09-13T12:26:31Z</date>
 	<key>SUSendProfileInfo</key>
 	<false/>
 	<key>SUUpdateRelaunchingMarker</key>
@@ -1971,7 +1972,7 @@
 	<key>SoundForEsc</key>
 	<false/>
 	<key>SplitPaneDimmingAmount</key>
-	<real>0.48527260638297876</real>
+	<real>0.27914173315602842</real>
 	<key>StatusBarPosition</key>
 	<integer>0</integer>
 	<key>SuppressRestartAnnouncement</key>
@@ -1996,7 +1997,7 @@
 	<key>findMode_iTerm</key>
 	<integer>0</integer>
 	<key>iTerm Version</key>
-	<string>3.3.11</string>
+	<string>3.3.12</string>
 	<key>kCPKSelectionViewPreferredModeKey</key>
 	<integer>1</integer>
 	<key>kCPKSelectionViewShowHSBTextFieldsKey</key>
