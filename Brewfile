@@ -37,3 +37,5 @@ brew "tree"
 brew "vim"
 # Internet file retriever
 brew "wget"
+# HTTP tunnel
+brew "corkscrew"
