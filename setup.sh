@@ -37,6 +37,7 @@ stow -R git
 stow -R vim
 stow -R certs
 stow -R wget
+stow -R ssh
 
 if [ "$PLATFORM_NAME" == "Darwin" ]; then
     echo "Restowing Mac apps..."
