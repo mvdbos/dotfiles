@@ -31,3 +31,6 @@
 [submodule "vim/.vim/pack/my-plugins/start/terminus"]
 	path = vim/.vim/pack/my-plugins/start/terminus
 	url = https://github.com/wincent/terminus.git
+[submodule "iterm2/iterm"]
+	path = iterm2/dracula-theme
+	url = git@github.com:dracula/iterm.git
