@@ -137,7 +137,7 @@ function git_prompt_pre() {
     local Gry='\[\e[0;90m\]'
     local Red='\[\e[0;31m\]'
     local Yel='\[\e[0;33m\]'
-    local BBlu='\[\e[1;34m\]'
+    local BBlu='\[\e[0;34m\]'
     local Mag='\[\e[0;35m\]'
 
     # Show current time
