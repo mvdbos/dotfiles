@@ -99,8 +99,6 @@ alias l='ls'
 alias lrt='ls -rt'
 alias ll='ls -ohgBv --group-directories-first'
 alias la='ls -lAhvG --group-directories-first'
-alias ps="ps fax"
-alias psg="ps aux | grep -v grep | grep -i -e VSZ -e"
 
 # load source files
 if [ "$PLATFORM_IS_DARWIN" -eq 1 ]; then
