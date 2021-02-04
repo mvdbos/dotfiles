@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+if [ ! -z ${1+x} ]; then 
+    git commit --amend -m "${1}" && git push
+else 
+    git commit --amend && git push
+fi
+
+
