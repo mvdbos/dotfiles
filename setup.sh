@@ -33,11 +33,15 @@ git submodule foreach --quiet git pull --quiet origin master
 
 echo "Restowing common apps..."
 stow -R bash
-stow -R git
 stow -R vim
 stow -R certs
 stow -R wget
 stow -R ssh
+
+# Handling annoying replacement of our .gitconfig symlink.
+# If that has happened, simply remove it.
+rm -f ~/.gitconfig
+stow -R git
 
 if [ "$PLATFORM_NAME" == "Darwin" ]; then
     echo "Restowing Mac apps..."
