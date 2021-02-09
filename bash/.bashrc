@@ -119,6 +119,10 @@ elif [ "$PLATFORM_IS_UBUNTU" -eq 1 ]; then
     test -f /etc/bash_completion.d/git-prompt && source /etc/bash_completion.d/git-prompt
     test -f /usr/share/bash-completion/bash_completion && source /usr/share/bash-completion/bash_completion
     test -f /usr/share/bash-completion/completions/git && source /usr/share/bash-completion/completions/git
+elif [ "$PLATFORM_IS_RASPBERRY" -eq 1 ]; then
+    test -f /etc/bash_completion.d/git-prompt && source /etc/bash_completion.d/git-prompt
+    test -f /usr/share/bash-completion/bash_completion && source /usr/share/bash-completion/bash_completion
+    test -f /usr/share/bash-completion/completions/git && source /usr/share/bash-completion/completions/git
 elif [ "$PLATFORM_IS_ANDROID" -eq 1 ]; then
     test -f $PREFIX/etc/bash_completion.d/git-prompt && source $PREFIX/etc/bash_completion.d/git-prompt
     test -f $PREFIX/usr/share/bash-completion/bash_completion && source $PREFIX/usr/share/bash-completion/bash_completion
