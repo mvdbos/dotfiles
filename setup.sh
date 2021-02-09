@@ -11,11 +11,14 @@ elif [[ $PLATFORM_IS_LINUX -eq 1 ]]; then
     if [[ $PLATFORM_IS_UBUNTU -eq 1 ]]; then
         echo "Detected $PLATFORM_NAME, proceeding with setup..."
         bash setup_ubuntu.bash
+    elif [[ $PLATFORM_IS_RASPBERRY -eq 1 ]]; then
+        echo "Detected $PLATFORM_NAME, proceeding with setup..."
+        bash setup_raspberry.bash
     elif [[ $PLATFORM_IS_ANDROID -eq 1 ]]; then
         echo "Detected $PLATFORM_NAME, proceeding with setup..."
         bash setup_android.bash
     else
-        echo "Unknown Linux detected, aborting."
+        echo -e "Unknown Linux detected, aborting." >&2
         exit 1
     fi
 
