@@ -85,6 +85,8 @@ export MANPAGER="sh -c 'col -bx | bat -l man -p'"
 export BAT_THEME="Dracula"
 #It might also be necessary to set MANROFFOPT="-c" if you experience formatting problems.
 
+alias ag='ag --hidden'
+
 alias j='jobs'
 alias k1='kill %1'
 alias k2='kill %2'
