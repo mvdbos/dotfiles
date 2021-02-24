@@ -30,6 +30,9 @@ shopt -s checkwinsize
 # Add autocorrect to dirnames
 shopt -s cdspell
 
+# Enable recursion with **, e.g. for f in **; do echo "$f";done
+shopt -s globstar
+
 # make less more friendly for non-text input files, see lesspipe(1)
 [ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
 
