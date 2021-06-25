@@ -29,6 +29,7 @@ brew "hub"
 brew "markdown"
 # Organize software neatly under a single directory tree (e.g. /usr/local)
 brew "stow"
+brew "thefuck"
 # Code-search similar to ack
 brew "the_silver_searcher"
 # Display directories as trees (with optional color/HTML output)
