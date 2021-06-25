@@ -67,6 +67,9 @@ alias grep='grep --color=auto'
 alias fgrep='fgrep --color=auto'
 alias egrep='egrep --color=auto'
 
+eval "$(thefuck --alias)"
+eval "$(thefuck --alias damn)"
+
 # colored GCC warnings and errors
 export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
@@ -246,3 +249,4 @@ test -f ~/.bashrc.local && source ~/.bashrc.local
 # Make this the last return value,
 # so we don't have an exit status of the test command on our prompt
 true
+
