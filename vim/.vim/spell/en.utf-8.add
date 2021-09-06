@@ -32,3 +32,8 @@ Kotlin
 CIO
 NL
 Bos
+serializers
+structs
+tx
+sigs
+X500Name
