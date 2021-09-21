@@ -18,9 +18,9 @@ function install_cert() {
     echo -n "$keystore_path: "
     if [[ -n $keystore_pass ]]
     then
-        keytool -importcert -alias ing-inspect -file ~/.config/certs/insg3_b64.cer -keystore cacerts -storepass $keystore_pass -trustcacerts -noprompt || true
+        keytool -importcert -alias "$cert_alias" -file "$cert_file" -keystore "$keystore_path" -storepass "$keystore_pass" -trustcacerts -noprompt || true
     else
-        keytool -importcert -alias ing-inspect -file ~/.config/certs/insg3_b64.cer -keystore cacerts -protected -noprompt -trustcacerts || true
+        keytool -importcert -alias "$cert_alias" -file "$cert_file" -keystore "$keystore_path" -noprompt -trustcacerts || true
     fi
 
 }
@@ -33,7 +33,7 @@ install_cert ing_inspect $cert_file $JAVA_HOME/jre/lib/security/cacerts "changei
 echo -e "\nInstalling into Jetbrains apps...\n"
 if [[ $PLATFORM_IS_DARWIN -eq 1 ]]; then
     find "$jetbrains_home" -name "cacerts" | while read keystore_path; do
-        install_cert ing_inspect "$cert_file" "$keystore_path"
+        install_cert ing_inspect "$cert_file" "$keystore_path" "changeit"
     done
 fi
 
