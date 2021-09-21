@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+
+# This script installs the ING inspection gateway certificate into $JAVA_HOME and the Jetbrains keystores
+
+source $HOME/.dotfiles/error_handler.bash
+source $HOME/.dotfiles/platform_detector.bash
+
+cert_file=$HOME/.config/certs/insg3_b64.cer
+java_home_cacerts=$JAVA_HOME/jre/lib/security/cacerts
+jetbrains_home="$HOME/Library/Application Support/Jetbrains"
+
+function install_cert() {
+    cert_alias="$1"
+    cert_path="$2"
+    keystore_path="$3"
+    keystore_pass="$4"
+
+    echo -n "$keystore_path: "
+    if [[ -n $keystore_pass ]]
+    then
+        keytool -importcert -alias ing-inspect -file ~/.config/certs/insg3_b64.cer -keystore cacerts -storepass $keystore_pass -trustcacerts -noprompt || true
+    else
+        keytool -importcert -alias ing-inspect -file ~/.config/certs/insg3_b64.cer -keystore cacerts -protected -noprompt -trustcacerts || true
+    fi
+
+}
+
+echo -e "Installing ING Inspection Gateway certificate\n"
+
+echo -e "Installing into \$JAVA_HOME...\n"
+install_cert ing_inspect $cert_file $JAVA_HOME/jre/lib/security/cacerts "changeit"
+
+echo -e "\nInstalling into Jetbrains apps...\n"
+if [[ $PLATFORM_IS_DARWIN -eq 1 ]]; then
+    find "$jetbrains_home" -name "cacerts" | while read keystore_path; do
+        install_cert ing_inspect "$cert_file" "$keystore_path"
+    done
+fi
+
+echo -e "\nDone"
