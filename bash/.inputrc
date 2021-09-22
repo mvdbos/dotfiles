@@ -4,8 +4,8 @@ set editing-mode vi
 set show-all-if-ambiguous on
 set skip-completed-text on
 set completion-ignore-case on
-# on menu-complete, first display the common prefix, then cycle through the 
-# options when hitting TAB
+# Perform partial completion on the first Tab press,
+# only start cycling full results on the second Tab press
 set menu-complete-display-prefix on
 
 set keymap vi-command
@@ -13,16 +13,15 @@ set keymap vi-command
 "\e[A": history-search-backward
 "\e[B": history-search-forward
 "\e.": yank-last-arg
-"\e0": "\C-p0ea "
-"\es": menu-complete
 
 set keymap vi-insert
 # these are for vi-insert mode
 "\e[A": history-search-backward
 "\e[B": history-search-forward
 "\e.": yank-last-arg
+
+# Control-l would otherwise not work in insert mode
 Control-l: clear-screen
-#"\es": menu-complete
 
 # Pressing tab will list all completions & select the first one. Pressing it 
 # again will cycle through available completions.
