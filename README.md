@@ -9,4 +9,4 @@ cd .dotfiles
 ```
 
 To uninstall configs for specific apps, you can do so by running `stow -D APPNAME` from the `.dotfiles` directory.
-To re-install, run `stow APPNAME`.
+To re-install, run `stow -R APPNAME`.
