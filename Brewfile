@@ -7,8 +7,6 @@ brew "bash"
 brew "bash-completion"
 # Clone of cat(1) with syntax highlighting and Git integration
 brew "bat"
-# Cross-platform make
-brew "cmake"
 # Color-highlighted diff(1) output
 brew "colordiff"
 # GNU File, Shell, and Text utilities
