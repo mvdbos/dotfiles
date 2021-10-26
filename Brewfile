@@ -13,22 +13,25 @@ brew "cmake"
 brew "colordiff"
 # GNU File, Shell, and Text utilities
 brew "coreutils"
+# HTTP tunnel
+brew "corkscrew"
 # Get a file from an HTTP, HTTPS or FTP server
 brew "curl"
-# GitHub CLI
-brew "gh"
 # Distributed revision control system
 brew "git"
 # Small git utilities
 brew "git-extras"
+# Git author stats
+brew "git-quick-stats"
 # Improved top (interactive process viewer)
 brew "htop"
-# GitHub CLI
-brew "hub"
 # Text-to-HTML conversion tool
 brew "markdown"
+# Handy rename util
+brew "rename"
 # Organize software neatly under a single directory tree (e.g. /usr/local)
 brew "stow"
+# Repeat and correct command typos
 brew "thefuck"
 # Code-search similar to ack
 brew "the_silver_searcher"
@@ -38,5 +41,3 @@ brew "tree"
 brew "vim"
 # Internet file retriever
 brew "wget"
-# HTTP tunnel
-brew "corkscrew"
