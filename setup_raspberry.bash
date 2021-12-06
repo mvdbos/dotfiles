@@ -4,23 +4,23 @@ echo "Installing Apt packages..."
 sudo apt-get update -qq
 
 sudo apt-get install -qqy \
-bash \ 
-bash-completion \ 
-colordiff \ 
-coreutils \ 
-curl \ 
-git \ 
-git-extras \ 
-htop \ 
-markdown \ 
+bash \
+bash-completion \
+colordiff \
+coreutils \
+curl \
+git \
+git-extras \
+htop \
+markdown \
 rename \
-silversearcher-ag \ 
-stow \ 
-tree \ 
-vim \ 
-wget \ 
-python3-dev \ 
-python3-pip \ 
+silversearcher-ag \
+stow \
+tree \
+vim \
+wget \
+python3-dev \
+python3-pip \
 python3-setuptools
 
 sudo apt autoremove -qq
