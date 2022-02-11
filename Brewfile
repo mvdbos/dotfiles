@@ -1,6 +1,7 @@
 tap "homebrew/bundle"
 tap "homebrew/core"
 tap "github/gh"
+# Azure CLI
 # Bourne-Again SHell, a UNIX command interpreter
 brew "bash"
 # Programmable completion for Bash 3.2
@@ -23,6 +24,8 @@ brew "git-extras"
 brew "git-quick-stats"
 # Improved top (interactive process viewer)
 brew "htop"
+# JSON parser
+brew "jq"
 # Text-to-HTML conversion tool
 brew "markdown"
 # Handy rename util
