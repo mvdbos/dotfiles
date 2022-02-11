@@ -1,6 +1,6 @@
 tap "homebrew/bundle"
 tap "homebrew/core"
-tap "github/gh"
+tap "microsoft/git"
 # Azure CLI
 brew "azure-cli"
 # Bourne-Again SHell, a UNIX command interpreter
@@ -43,3 +43,5 @@ brew "tree"
 brew "vim"
 # Internet file retriever
 brew "wget"
+# Git Credential Manager
+cask "git-credential-manager-core"
