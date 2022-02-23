@@ -331,6 +331,21 @@ xnoremap <Leader>t :'<,'>call ToggleComment()<CR>
 " END: ToggleComment() functionality
 """"""""""""""""""""""""""""""""""""""""""""""""""
 
+" Always paste from the first register, which we yank to by default. 
+" This way, purposeful yanks are not overwritten by deletions.
+" Vim registers become effectively disabled by this.
+function! ToggleFixedRegisterPaste()
+    if mapcheck("p", "n") == ""
+        noremap p "0p
+        echo 'Fixed register paste on'
+    else
+        unmap c
+        echo 'Fixed register paste off'
+    endif
+endfunction
+nnoremap <leader>q :call ToggleFixedRegisterPaste()<CR>
+noremap p "0p
+
 " Do we have local vimrc?
 " If so, go ahead and load it.
 execute "silent! source ~/.vimrc.local"
