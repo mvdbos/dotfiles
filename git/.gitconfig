@@ -18,7 +18,7 @@
     interactive = auto
 [core]
     editor = vim
-    excludesfile = /Users/matthijs/.gitignore-global
+    excludesfile = ~/.gitignore-global
 [pager]
     log = ~/.bin/diff-highlight | less -RFX
     show = ~/.bin/diff-highlight | less -RFX
