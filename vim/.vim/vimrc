@@ -344,7 +344,7 @@ function! ToggleFixedRegisterPaste()
     endif
 endfunction
 nnoremap <leader>q :call ToggleFixedRegisterPaste()<CR>
-#noremap p "0p
+"noremap p "0p
 
 " Do we have local vimrc?
 " If so, go ahead and load it.
