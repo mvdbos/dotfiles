@@ -19,6 +19,8 @@ brew "corkscrew"
 brew "curl"
 # Distributed revision control system
 brew "git"
+# Git Credential Manager
+cask "git-credential-manager-core"
 # Small git utilities
 brew "git-extras"
 # Git author stats
@@ -43,5 +45,3 @@ brew "tree"
 brew "vim"
 # Internet file retriever
 brew "wget"
-# Git Credential Manager
-cask "git-credential-manager-core"
