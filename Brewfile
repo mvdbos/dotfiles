@@ -21,6 +21,8 @@ brew "curl"
 brew "git"
 # Git Credential Manager
 cask "git-credential-manager-core"
+# Phoenix Window Manager
+cask "phoenix"
 # Small git utilities
 brew "git-extras"
 # Git author stats
