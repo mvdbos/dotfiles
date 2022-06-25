@@ -1,6 +1,14 @@
 tap "homebrew/bundle"
 tap "homebrew/core"
 tap "microsoft/git"
+
+cask_args appdir: "~/Applications", require_sha: true
+#
+# Git Credential Manager
+cask "git-credential-manager-core"
+# Phoenix Window Manager
+cask "phoenix"
+
 # Azure CLI
 brew "azure-cli"
 # Bourne-Again SHell, a UNIX command interpreter
@@ -19,10 +27,6 @@ brew "corkscrew"
 brew "curl"
 # Distributed revision control system
 brew "git"
-# Git Credential Manager
-cask "git-credential-manager-core"
-# Phoenix Window Manager
-cask "phoenix"
 # Small git utilities
 brew "git-extras"
 # Git author stats
