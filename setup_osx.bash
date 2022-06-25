@@ -7,6 +7,9 @@ fi
 
 brew bundle install --no-upgrade --file=Brewfile
 
+# Install SDKMan
+curl -s "https://get.sdkman.io?rcupdate=false" | bash
+
 echo "Setting iTerm preference file location"
 # Specify the preferences directory
 defaults write com.googlecode.iterm2.plist PrefsCustomFolder -string "~/.dotfiles/iterm2"
