@@ -11,6 +11,8 @@ brew bundle install --no-upgrade --file=Brewfile
 
 # Install SDKMan
 curl -s "https://get.sdkman.io?rcupdate=false" | bash
+export SDKMAN_DIR="$HOME/.sdkman"
+[[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"
 
 # Install Java 8
 sdk install java 8.0.332-zulu
