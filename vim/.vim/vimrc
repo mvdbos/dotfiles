@@ -343,8 +343,7 @@ function! ToggleFixedRegisterPaste()
         echo 'Fixed register paste off'
     endif
 endfunction
-nnoremap <leader>q :call ToggleFixedRegisterPaste()<CR>
-"noremap p "0p
+nnoremap <leader>p :call ToggleFixedRegisterPaste()<CR>
 
 " Do we have local vimrc?
 " If so, go ahead and load it.
