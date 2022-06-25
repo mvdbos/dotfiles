@@ -233,7 +233,6 @@ alias gw="g log --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %C(white)%s
 alias gwip="git add . && git commit -m 'WIP' --no-verify  && git push"
 
 
-# load source files
 if [[ $PLATFORM_IS_DARWIN -eq 1 ]]; then
     export LC_ALL=en_US.UTF-8
     export LANG=en_US.UTF-8
@@ -243,9 +242,8 @@ elif [[ $PLATFORM_IS_UBUNTU -eq 1 ]]; then
     export LANG=en_US.utf8
 fi
 
-# Settings for go
-export GOPATH=$HOME/.go
-PATH=$PATH:$GOPATH/bin
+export SDKMAN_DIR="$HOME/.sdkman"
+[[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"
 
 test -f ~/.bashrc.local && source ~/.bashrc.local
 
