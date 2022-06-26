@@ -9,10 +9,7 @@ colordiff \
 coreutils \
 curl \
 git \
-git-extras \
 htop \
-markdown \
-rename \
 silversearcher-ag \
 stow \
 tree \
