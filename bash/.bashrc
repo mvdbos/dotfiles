@@ -69,8 +69,7 @@ alias egrep='egrep --color=auto'
 
 if [ "$PLATFORM_IS_DARWIN" -eq 1 ] || [ "$PLATFORM_IS_UBUNTU" -eq 1 ] || [ "$PLATFORM_IS_RASPBERRY" -eq 1 ]; then
     eval "$(thefuck --alias)"
-    eval "$(thefuck --alias damn)"
-    eval "$(thefuck --alias oops)"
+    eval "$(thefuck --alias ?)"
 fi
 
 # colored GCC warnings and errors
