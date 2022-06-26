@@ -239,6 +239,9 @@ augroup whitespace
     autocmd BufWinLeave * call clearmatches()
 augroup END
 
+" Tagbar 
+noremap <leader>\ :TagbarToggle<CR>
+
 " Bclose() {{{2
 " delete buffer without closing window
 " We need this to prevent tagbar closing vim on :bd
@@ -275,6 +278,9 @@ endfun
 "superscript mapping ---------------------- {{{
 execute "digraphs xS " . 0x02E3
 "}}}
+
+" rust.vim settings
+let g:rustfmt_autosave = 1
 
 "Enable the Silver Seacher (ag)
 if executable('ag')
