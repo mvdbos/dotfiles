@@ -37,3 +37,9 @@
 [submodule "vim/.vim/pack/my-plugins/start/kotlin-vim"]
 	path = vim/.vim/pack/my-plugins/start/kotlin-vim
 	url = https://github.com/udalov/kotlin-vim.git
+[submodule "vim/.vim/pack/my-plugins/start/tagbar"]
+	path = vim/.vim/pack/my-plugins/start/tagbar
+	url = https://github.com/preservim/tagbar
+[submodule "vim/.vim/pack/my-plugins/start/rust.vim"]
+	path = vim/.vim/pack/my-plugins/start/rust.vim
+	url = https://github.com/rust-lang/rust.vim
