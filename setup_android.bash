@@ -7,6 +7,7 @@ bash-completion \
 bat \
 colordiff \
 coreutils \
+ctags \
 curl \
 git \
 htop \
