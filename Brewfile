@@ -35,5 +35,6 @@ brew "thefuck"
 # Code-search similar to ack
 brew "the_silver_searcher"
 brew "tree"
+brew "universal-ctags"
 brew "vim"
 brew "wget"
