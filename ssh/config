@@ -1,0 +1,4 @@
+# When we are on the a specific subnet (e.g. 10.76.177), we go through the local proxy
+Match host * exec "onsubnet 10.76.177."     
+    ProxyCommand ssh-proxy -p 127.0.0.1:3128 %h %p
+
