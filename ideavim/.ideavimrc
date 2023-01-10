@@ -1,3 +1,5 @@
+Plug 'preservim/nerdtree'
+
 let mapleader = ","
 
 " search settings
@@ -46,3 +48,6 @@ nnoremap [s :action GotoPreviousError<CR>
 " This way, purposeful yanks are not overwritten by deletions.
 " Vim registers become effectively disabled by this.
 "noremap p "0p
+
+" map <Leader>n <ESC>:NERDTreeToggle<CR>
+map <Leader>n <ESC>:NERDTreeFocus<CR>
