@@ -251,3 +251,5 @@ test -f ~/.bashrc.local && source ~/.bashrc.local
 # so we don't have an exit status of the test command on our prompt
 true
 
+
+source /Users/user/.docker/init-bash.sh || true # Added by Docker Desktop
