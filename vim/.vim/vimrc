@@ -308,7 +308,7 @@ nnoremap \| :Ag<SPACE><C-R><C-W><CR>
 """"""""""""""""""""""""""""""""""""""""""""""""""
 autocmd FileType c,cpp,java,kotlin let b:comment_leader = '//'
 autocmd FileType bash,sh,zsh,ruby,python  let b:comment_leader = '#'
-autocmd FileType conf,fstab      let b:comment_leader = '#'
+autocmd FileType conf,fstab,yaml      let b:comment_leader = '#'
 autocmd FileType matlab,tex      let b:comment_leader = '%'
 autocmd FileType vim             let b:comment_leader = '"'
 
