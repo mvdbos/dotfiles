@@ -63,5 +63,4 @@
     newHighlight = green bold 22
 [credential]
 	helper = 
-	helper = 
 	helper = /usr/local/share/gcm-core/git-credential-manager
