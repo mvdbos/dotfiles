@@ -359,6 +359,10 @@
 	<true/>
 	<key>IRMemory</key>
 	<integer>4</integer>
+	<key>NeverWarnAboutShortLivedSessions_56294D09-C240-4956-8A78-C8E298B770DB</key>
+	<true/>
+	<key>NeverWarnAboutShortLivedSessions_56294D09-C240-4956-8A78-C8E298B770DB_selection</key>
+	<integer>0</integer>
 	<key>New Bookmarks</key>
 	<array>
 		<dict>
@@ -574,7 +578,7 @@
 			<key>Columns</key>
 			<integer>90</integer>
 			<key>Command</key>
-			<string>/usr/local/bin/bash</string>
+			<string>/opt/homebrew/bin/bash</string>
 			<key>Cursor Color</key>
 			<dict>
 				<key>Blue Component</key>
