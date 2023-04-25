@@ -47,7 +47,6 @@ if [[ $PLATFORM_IS_DARWIN -eq 1 ]]; then
     alias rm='grm -I'
     alias mv='gmv -iu --strip-trailing-slashes'
     alias df='gdf -h --total'
-    alias dircolors='gdircolors'
     alias dir='gdir'
 else
     alias ls='ls -F1B --group-directories-first --color=auto'
@@ -59,13 +58,16 @@ fi
 export WGETRC="${HOME}/.config/wget/wgetrc"
 alias wget='wget --execute ca_certificate=~/.config/certs/insg3_b64.cer --hsts-file=~/.config/wget/wget-hsts-db'
 
-# enable color support of ls and also add handy aliases
-test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
+# enable color support of ls 
 alias dir='dir --color=auto'
 alias vdir='vdir --color=auto'
 alias grep='grep --color=auto'
 alias fgrep='fgrep --color=auto'
 alias egrep='egrep --color=auto'
+
+if [ "$PLATFORM_IS_DARWIN" -eq 1 ] ; then
+    eval $(/opt/homebrew/bin/brew shellenv)
+fi
 
 if [ "$PLATFORM_IS_DARWIN" -eq 1 ] || [ "$PLATFORM_IS_UBUNTU" -eq 1 ] || [ "$PLATFORM_IS_RASPBERRY" -eq 1 ]; then
     eval "$(thefuck --alias)"
@@ -250,6 +252,3 @@ test -f ~/.bashrc.local && source ~/.bashrc.local
 # Make this the last return value,
 # so we don't have an exit status of the test command on our prompt
 true
-
-
-source /Users/EU88FH/.docker/init-bash.sh || true # Added by Docker Desktop

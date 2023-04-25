@@ -22,3 +22,6 @@ echo "Setting iTerm preference file location"
 defaults write com.googlecode.iterm2.plist PrefsCustomFolder -string "~/.dotfiles/iterm2"
 # Tell iTerm2 to use the custom preferences in the directory
 defaults write com.googlecode.iterm2.plist LoadPrefsFromCustomFolder -bool true
+
+# Let keys repeat normally. No popup for special chars
+defaults write -g ApplePressAndHoldEnabled -bool false

@@ -7,7 +7,6 @@ cask_args appdir: "~/Applications"
 cask "git-credential-manager-core"
 cask "phoenix"
 cask "jetbrains-toolbox"
-cask "firefox"
 cask "spotify"
 
 brew "azure-cli"
