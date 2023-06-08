@@ -9,6 +9,7 @@
     lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr)%Creset %C(blue)(%an)%Creset'  --abbrev-commit --date=relative
     st = status -s -b
     br = branch
+    bv = branch --sort=-committerdate --format='%(HEAD) %(color:yellow)%(align:width=40,position=left)%(refname:short)%(end) %(color:red)%(objectname:short) %(color:reset)%(subject) %(color:green)(%(committerdate:relative)) %(color:blue)(%(authorname))%(color:reset)' --color=always
     pr = pull-request
     gr = grep -i -n -0 --heading --break
 [color]
@@ -66,3 +67,5 @@
 	helper = /usr/local/share/gcm-core/git-credential-manager
 [credential "https://dev.azure.com"]
 	useHttpPath = true
+[includeIf "gitdir/i:~/Developer/ING/"]
+  path = ~/Developer/ING/.gitconfig
