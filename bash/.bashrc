@@ -216,7 +216,8 @@ __git_complete gw _git_log
 
 alias g='git'
 alias ga='g add'
-alias gb='g branch'
+alias gb='g br'
+alias gb='g bv'
 alias gc='g ci'
 alias gco='g co'
 alias gd='g diff'
