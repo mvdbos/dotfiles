@@ -11,7 +11,7 @@ cask "spotify"
 
 brew "azure-cli"
 brew "bash"
-brew "bash-completion"
+brew "bash-completion@2"
 # Clone of cat(1) with syntax highlighting and Git integration
 brew "bat"
 brew "colordiff"
