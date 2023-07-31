@@ -32,7 +32,7 @@ fi
 echo "Updating submodules..."
 git submodule init --quiet
 git submodule update --quiet
-git submodule foreach --quiet git pull --rebase --quiet origin master
+git submodule foreach --quiet git pull --rebase --quiet origin HEAD
 
 echo "Restowing common apps..."
 stow -R bash
