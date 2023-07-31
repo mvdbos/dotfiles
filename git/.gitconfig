@@ -62,10 +62,10 @@
     oldHighlight = red bold 52
     newNormal = green
     newHighlight = green bold 22
+[includeIf "gitdir/i:~/Developer/ING/"]
+  path = ~/Developer/ING/.gitconfig
 [credential]
 	helper = 
 	helper = /usr/local/share/gcm-core/git-credential-manager
 [credential "https://dev.azure.com"]
 	useHttpPath = true
-[includeIf "gitdir/i:~/Developer/ING/"]
-  path = ~/Developer/ING/.gitconfig
