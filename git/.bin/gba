@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+echo "Local branches:"
+
+git branch --sort=-committerdate --format='%(HEAD) %(color:yellow)%(align:width=40,position=left)%(refname:short)%(end) %(color:red)%(objectname:short) %(color:reset)%(subject) %(color:green)(%(committerdate:relative)) %(color:blue)(%(authorname))%(color:reset)' --color=always
+
+echo -e "\nRemote branches:"
+
+git branch --sort=-committerdate --format='%(HEAD) %(color:yellow)%(align:width=40,position=left)%(refname:short)%(end) %(color:red)%(objectname:short) %(color:reset)%(subject) %(color:green)(%(committerdate:relative)) %(color:blue)(%(authorname))%(color:reset)' --color=always --remote
