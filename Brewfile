@@ -1,5 +1,4 @@
 tap "homebrew/bundle"
-tap "homebrew/core"
 tap "microsoft/git"
 
 cask_args appdir: "~/Applications"
