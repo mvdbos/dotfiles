@@ -67,3 +67,5 @@
 	helper = /usr/local/bin/git-credential-manager
 [advice]
 	addIgnoredFile = false
+[init]
+	defaultBranch = main
