@@ -71,3 +71,5 @@
 	useHttpPath = true
 [advice]
 	addIgnoredFile = false
+[init]
+	defaultBranch = main
