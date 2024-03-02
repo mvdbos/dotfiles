@@ -65,8 +65,8 @@ alias grep='grep --color=auto'
 alias fgrep='fgrep --color=auto'
 alias egrep='egrep --color=auto'
 
-if [ "$PLATFORM_IS_DARWIN" -eq 1 ] ; then
-    eval $(/opt/homebrew/bin/brew shellenv)
+if [ "$PLATFORM_IS_DARWIN" -eq 1 ] && type brew &>/dev/null; then
+    eval $(brew shellenv)
 fi
 
 if [ "$PLATFORM_IS_DARWIN" -eq 1 ] || [ "$PLATFORM_IS_UBUNTU" -eq 1 ] || [ "$PLATFORM_IS_RASPBERRY" -eq 1 ]; then
