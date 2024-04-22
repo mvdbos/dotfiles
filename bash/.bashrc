@@ -1,5 +1,7 @@
 PATH="/usr/local/bin:/usr/local/sbin:$PATH"
 PATH="~/.bin:$PATH"
+PATH="/opt/homebrew/bin:$PATH"
+
 
 source ~/.dotfiles/platform_detector.bash
 
