@@ -2,7 +2,8 @@
     name = Matthijs van den Bos
     email = matthijs@vandenbos.org
 [push]
-    default = current
+    default = simple
+    autoSetupRemote = true
 [alias]
     co = checkout
     ci = commit
@@ -12,6 +13,7 @@
     bv = branch --sort=-committerdate --format='%(HEAD) %(color:yellow)%(align:width=40,position=left)%(refname:short)%(end) %(color:red)%(objectname:short) %(color:reset)%(subject) %(color:green)(%(committerdate:relative)) %(color:blue)(%(authorname))%(color:reset)' --color=always
     pr = pull-request
     gr = grep -i -n -0 --heading --break
+    sw = switch
 [color]
     ui = true
     interactive = auto
@@ -25,6 +27,9 @@
 [interactive]
     singleKey = true
     diffFilter = ~/.bin/diff-highlight
+[checkout]
+    workers = 8
+    defaultRemote = origin
 [diff]
     tool = vimdiff
 [difftool]
@@ -49,11 +54,11 @@
     new = green
 [fetch]
     prune = true
-    parallel = 2
+    parallel = 8
 [pull]
     ff = only
 [submodule]
-    fetchJobs = 2
+    fetchJobs = 8
     recurse = true
 [status]
     submodulesummary = 1
@@ -73,3 +78,7 @@
 	addIgnoredFile = false
 [init]
 	defaultBranch = main
+[rebase]
+    # Prevent accidentally dropping commits by deleting lines. Use 'drop' to drop commits.
+    missingCommitsCheck = error
+    abbreviateCommands = true
