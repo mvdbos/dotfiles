@@ -272,8 +272,11 @@ fun! TrimWhitespace()
     call winrestview(l:save)
 endfun
 
-"autocmd FileType c,cpp,python,ruby,java,php,text,vim autocmd BufWritePre * :call TrimWhitespace()
-:noremap <Leader>sw :call TrimWhitespace()<CR>
+autocmd FileType c,cpp,python,ruby,java,php,text,vim autocmd BufWritePre * :call TrimWhitespace()
+noremap <Leader>sw :call TrimWhitespace()<CR>
+
+" Automaticall close quickfix and location windows on pressing enter
+autocmd FileType qf nnoremap <buffer> <CR> <CR>:cclose<CR>
 
 "superscript mapping ---------------------- {{{
 execute "digraphs xS " . 0x02E3
