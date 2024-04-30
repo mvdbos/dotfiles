@@ -43,3 +43,6 @@
 [submodule "vim/.vim/pack/my-plugins/start/rust.vim"]
 	path = vim/.vim/pack/my-plugins/start/rust.vim
 	url = https://github.com/rust-lang/rust.vim
+[submodule "vim/.vim/pack/my-plugins/start/copilot.vim"]
+	path = vim/.vim/pack/my-plugins/start/copilot.vim
+	url = https://github.com/github/copilot.vim
