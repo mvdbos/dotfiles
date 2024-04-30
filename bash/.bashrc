@@ -246,6 +246,11 @@ elif [[ $PLATFORM_IS_UBUNTU -eq 1 ]]; then
     export LANG=en_US.utf8
 fi
 
+# Set up Github Copilot alias
+eval "$(gh copilot alias -- bash)"
+alias cs='ghcs'
+alias ce='ghce'
+
 export SDKMAN_DIR="$HOME/.sdkman"
 [[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"
 

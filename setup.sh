@@ -58,3 +58,6 @@ theme_dir="$(bat --config-dir)/themes/dracula"
 mkdir -p "$theme_dir"
 curl --silent --show-error -o $theme_dir/Dracula.tmTheme https://raw.githubusercontent.com/dracula/sublime/master/Dracula.tmTheme
 bat cache --build
+
+# Add copilot plugin to gh
+gh extension install github/gh-copilot
