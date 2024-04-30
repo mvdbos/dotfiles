@@ -9,6 +9,7 @@ bash-completion \
 colordiff \
 coreutils \
 curl \
+gh \
 git \
 git-extras \
 htop \

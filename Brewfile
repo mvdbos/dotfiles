@@ -18,6 +18,7 @@ brew "coreutils"
 # HTTP tunnel
 brew "corkscrew"
 brew "curl"
+brew "gh"
 brew "git"
 brew "git-extras"
 brew "git-quick-stats"
