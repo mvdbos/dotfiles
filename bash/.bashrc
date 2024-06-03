@@ -23,7 +23,7 @@ HISTSIZE=100000
 HISTFILESIZE=100000
 
 export HISTTIMEFORMAT="%F %T "          ## Adds time to history
-export HISTIGNORE='ls:bg:fg:history'    ## Hist ignores exact match
+export HISTIGNORE='history'    ## Hist ignores exact match
 
 # check the window size after each command and, if necessary,
 # update the values of LINES and COLUMNS.
@@ -60,7 +60,7 @@ fi
 export WGETRC="${HOME}/.config/wget/wgetrc"
 alias wget='wget --execute ca_certificate=~/.config/certs/insg3_b64.cer --hsts-file=~/.config/wget/wget-hsts-db'
 
-# enable color support of ls 
+# enable color support of ls
 alias dir='dir --color=auto'
 alias vdir='vdir --color=auto'
 alias grep='grep --color=auto'
@@ -143,10 +143,8 @@ elif [ "$PLATFORM_IS_ANDROID" -eq 1 ]; then
     test -f $PREFIX/usr/share/bash-completion/completions/git && source $PREFIX/usr/share/bash-completion/completions/git
 fi
 
-function git_prompt_pre() {
-    local exit_code="$?"
-
-    prompt_string="\n"
+function prompt_info() {
+    local prompt_string=""
 
     local RCol='\[\e[0m\]'
 
@@ -156,13 +154,6 @@ function git_prompt_pre() {
     local BBlu='\[\e[1;34m\]'
     local Mag='\[\e[0;35m\]'
 
-    # Show current time
-    prompt_string+="${Gry}[$(date +%H:%M)] ${RCol}"
-
-    # Show exit code if non-zero
-    if [ $exit_code != 0 ]; then
-        prompt_string+="${Red}(${exit_code}) ${RCol}"
-    fi
 
     # Check Jobs
     type jobs &>/dev/null
@@ -182,12 +173,8 @@ function git_prompt_pre() {
         prompt_string+="${Mag}\h${RCol}:"
     fi
 
-    prompt_string+="${BBlu}\w${RCol}"
+    prompt_string+="[${BBlu}\w${RCol}]"
     echo -n $prompt_string
-}
-
-function git_prompt_post() {
-    echo -n " \\\$ "
 }
 
 # Set the truncation length of \w (current working dir) in prompt
@@ -198,7 +185,44 @@ export GIT_PS1_SHOWDIRTYSTATE=true
 export GIT_PS1_SHOWUNTRACKEDFILES=true
 export GIT_PS1_SHOWUPSTREAM=auto
 export GIT_PS1_SHOWCOLORHINTS=true
-PROMPT_COMMAND='__git_ps1 "$(git_prompt_pre)" "$(git_prompt_post)"'
+
+RESET="\[\033[0m\]"
+RED="\[\033[0;31m\]"
+GREEN="\[\033[0;32m\]"
+BLUE="\[\033[01;34m\]"
+BYELLOW="\[\033[1;33m\]"
+GREY="\[\e[0;90m\]"
+MAGENTA="\[\e[0;35m\]"
+
+PS0="\n"
+
+function __prompt_command() {
+    local exit_code="$?"
+    if [ $exit_code != 0 ]; then
+        last_command="$(history | tail -n 1 | awk '{$1=$2=$3=""; print $0}')"
+        echo "Last command: ${last_command}"
+        last_command="${last_command#"${last_command%%[![:space:]]*}"}"
+        echo "Last command: ${last_command}"
+        last_command="${last_command%"${last_command##*[![:space:]]}"}"
+        echo "Last command: ${last_command}"
+        EXIT_STATUS="\n${RED}(${exit_code}: \\\`${last_command}\\\`)${RESET}"
+    else
+        EXIT_STATUS=""
+    fi
+
+    PS_LINE=`printf -- '- %.0s' {1..200}`
+    # First, we fill the line with dashes, then we move the cursor to the beginning of the line and overwrite the line with the actual prompt.
+    PS_FILL="${GREY}\${PS_LINE:0:$COLUMNS}${RESET}\[\033[0G\]"
+
+    PS_GIT='$(__git_ps1 " (%s)")'
+    # for the time, we move the cursor to 10 chars from the end of the line and print the time.
+    PS_TIME="\[\033[\$((COLUMNS-10))G\] ${GREY}[\t]${RESET}"
+
+    PS_PROMPT="\\n${GREY}\\\$${RESET} "
+    PS1="${EXIT_STATUS}\n${PS_FILL}$(prompt_info)${PS_GIT}${PS_TIME}${RESET}${PS_PROMPT}"
+}
+
+PROMPT_COMMAND=__prompt_command
 
 # enable git completion on 'g' alias in addition to 'git'
 __git_complete g __git_main
@@ -248,8 +272,8 @@ fi
 
 # Set up Github Copilot alias
 eval "$(gh copilot alias -- bash)"
-alias cs='ghcs'
-alias ce='ghce'
+alias cps='ghcs'
+alias cpe='ghce'
 
 export SDKMAN_DIR="$HOME/.sdkman"
 [[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"
