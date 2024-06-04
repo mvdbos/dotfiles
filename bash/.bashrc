@@ -11,19 +11,20 @@ case $- in
     *) return;;
 esac
 
-# don't put duplicate lines or lines starting with space in the history.
-# See bash(1) for more options
-HISTCONTROL=ignoreboth:erasedups
 
 # append to the history file, don't overwrite it
 shopt -s histappend
 
+# don't put duplicate lines or lines starting with space in the history.
+# See bash(1) for more options
+HISTCONTROL=ignorespace:ignoredups:erasedups
+#
 # for setting history length see HISTSIZE and HISTFILESIZE in bash(1)
 HISTSIZE=100000
 HISTFILESIZE=100000
 
 export HISTTIMEFORMAT="%F %T "          ## Adds time to history
-export HISTIGNORE='history'    ## Hist ignores exact match
+export HISTIGNORE='history:ls:ls[ ]*:l:la:ll:gs:gs[ ]*:gd:gd[ ]*:gfp:fg:bg:man[ ]*:pwd:cd:cd[]*:man[]*:which*:ps'    ## colon-separated list of commands to ignore. Exact match
 
 # check the window size after each command and, if necessary,
 # update the values of LINES and COLUMNS.
