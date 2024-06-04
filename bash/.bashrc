@@ -24,7 +24,7 @@ HISTSIZE=100000
 HISTFILESIZE=100000
 
 export HISTTIMEFORMAT="%F %T "          ## Adds time to history
-export HISTIGNORE='history:ls:ls[ ]*:l:la:ll:gs:gs[ ]*:gd:gd[ ]*:gfp:fg:bg:man[ ]*:pwd:cd:cd[]*:man[]*:which*:ps'    ## colon-separated list of commands to ignore. Exact match
+export HISTIGNORE='history:ls:ls[ ]*:l:la:ll:gs::gd:gfp:fg:bg:man[ ]*:pwd:cd:cd[]*:man[]*:which*:ps'    ## colon-separated list of commands to ignore. Exact match
 
 # check the window size after each command and, if necessary,
 # update the values of LINES and COLUMNS.
@@ -197,16 +197,47 @@ MAGENTA="\[\e[0;35m\]"
 
 PS0="\n"
 
+function record_command_details() {
+    previous_command=$BASH_COMMAND
+}
+
+# Run before each interactive command is executed
+start_command_timer() {
+    if [ "UNSET" == "${timer}" ]; then
+        timer=$SECONDS
+    else
+        timer=${timer:-$SECONDS}
+    fi
+}
+
+# Run before the prompt is displayed
+stop_command_timer() {
+    if [ "UNSET" == "${timer}" ]; then
+        the_seconds=0
+        timer_show="0s"
+    else
+        the_seconds=$((SECONDS - timer))
+        timer_show="$(format-duration seconds $the_seconds)"
+    fi
+    timer="UNSET"
+}
+
+preexec_functions+=(start_command_timer)
+precmd_functions+=(stop_command_timer)
+preexec_functions+=(record_command_details)
+
 function __prompt_command() {
     local exit_code="$?"
+
+    LONG_RUNTIME=60
+    if [ -n "$the_seconds" ] && [ $the_seconds -gt $LONG_RUNTIME ]; then
+        TIMER_RESULT="\n${BYELLOW}(runtime: ~${timer_show})${RESET} "
+    else
+        TIMER_RESULT=""
+    fi
+
     if [ $exit_code != 0 ]; then
-        last_command="$(history | tail -n 1 | awk '{$1=$2=$3=""; print $0}')"
-        echo "Last command: ${last_command}"
-        last_command="${last_command#"${last_command%%[![:space:]]*}"}"
-        echo "Last command: ${last_command}"
-        last_command="${last_command%"${last_command##*[![:space:]]}"}"
-        echo "Last command: ${last_command}"
-        EXIT_STATUS="\n${RED}(${exit_code}: \\\`${last_command}\\\`)${RESET}"
+        EXIT_STATUS="\n${RED}(exit: ${exit_code}, cmd: \\\`${previous_command}\\\`)${RESET} "
     else
         EXIT_STATUS=""
     fi
@@ -220,10 +251,10 @@ function __prompt_command() {
     PS_TIME="\[\033[\$((COLUMNS-10))G\] ${GREY}[\t]${RESET}"
 
     PS_PROMPT="\\n${GREY}\\\$${RESET} "
-    PS1="${EXIT_STATUS}\n${PS_FILL}$(prompt_info)${PS_GIT}${PS_TIME}${RESET}${PS_PROMPT}"
+    PS1="${TIMER_RESULT}${EXIT_STATUS}\n${PS_FILL}$(prompt_info)${PS_GIT}${PS_TIME}${RESET}${PS_PROMPT}"
 }
 
-PROMPT_COMMAND=__prompt_command
+PROMPT_COMMAND=__prompt_command;
 
 # enable git completion on 'g' alias in addition to 'git'
 __git_complete g __git_main
@@ -278,6 +309,8 @@ alias cpe='ghce'
 
 export SDKMAN_DIR="$HOME/.sdkman"
 [[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"
+
+[[ -f ~/.bash-preexec.sh ]] && source ~/.bash-preexec.sh
 
 test -f ~/.bashrc.local && source ~/.bashrc.local
 
