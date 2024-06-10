@@ -15,23 +15,25 @@
     gr = grep -i -n -0 --heading --break
     sw = switch
 [color]
-    ui = true
+	ui = true
     interactive = auto
 [core]
     editor = vim
     excludesfile = ~/.gitignore-global
-[pager]
-    log = ~/.bin/diff-highlight | less -RFX
-    show = ~/.bin/diff-highlight | less -RFX
-    diff = ~/.bin/diff-highlight | less -RFX
+	pager = diff-so-fancy | less --tabs=4 -RFX
+#[pager]
+#    log = ~/.bin/diff-highlight | less -RFX
+#    show = ~/.bin/diff-highlight | less -RFX
+#    diff = ~/.bin/diff-highlight | less -RFX
 [interactive]
     singleKey = true
-    diffFilter = ~/.bin/diff-highlight
+    #diffFilter = ~/.bin/diff-highlight
 [checkout]
     workers = 8
     defaultRemote = origin
 [diff]
     tool = vimdiff
+	noprefix = true
 [difftool]
     prompt = false
 [merge]
@@ -46,12 +48,12 @@
     required = true
 	process = git-lfs filter-process
 [color "diff"]
-    whitespace = red reverse
-    meta = yellow
-    frag = magenta bold
-    commit = yellow bold
-    old = red
-    new = green
+	whitespace = red reverse
+	meta = yellow bold
+	frag = magenta bold
+	commit = yellow bold
+	old = red
+	new = green
 [fetch]
     prune = true
     parallel = 8
@@ -63,10 +65,10 @@
 [status]
     submodulesummary = 1
 [color "diff-highlight"]
-    oldNormal = red
-    oldHighlight = red bold 52
-    newNormal = green
-    newHighlight = green bold 22
+	oldNormal = red
+	oldHighlight = red 52
+	newNormal = green
+	newHighlight = green 22
 [includeIf "gitdir/i:~/Developer/ING/"]
   path = ~/Developer/ING/.gitconfig
 [credential]
@@ -82,3 +84,5 @@
     # Prevent accidentally dropping commits by deleting lines. Use 'drop' to drop commits.
     missingCommitsCheck = error
     abbreviateCommands = true
+[diff-so-fancy]
+	first-run = false
