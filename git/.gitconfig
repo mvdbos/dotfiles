@@ -21,10 +21,6 @@
     editor = vim
     excludesfile = ~/.gitignore-global
 	pager = diff-so-fancy | less --tabs=4 -RFX
-#[pager]
-#    log = ~/.bin/diff-highlight | less -RFX
-#    show = ~/.bin/diff-highlight | less -RFX
-#    diff = ~/.bin/diff-highlight | less -RFX
 [interactive]
     singleKey = true
 	diffFilter = diff-so-fancy --patch
@@ -33,7 +29,6 @@
     defaultRemote = origin
 [diff]
     tool = vimdiff
-	noprefix = true
 [difftool]
     prompt = false
 [merge]

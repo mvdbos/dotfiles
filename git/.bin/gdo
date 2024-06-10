@@ -10,4 +10,5 @@ remote_name=${1:-$default_remote}
 current_branch=$(git rev-parse --abbrev-ref HEAD)
 
 # Perform git diff between the local branch and its remote counterpart
+clear
 git diff "${remote_name}/${current_branch}"
