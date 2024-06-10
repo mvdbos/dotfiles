@@ -27,7 +27,7 @@
 #    diff = ~/.bin/diff-highlight | less -RFX
 [interactive]
     singleKey = true
-    #diffFilter = ~/.bin/diff-highlight
+	diffFilter = diff-so-fancy --patch
 [checkout]
     workers = 8
     defaultRemote = origin
