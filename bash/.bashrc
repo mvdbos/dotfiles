@@ -24,7 +24,7 @@ HISTSIZE=100000
 HISTFILESIZE=100000
 
 export HISTTIMEFORMAT="%F %T "          ## Adds time to history
-export HISTIGNORE='history:ls:ls[ ]*:l:la:ll:gs::gd:gfp:fg:bg:man[ ]*:pwd:cd:cd[]*:man[]*:which*:ps'    ## colon-separated list of commands to ignore. Exact match
+export HISTIGNORE='history:ls:l:la:ll:gs::gd:gfp:fg:bg:man[ ]*:pwd:cd:which*:ps'    ## colon-separated list of commands to ignore. Exact match
 
 # check the window size after each command and, if necessary,
 # update the values of LINES and COLUMNS.
@@ -32,9 +32,21 @@ shopt -s checkwinsize
 
 # Add autocorrect to dirnames
 shopt -s cdspell
+shopt -s dirspell
+shopt -s direxpand
+
+# If set, Bash lists the status of any stopped and running jobs before exiting an
+# interactive shell. If any jobs are running, this causes the exit to be deferred
+# until a second exit is attempted without an intervening command.
+# The shell always postpones exiting if any jobs are stopped.
+shopt -s checkjobs
 
 # Enable recursion with **, e.g. for f in **; do echo "$f";done
 shopt -s globstar
+
+# If set, Bash includes filenames beginning with a ‘.’ in the results of filename expansion.
+# The filenames ‘.’ and ‘..’ must always be matched explicitly, even if dotglob is set.
+shopt -s dotglob
 
 # make less more friendly for non-text input files, see lesspipe(1)
 [ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
@@ -108,8 +120,41 @@ alias mkdir='mkdir -pv'
 alias diff='colordiff'
 alias du='du -hc'
 alias tree='tree -F'
-function cdls () { builtin cd "$@" && ls; }
-alias cd='cdls'
+# Any symlink to a dir put in this dir will be completed first with the cd command from anyhwhere
+CDPATH=.:~/.config/dir_aliases:$CDPATH
+
+# cd replacement that checks for a directory alias. If it exists, it will cd to that directory with cd -P
+# note that cd output is sent to /dev/null to avoid it echoing the directory it's changing to caused by setting CDPATH
+function cdbm() {
+    local target_dir="$1"
+    local aliases_dir="$HOME/.config/dir_aliases"
+
+    if [[ -z "$target_dir" ]] || [[ $1 == "-" ]] || [[ $1 == "--help" ]] || [[ $1 == "-L" ]]; then
+        builtin cd "$@" >/dev/null && ls
+        return $?
+    fi
+
+    if [[ -d "$aliases_dir/$target_dir" ]]; then
+        builtin cd -P "$target_dir" >/dev/null && ls
+    else
+        builtin cd "$@" >/dev/null && ls
+    fi
+}
+
+alias cd='cdbm'
+
+function up() {
+    local levels="$1"
+    local path=""
+    for ((i = 1; i <= levels; i++)); do
+        path="../$path"
+    done
+    cd "$path"
+}
+
+alias ..='up 1'
+alias ...='up 2'
+alias ....='up 3'
 alias l='ls'
 alias lrt='ls -rt'
 alias ll='ls -ohgBv --group-directories-first'
@@ -159,13 +204,9 @@ function prompt_info() {
     # Check Jobs
     type jobs &>/dev/null
     if [ $? == "0" ]; then
-        ## Backgrounded running jobs
-        local jobs=$(jobs -r | wc -l | tr -d ' ')
-        ## Stopped Jobs
-        local jobs=$((jobs + $(jobs -s | wc -l | tr -d ' ')))
-
-        if [ ${jobs} -gt 0 ]; then
-            prompt_string+="${Yel}jobs:${jobs}${RCol} "
+        local jobs=$(jobs | awk 'NR > 1 {printf ", "}{printf "%s",$3} END {print ""}')
+        if [ -n "$jobs" ]; then
+            prompt_string+="${Yel}(jobs: ${jobs})${RCol} "
         fi
     fi
 
