@@ -300,6 +300,7 @@ PROMPT_COMMAND=__prompt_command;
 # enable git completion on 'g' alias in addition to 'git'
 __git_complete g __git_main
 __git_complete ga _git_add
+__git_complete gap _git_add
 __git_complete gb _git_branch
 __git_complete gc _git_commit
 __git_complete gco _git_checkout
@@ -315,6 +316,7 @@ __git_complete gw _git_log
 
 alias g='git'
 alias ga='g add'
+alias gap='g add -p'
 alias gb='g bv'
 alias gc='g ci'
 alias gco='g co'
