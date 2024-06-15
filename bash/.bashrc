@@ -189,33 +189,41 @@ elif [ "$PLATFORM_IS_ANDROID" -eq 1 ]; then
     test -f $PREFIX/usr/share/bash-completion/completions/git && source $PREFIX/usr/share/bash-completion/completions/git
 fi
 
+BLUE="\[\$(tput setaf 4)\]"
+CYAN="\[\$(tput setaf 6)\]"
+GREEN="\[\$(tput setaf 2)\]"
+GREY="\[\$(tput setaf 8)\]"
+MAGENTA="\[\$(tput setaf 5)\]"
+RED="\[\$(tput setaf 1)\]"
+WHITE="\[\$(tput setaf 7)\]"
+YELLOW="\[\$(tput setaf 3)\]"
+
+BLINK="\[\$(tput blink)\]"
+BOLD="\[\$(tput bold)\]"
+ITALIC="\[\$(tput sitm)\]"
+UNDERLINE="\[\$(tput smul)\]"
+
+RESET="\[\$(tput sgr0)\]"
+
 function prompt_info() {
     local prompt_string=""
-
-    local RCol='\[\e[0m\]'
-
-    local Gry='\[\e[0;90m\]'
-    local Red='\[\e[0;31m\]'
-    local Yel='\[\e[0;33m\]'
-    local BBlu='\[\e[1;34m\]'
-    local Mag='\[\e[0;35m\]'
-
 
     # Check Jobs
     type jobs &>/dev/null
     if [ $? == "0" ]; then
         local jobs=$(jobs | awk 'NR > 1 {printf ", "}{printf "%s",$3} END {print ""}')
         if [ -n "$jobs" ]; then
-            prompt_string+="${Yel}(jobs: ${jobs})${RCol} "
+            prompt_string+="${YELLOW}${BOLD}(jobs: ${jobs})${RESET} "
         fi
     fi
 
     # Only show hostname if not on localhost
     if [ -n "$SSH_CLIENT" ] || [ -n "$SSH_TTY" ]; then
-        prompt_string+="${Mag}\h${RCol}:"
+        prompt_string+="${MAGENTA}\h${RESET}:"
     fi
 
-    prompt_string+="[${BBlu}\w${RCol}]"
+    prompt_string+="[${BLUE}${BOLD}\w${RESET}]"
+
     echo -n $prompt_string
 }
 
@@ -228,13 +236,6 @@ export GIT_PS1_SHOWUNTRACKEDFILES=true
 export GIT_PS1_SHOWUPSTREAM=auto
 export GIT_PS1_SHOWCOLORHINTS=true
 
-RESET="\[\033[0m\]"
-RED="\[\033[0;31m\]"
-GREEN="\[\033[0;32m\]"
-BLUE="\[\033[01;34m\]"
-BYELLOW="\[\033[1;33m\]"
-GREY="\[\e[0;90m\]"
-MAGENTA="\[\e[0;35m\]"
 
 PS0="\n"
 
@@ -272,7 +273,7 @@ function __prompt_command() {
 
     LONG_RUNTIME=60
     if [ -n "$the_seconds" ] && [ $the_seconds -gt $LONG_RUNTIME ]; then
-        TIMER_RESULT="\n${BYELLOW}(runtime: ~${timer_show})${RESET} "
+        TIMER_RESULT="\n${YELLOW}${BOLD}(runtime: ~${timer_show})${RESET} "
     else
         TIMER_RESULT=""
     fi
