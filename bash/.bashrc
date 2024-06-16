@@ -290,7 +290,7 @@ function __prompt_command() {
 
     PS_GIT='$(__git_ps1 " (%s)")'
     # for the time, we move the cursor to 10 chars from the end of the line and print the time.
-    PS_TIME="\[\033[\$((COLUMNS-10))G\] ${GREY}[\t]${RESET}"
+    PS_TIME="\[\033[\$((COLUMNS-7))G\] ${GREY}[$(date +%H:%M)]${RESET}"
 
     PS_PROMPT="\\n${GREY}\\\$${RESET} "
     PS1="${TIMER_RESULT}${EXIT_STATUS}\n${PS_FILL}$(prompt_info)${PS_GIT}${PS_TIME}${RESET}${PS_PROMPT}"
