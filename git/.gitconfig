@@ -64,9 +64,6 @@
 	oldHighlight = red 52
 	newNormal = green
 	newHighlight = green 22
-[credential]
-	helper = 
-	helper = /usr/local/bin/git-credential-manager
 [advice]
 	addIgnoredFile = false
 [init]
@@ -77,3 +74,5 @@
     abbreviateCommands = true
 [diff-so-fancy]
 	first-run = false
+[credential]
+	helper = /usr/local/bin/git-credential-manager
