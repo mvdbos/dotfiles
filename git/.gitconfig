@@ -66,9 +66,6 @@
 	newHighlight = green 22
 [includeIf "gitdir/i:~/Developer/ING/"]
   path = ~/Developer/ING/.gitconfig
-[credential]
-	helper = 
-	helper = /usr/local/bin/git-credential-manager
 [credential "https://dev.azure.com"]
 	useHttpPath = true
 [advice]
@@ -81,3 +78,5 @@
     abbreviateCommands = true
 [diff-so-fancy]
 	first-run = false
+[credential]
+	helper = /usr/local/bin/git-credential-manager
