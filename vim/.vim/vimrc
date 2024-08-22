@@ -20,7 +20,7 @@ set shiftwidth=4  " number of spaces to use for autoindenting
 set cursorline
 
 set mouse=a
-set clipboard=unnamed
+set clipboard+=unnamed
 
 " search settings
 set ignorecase
@@ -313,7 +313,7 @@ endif
 """"""""""""""""""""""""""""""""""""""""""""""""""
 " START: ToggleComment() functionality
 """"""""""""""""""""""""""""""""""""""""""""""""""
-autocmd FileType c,cpp,java,kotlin,scala,php let b:comment_leader = '//'
+autocmd FileType go,c,cpp,java,kotlin,scala,php let b:comment_leader = '//'
 autocmd FileType bash,sh,zsh,ruby,python  let b:comment_leader = '#'
 autocmd FileType conf,fstab,yaml      let b:comment_leader = '#'
 autocmd FileType matlab,tex      let b:comment_leader = '%'

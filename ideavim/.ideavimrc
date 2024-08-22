@@ -44,10 +44,13 @@ map <C-p> :action SearchEverywhere<CR>
 nnoremap ]s :action GotoNextError<CR>
 nnoremap [s :action GotoPreviousError<CR>
 
-" Always paste from the first register, which we yank to by default. 
+" Always paste from the first register, which we yank to by default.
 " This way, purposeful yanks are not overwritten by deletions.
 " Vim registers become effectively disabled by this.
 "noremap p "0p
+
+" Yank to the system clipboard
+set clipboard+=unnamed
 
 " map <Leader>n <ESC>:NERDTreeToggle<CR>
 map <Leader>n <ESC>:NERDTreeFocus<CR>

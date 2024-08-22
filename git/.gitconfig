@@ -75,4 +75,5 @@
 [diff-so-fancy]
 	first-run = false
 [credential]
-	helper = /usr/local/bin/git-credential-manager
+	helper = 
+	helper = /usr/local/share/gcm-core/git-credential-manager

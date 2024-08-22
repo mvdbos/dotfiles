@@ -3,7 +3,7 @@ tap "microsoft/git"
 
 cask_args appdir: "~/Applications"
 
-cask "git-credential-manager-core"
+cask "git-credential-manager"
 cask "phoenix"
 cask "jetbrains-toolbox"
 cask "spotify"
