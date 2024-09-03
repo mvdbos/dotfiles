@@ -335,6 +335,7 @@ alias gr='g rebase'
 alias gs='g st'
 alias gw="g log --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %C(white)%s %Cgreen(%cr)%Creset %C(blue)(%an)%Creset %n%+b' --stat --no-merges  --date=relative --ignore-all-space --ignore-blank-lines  --ignore-space-at-eol  --ignore-space-change"
 alias gwip="git add . && git commit -m 'WIP' --no-verify  && git push"
+alias git-delete-local-orphan-branches="git branch -vv | awk '\$1 != \"*\"' | awk '\$4 ~ /gone\]/ || \$3 !~ /\[origin\// {print \$1}' | xargs -p -n 1 git branch -D"
 
 
 if [[ $PLATFORM_IS_DARWIN -eq 1 ]]; then
