@@ -16,6 +16,8 @@ set cursorline
 set number
 set scrolljump=5              " Jump 5 lines when running out of the screen
 
+set oldundo "this makes undo behave like Intellij undo, i.e. every small change, instead of VIM undo, which undoes everything since the last switch to insert mode
+
 " Disabling the arrow keys to help do things the 'right' way
 nnoremap <up> <nop>
 nnoremap <down> <nop>
