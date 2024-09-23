@@ -3,8 +3,7 @@
 if [ -z ${1} ]; then 
     echo "Aborting commit, no message provided."
 else 
-    message="$*"
-    git commit -m "${message}"
+    git commit -m "$*"
 fi
 
 
