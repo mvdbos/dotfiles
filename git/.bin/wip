@@ -4,5 +4,10 @@ message='WIP'
 
 if [ ! -z ${1} ]; then message="WIP $*"; fi
 
-git add . && git commit -m "${message}" --no-verify  && git push
+git add . && git commit -m "${message}" --no-verify 
+if [ $? -eq 0 ]; then
+    if [ ! -z $(git remote) ]; then
+        git push
+    fi
+fi
 
