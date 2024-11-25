@@ -77,7 +77,7 @@ au BufReadPost,BufNewFile *.md setlocal textwidth=0 wrapmargin=0
 " These settings are for soft wrap
 au BufReadPost,BufNewFile *.md setlocal linebreak wrap
 au BufReadPost,BufNewFile *.md setlocal breakindent breakindentopt=shift:2
-"au BufReadPost,BufNewFile *.md let &showbreak='> '
+au BufReadPost,BufNewFile *.md let &showbreak='> '
 
 au BufReadPost,BufNewFile *.md setlocal conceallevel=2
 au BufReadPost,BufNewFile *.md setlocal foldlevel=3
@@ -88,8 +88,8 @@ au BufReadPost,BufNewFile *.md setlocal complete+=kspell
 " makes completions match case with typed text
 au BufReadPost,BufNewFile *.md setlocal infercase
 
-"au FileType markdown set columns=80
-"autocmd VimResized,BufWinEnter,BufReadPost,BufNewFile *.md set columns=80
+" au FileType markdown set columns=120
+" autocmd VimResized,BufWinEnter,BufReadPost,BufNewFile *.md set columns=120
 
 " Markdown folding: ensure performance by setting manual in insert mode
 function! s:setFoldManual()
@@ -177,6 +177,9 @@ nmap <leader>6 <Plug>AirlineSelectTab6
 nmap <leader>7 <Plug>AirlineSelectTab7
 nmap <leader>8 <Plug>AirlineSelectTab8
 nmap <leader>9 <Plug>AirlineSelectTab9
+
+" Copilot
+imap <C-L> <Plug>(copilot-accept-word)
 
 " Vim indent guides settings
 let g:indent_guides_guide_size = 1
