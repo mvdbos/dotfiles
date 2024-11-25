@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-if [ ! -z ${1} ]; then 
+if [ ! -z "${1}" ]; then 
     git commit --amend -m "$*"
 else 
     git commit --amend --no-edit

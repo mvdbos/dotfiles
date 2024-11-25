@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-if [ -z ${1} ]; then 
+if [ -z "${1}" ]; then 
     echo "Aborting commit, no message provided."
 else 
     git commit -m "$*"
