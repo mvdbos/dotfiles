@@ -84,10 +84,10 @@ if [ "$PLATFORM_IS_DARWIN" -eq 1 ] && type brew &>/dev/null; then
     eval $(brew shellenv)
 fi
 
-if [ "$PLATFORM_IS_DARWIN" -eq 1 ] || [ "$PLATFORM_IS_UBUNTU" -eq 1 ] || [ "$PLATFORM_IS_RASPBERRY" -eq 1 ]; then
-    eval "$(thefuck --alias)"
-    eval "$(thefuck --alias ?)"
-fi
+# if [ "$PLATFORM_IS_DARWIN" -eq 1 ] || [ "$PLATFORM_IS_UBUNTU" -eq 1 ] || [ "$PLATFORM_IS_RASPBERRY" -eq 1 ]; then
+#     eval "$(thefuck --alias)"
+#     eval "$(thefuck --alias ?)"
+# fi
 
 # colored GCC warnings and errors
 export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
