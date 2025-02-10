@@ -10,7 +10,8 @@
     lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr)%Creset %C(blue)(%an)%Creset'  --abbrev-commit --date=relative
     st = status -s -b
     br = branch
-    bv = branch --sort=-committerdate --format='%(HEAD) %(color:yellow)%(align:width=40,position=left)%(refname:short)%(end) %(color:red)%(objectname:short) %(color:reset)%(subject) %(color:green)(%(committerdate:relative)) %(color:blue)(%(authorname))%(color:reset)' --color=always
+    bl = branch --sort=-committerdate --format='%(HEAD) %(color:yellow)%(align:width=40,position=left)%(refname:short)%(end) %(color:reset)%(subject) %(color:green)(%(committerdate:relative)) %(color:blue)(%(authorname))%(color:reset)' --color=always
+    brem = branch --sort=-committerdate --format='%(HEAD) %(color:yellow)%(align:width=40,position=left)%(refname:short)%(end) %(color:reset)%(subject) %(color:green)(%(committerdate:relative)) %(color:blue)(%(authorname))%(color:reset)' --color=always --remote
     pr = pull-request
     gr = grep -i -n -0 --heading --break
     sw = switch
