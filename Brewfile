@@ -6,7 +6,6 @@ cask_args appdir: "~/Applications"
 cask "git-credential-manager"
 cask "phoenix"
 cask "jetbrains-toolbox"
-cask "spotify"
 
 brew "bash"
 brew "bash-completion@2"
@@ -22,8 +21,6 @@ brew "git"
 brew "git-extras"
 brew "git-quick-stats"
 brew "htop"
-# JSON parser
-brew "jq"
 brew "markdown"
 brew "rename"
 # Organize software neatly under a single directory tree (e.g. /usr/local)
