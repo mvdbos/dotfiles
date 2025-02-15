@@ -1,6 +1,7 @@
 PATH="/usr/local/bin:/usr/local/sbin:$PATH"
 PATH="~/.bin:$PATH"
 PATH="/opt/homebrew/bin:$PATH"
+PATH="$HOMEBREW_PREFIX/opt/coreutils/libexec/gnubin:$PATH" # this makes the GNU coreutils preferred over the BSD ones
 
 
 source ~/.dotfiles/platform_detector.bash
@@ -83,6 +84,9 @@ alias egrep='egrep --color=auto'
 
 if [ "$PLATFORM_IS_DARWIN" -eq 1 ] && type brew &>/dev/null; then
     eval $(brew shellenv)
+    export HOMEBREW_CASK_OPTS="--appdir=${HOME}/Applications"
+    export HOMEBREW_NO_ANALYTICS="true"
+    export HOMEBREW_NO_ENV_HINTS="true"
 fi
 
 # if [ "$PLATFORM_IS_DARWIN" -eq 1 ] || [ "$PLATFORM_IS_UBUNTU" -eq 1 ] || [ "$PLATFORM_IS_RASPBERRY" -eq 1 ]; then
