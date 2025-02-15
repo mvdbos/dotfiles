@@ -33,6 +33,10 @@ echo "Updating submodules..."
 git submodule init --quiet
 git submodule update --quiet
 git submodule foreach --quiet git pull --rebase --quiet origin HEAD
+git fetch
+git pull --recurse-submodules
+git delete-merged-branches
+git-delete-squashed-branches
 
 echo "Restowing common apps..."
 stow -R bash
