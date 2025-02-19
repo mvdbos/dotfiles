@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+
+# This script lists all local and remote branches that you have created.
+
+
+# If there are arguments, proxy to git branch, otherwise execute the below script
+if [ $# -gt 0 ]; then
+	git branch "$@"
+	exit $?
+fi
+
+head=$(git rev-parse --abbrev-ref HEAD)
+
+locals=$(git for-each-ref --color=always --sort=-committerdate \
+      --format="%(color:yellow)%(align:width=40,position=left)%(refname:short)%(end)%(color:reset)%(subject) %(color:green)(%(committerdate:relative))%(color:reset)----%(authorname)----%(refname:short)" refs/heads/ \
+        | grep "$(git config user.name)" \
+        | grep -v "backup" \
+        | grep -v year \
+        | grep -v month \
+        | egrep -v "^(?:\x1B\[[0-9;]*m)*master(?:\x1B\[[0-9;]*m)*[[:space:]]+.*$")
+
+remotes=$(git for-each-ref --color=always --sort=-committerdate \
+      --format="%(color:yellow)%(align:width=40,position=left)%(refname:short)%(end)%(color:reset)%(subject) %(color:green)(%(committerdate:relative))%(color:reset)----%(authorname)----%(refname:short)" refs/remotes/ \
+        | grep "$(git config user.name)" \
+        | grep -v year \
+        | grep -v month \
+        | egrep -v "^(?:\x1B\[[0-9;]*m)*(origin|origin\/master)(?:\x1B\[[0-9;]*m)*[[:space:]]+.*$")
+
+echo "LOCAL:"
+while IFS= read -r line; do
+  full_local=$(echo "$line" | awk -F"----" '{print $1}')
+  local_branch=$(echo $line | awk -F"----" '{print $3}')
+  if [[ "$local_branch" == "$head" ]]; then
+    echo "* $full_local"
+  else
+    echo "  $full_local"
+  fi
+  remotes=$(echo "$remotes" | awk -v local_branch="$local_branch" -F"----" '$3 != "origin/"local_branch {print}')
+done <<< "$locals"
+
+echo
+echo "REMOTE:"
+while IFS= read -r line; do
+  echo "  $(echo "$line" | awk -F"----" '{print $1}')"
+done <<< "$remotes"
