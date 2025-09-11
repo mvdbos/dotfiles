@@ -1,24 +1,36 @@
 set editing-mode vi
-# set keymap vi
+#
+# Disabled, because we do it manually in our prompt_command function in .bashrc
+set show-mode-in-prompt on
+set vi-cmd-mode-string "\1\033[0;35m\2[CMD]\1\033[0m\2 "
+set vi-ins-mode-string "\1\033[0;32m\2[INS]\1\033[0m\2 "
 
 set show-all-if-ambiguous on
+set show-all-if-unmodified on
 set skip-completed-text on
 set completion-ignore-case on
 # Perform partial completion on the first Tab press,
 # only start cycling full results on the second Tab press
 set menu-complete-display-prefix on
+set colored-completion-prefix on
 
-set keymap vi-command
-# these are for vi-command mode
-"\e[A": history-search-backward
-"\e[B": history-search-forward
-"\e.": yank-last-arg
+# never ask, always show completions
+set completion-query-items 0
+# If set to ‘on’, Readline uses an internal pager resembling more(1) to display a screenful of possible completions at a time. This variable is ‘on’ by default.
+set page-completions off
+
+#set keymap vi-command
+## these are for vi-command mode
+#"\e[A": history-search-backward
+#"\e[B": history-search-forward
+#"\e.": yank-last-arg
 
 set keymap vi-insert
 # these are for vi-insert mode
 "\e[A": history-search-backward
 "\e[B": history-search-forward
 "\e.": yank-last-arg
+set search-ignore-case on
 
 # Control-l would otherwise not work in insert mode
 Control-l: clear-screen
