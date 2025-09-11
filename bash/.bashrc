@@ -1,3 +1,4 @@
+
 PATH="/usr/local/bin:/usr/local/sbin:$PATH"
 PATH="~/.bin:$PATH"
 PATH="/opt/homebrew/bin:$PATH"
@@ -34,7 +35,7 @@ shopt -s checkwinsize
 # Add autocorrect to dirnames
 shopt -s cdspell
 shopt -s dirspell
-shopt -s direxpand
+shopt -u direxpand
 
 # If set, Bash lists the status of any stopped and running jobs before exiting an
 # interactive shell. If any jobs are running, this causes the exit to be deferred
@@ -165,6 +166,8 @@ alias lrt='ls -rt'
 alias ll='ls -ohgBv --group-directories-first'
 alias la='ls -lAhvG --group-directories-first'
 
+eval $(locale)
+
 # load source files
 if [ "$PLATFORM_IS_DARWIN" -eq 1 ]; then
     test -f /usr/local/etc/bash_completion.d/git-prompt.sh && source /usr/local/etc/bash_completion.d/git-prompt.sh
@@ -290,14 +293,12 @@ function __prompt_command() {
     fi
 
     PS_LINE=`printf -- '- %.0s' {1..200}`
-    # First, we fill the line with dashes, then we move the cursor to the beginning of the line and overwrite the line with the actual prompt.
     PS_FILL="${GREY}\${PS_LINE:0:$COLUMNS}${RESET}\[\033[0G\]"
 
     PS_GIT='$(__git_ps1 " (%s)")'
-    # for the time, we move the cursor to 10 chars from the end of the line and print the time.
     PS_TIME="\[\033[\$((COLUMNS-7))G\] ${GREY}[$(date +%H:%M)]${RESET}"
-
     PS_PROMPT="\\n${GREY}\\\$${RESET} "
+
     PS1="${TIMER_RESULT}${EXIT_STATUS}\n${PS_FILL}$(prompt_info)${PS_GIT}${PS_TIME}${RESET}${PS_PROMPT}"
 }
 
