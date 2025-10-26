@@ -312,6 +312,7 @@ __git_complete gb _git_branch
 __git_complete gc _git_commit
 __git_complete gco _git_checkout
 __git_complete gd _git_diff
+__git_complete gdo _git_diff
 __git_complete gf _git_fetch
 __git_complete gg _git_grep
 __git_complete gl _git_log
