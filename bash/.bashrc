@@ -90,11 +90,6 @@ if [ "$PLATFORM_IS_DARWIN" -eq 1 ] && type brew &>/dev/null; then
     export HOMEBREW_NO_ENV_HINTS="true"
 fi
 
-if [ "$PLATFORM_IS_DARWIN" -eq 1 ] || [ "$PLATFORM_IS_UBUNTU" -eq 1 ] || [ "$PLATFORM_IS_RASPBERRY" -eq 1 ]; then
-    eval "$(thefuck --alias)"
-    eval "$(thefuck --alias ?)"
-fi
-
 # colored GCC warnings and errors
 export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
@@ -355,11 +350,6 @@ elif [[ $PLATFORM_IS_UBUNTU -eq 1 ]]; then
     export LANGUAGE=en_US.utf8
     export LANG=en_US.utf8
 fi
-
-# Set up Github Copilot alias
-eval "$(gh copilot alias -- bash)"
-alias cps='ghcs'
-alias cpe='ghce'
 
 export SDKMAN_DIR="$HOME/.sdkman"
 [[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"

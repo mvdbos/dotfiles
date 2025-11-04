@@ -30,9 +30,6 @@ echo "Installing Snap packages..."
 #sudo snap install gh --edge
 #sudo snap install hub --classic
 
-echo "Installing Python 3 packages..."
-sudo -H pip3 install thefuck
-
 echo "Setting timezone to Europe/Amsterdam"
 sudo timedatectl set-timezone Europe/Amsterdam
 

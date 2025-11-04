@@ -1,6 +1,6 @@
 [user]
-    name = Matthijs van den Bos
-    email = matthijs@vandenbos.org
+	name = Matthijs van den Bos
+	email = matthijs@vandenbos.org
 [push]
     default = simple
     autoSetupRemote = true
