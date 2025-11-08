@@ -12,6 +12,22 @@
 	<true/>
 	<key>AIFeatureStreamingResponses</key>
 	<true/>
+	<key>AIPermissionActInWebBrowser</key>
+	<integer>1</integer>
+	<key>AIPermissionCheckTerminalState</key>
+	<integer>1</integer>
+	<key>AIPermissionRunCommands</key>
+	<integer>1</integer>
+	<key>AIPermissionTypeForYou</key>
+	<integer>1</integer>
+	<key>AIPermissionViewHistory</key>
+	<integer>1</integer>
+	<key>AIPermissionViewManpages</key>
+	<integer>1</integer>
+	<key>AIPermissionWriteToClipboard</key>
+	<integer>1</integer>
+	<key>AIPermissionWriteToFilesystem</key>
+	<integer>1</integer>
 	<key>AITermAPI</key>
 	<integer>2</integer>
 	<key>AIVectorStore</key>
@@ -709,6 +725,8 @@
 			<true/>
 			<key>Prompt Before Closing 2</key>
 			<integer>2</integer>
+			<key>Prompt Path Click Opens Navigator</key>
+			<false/>
 			<key>Right Option Key Sends</key>
 			<integer>0</integer>
 			<key>Rows</key>
