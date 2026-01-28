@@ -3,6 +3,12 @@
 ## Overview
 This document defines the validation process that must be run whenever changes are made to the dotfiles configuration for bash or zsh.
 
+## Key Files
+
+- **`stow_dotfiles.sh`**: Centralized stow logic used by both `setup.sh` and `validate_setup.sh`
+- **`validate_setup.sh`**: Validation script that tests the configuration
+- **`setup.sh`**: Main setup script that installs all packages
+
 ## Validation Requirement
 
 **MANDATORY**: Run `./validate_setup.sh` after ANY changes to:
@@ -12,6 +18,7 @@ This document defines the validation process that must be run whenever changes a
 - `shell/.config/shell/aliases`
 - `shell/.config/shell/functions`
 - `setup.sh`
+- `stow_dotfiles.sh`
 
 ## Running Validation
 
