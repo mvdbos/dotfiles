@@ -77,7 +77,7 @@ set -o vi
 eval $(locale)
 
 # load source files
-if [ "$PLATFORM_IS_DARWIN" -eq 1 ]; then
+if [ "$PLATFORM_IS_DARWIN" -eq 1 ] 2>/dev/null; then
     test -f /usr/local/etc/bash_completion.d/git-prompt.sh && source /usr/local/etc/bash_completion.d/git-prompt.sh
 
     # We don't need hub autocompletion set up on OS X: HomeBrew does that for us
@@ -91,15 +91,15 @@ if [ "$PLATFORM_IS_DARWIN" -eq 1 ]; then
             done
         fi
     fi
-elif [ "$PLATFORM_IS_UBUNTU" -eq 1 ]; then
+elif [ "$PLATFORM_IS_UBUNTU" -eq 1 ] 2>/dev/null; then
     test -f /etc/bash_completion.d/git-prompt && source /etc/bash_completion.d/git-prompt
     test -f /usr/share/bash-completion/bash_completion && source /usr/share/bash-completion/bash_completion
     test -f /usr/share/bash-completion/completions/git && source /usr/share/bash-completion/completions/git
-elif [ "$PLATFORM_IS_RASPBERRY" -eq 1 ]; then
+elif [ "$PLATFORM_IS_RASPBERRY" -eq 1 ] 2>/dev/null; then
     test -f /etc/bash_completion.d/git-prompt && source /etc/bash_completion.d/git-prompt
     test -f /usr/share/bash-completion/bash_completion && source /usr/share/bash-completion/bash_completion
     test -f /usr/share/bash-completion/completions/git && source /usr/share/bash-completion/completions/git
-elif [ "$PLATFORM_IS_ANDROID" -eq 1 ]; then
+elif [ "$PLATFORM_IS_ANDROID" -eq 1 ] 2>/dev/null; then
     test -f $PREFIX/etc/bash_completion.d/git-prompt && source $PREFIX/etc/bash_completion.d/git-prompt
     test -f $PREFIX/usr/share/bash-completion/bash_completion && source $PREFIX/usr/share/bash-completion/bash_completion
     test -f $PREFIX/usr/share/bash-completion/completions/git && source $PREFIX/usr/share/bash-completion/completions/git
