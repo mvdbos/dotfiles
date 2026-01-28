@@ -28,9 +28,6 @@ setopt HIST_VERIFY              # Don't execute immediately upon history expansi
 setopt INC_APPEND_HISTORY       # Write to the history file immediately, not when the shell exits
 setopt SHARE_HISTORY            # Share history between all sessions
 
-# Ignore these commands in history
-HISTORY_IGNORE='(history|ls|l|la|ll|gs|gd|gfp|fg|bg|man *|pwd|cd|which*|ps)'
-
 # Shell options
 setopt AUTO_CD              # If a command is a directory name, cd to it
 setopt AUTO_PUSHD           # Make cd push the old directory onto the directory stack
@@ -101,6 +98,24 @@ bindkey -M vicmd 'j' history-search-forward
 # Alt-. to insert last argument (like bash)
 bindkey -M viins '\e.' insert-last-word
 
+# Load platform-specific completion paths before initializing completion
+if [[ $PLATFORM_IS_DARWIN -eq 1 ]] 2>/dev/null; then
+    # On macOS with Homebrew
+    if type brew &>/dev/null; then
+        FPATH="$(brew --prefix)/share/zsh/site-functions:${FPATH}"
+    fi
+elif [[ $PLATFORM_IS_UBUNTU -eq 1 ]] 2>/dev/null || [[ $PLATFORM_IS_RASPBERRY -eq 1 ]] 2>/dev/null; then
+    # On Ubuntu/Raspberry Pi
+    if [ -d /usr/share/zsh/vendor-completions ]; then
+        fpath=(/usr/share/zsh/vendor-completions $fpath)
+    fi
+elif [[ $PLATFORM_IS_ANDROID -eq 1 ]] 2>/dev/null; then
+    # On Android/Termux
+    if [ -d "$PREFIX/share/zsh/site-functions" ]; then
+        fpath=("$PREFIX/share/zsh/site-functions" $fpath)
+    fi
+fi
+
 # Initialize completion system
 autoload -Uz compinit
 compinit
@@ -127,26 +142,6 @@ zstyle ':completion:*:corrections' format '%B%d (errors: %e)%b'
 
 # Git completion (zsh has built-in git completion)
 # Just need to enable it, which compinit does
-
-# Load platform-specific completions and configs
-if [[ $PLATFORM_IS_DARWIN -eq 1 ]] 2>/dev/null; then
-    # On macOS with Homebrew
-    if type brew &>/dev/null; then
-        FPATH="$(brew --prefix)/share/zsh/site-functions:${FPATH}"
-        autoload -Uz compinit
-        compinit
-    fi
-elif [[ $PLATFORM_IS_UBUNTU -eq 1 ]] 2>/dev/null || [[ $PLATFORM_IS_RASPBERRY -eq 1 ]] 2>/dev/null; then
-    # On Ubuntu/Raspberry Pi
-    if [ -d /usr/share/zsh/vendor-completions ]; then
-        fpath=(/usr/share/zsh/vendor-completions $fpath)
-    fi
-elif [[ $PLATFORM_IS_ANDROID -eq 1 ]] 2>/dev/null; then
-    # On Android/Termux
-    if [ -d "$PREFIX/share/zsh/site-functions" ]; then
-        fpath=("$PREFIX/share/zsh/site-functions" $fpath)
-    fi
-fi
 
 # Define colors for prompt
 autoload -U colors && colors

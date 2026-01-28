@@ -4,7 +4,7 @@ source error_handler.bash
 source platform_detector.bash
 
 if [[ $PLATFORM_IS_DARWIN -eq 1 ]]; then
-    echo "Detected OS X, proceeding with setup..."
+    echo "Detected macOS, proceeding with setup..."
     bash setup_osx.bash
 elif [[ $PLATFORM_IS_LINUX -eq 1 ]]; then
 

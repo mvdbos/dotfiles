@@ -6,8 +6,10 @@
 up() {
     local levels="$1"
     local path=""
-    for i in $(seq 1 "$levels"); do
+    local i=1
+    while [ "$i" -le "$levels" ]; do
         path="../$path"
+        i=$((i + 1))
     done
     cd "$path" || return 1
 }
@@ -27,6 +29,7 @@ cdbm() {
     # Check if there's an alias for this directory
     if [ -d "$aliases_dir/$target_dir" ]; then
         builtin cd -P "$target_dir" >/dev/null && ls
+        return $?
     else
         builtin cd "$@" >/dev/null && ls
     fi
