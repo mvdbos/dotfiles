@@ -46,7 +46,9 @@ if [ "$PLATFORM_IS_DARWIN" -eq 1 ] 2>/dev/null; then
     export LC_ALL=en_US.UTF-8
     export LANG=en_US.UTF-8
     
-    if command -v brew >/dev/null 2>&1; then
+    # Skip brew shellenv for zsh (handled in .zshenv for speed)
+    # For other shells, run brew shellenv
+    if [ -z "$ZSH_VERSION" ] && command -v brew >/dev/null 2>&1; then
         eval "$(brew shellenv)"
         export HOMEBREW_CASK_OPTS="--appdir=${HOME}/Applications"
         export HOMEBREW_NO_ANALYTICS="true"
@@ -56,17 +58,6 @@ elif [ "$PLATFORM_IS_UBUNTU" -eq 1 ] 2>/dev/null; then
     export LC_ALL=en_US.utf8
     export LANGUAGE=en_US.utf8
     export LANG=en_US.utf8
-fi
-
-# SDKMAN initialization
-export SDKMAN_DIR="$HOME/.sdkman"
-if [ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]; then
-    . "$HOME/.sdkman/bin/sdkman-init.sh"
-fi
-
-# Source local profile overrides if they exist
-if [ -f "$HOME/.profile.local" ]; then
-    . "$HOME/.profile.local"
 fi
 
 # For bash login shells, source .bashrc to get interactive configuration
