@@ -5,7 +5,9 @@
 [[ $- != *i* ]] && return
 
 # Source shared profile for common environment setup
-if [ -f "$HOME/.profile" ]; then
+# Only do this for non-login shells, since login shells
+# already source ~/.profile via ~/.zprofile
+if [[ ! -o login ]] && [ -f "$HOME/.profile" ]; then
     source "$HOME/.profile"
 fi
 
@@ -71,8 +73,15 @@ alias ..='up 1'
 alias ...='up 2'
 alias ....='up 3'
 
-# Load locale
-eval $(locale) 2>/dev/null
+# Load locale safely without using eval on untrusted data
+while IFS='=' read -r _loc_name _loc_value; do
+    case "${_loc_name}" in
+        LANG|LC_ALL|LC_CTYPE|LC_COLLATE|LC_MESSAGES|LC_TIME|LC_NUMERIC|LC_MONETARY|LC_PAPER|LC_NAME|LC_ADDRESS|LC_TELEPHONE|LC_MEASUREMENT|LC_IDENTIFICATION)
+            export "${_loc_name}=${_loc_value}"
+            ;;
+    esac
+done < <(locale 2>/dev/null)
+unset _loc_name _loc_value
 
 # Vi mode configuration
 bindkey -v  # Enable vi mode
