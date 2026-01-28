@@ -1,11 +1,11 @@
+# Mark that .bashrc has been sourced to prevent circular sourcing with .profile
+export BASHRC_SOURCED=1
 
-PATH="/usr/local/bin:/usr/local/sbin:$PATH"
-PATH="~/.bin:$PATH"
-PATH="/opt/homebrew/bin:$PATH"
-PATH="$HOMEBREW_PREFIX/opt/coreutils/libexec/gnubin:$PATH" # this makes the GNU coreutils preferred over the BSD ones
-
-
-source ~/.dotfiles/platform_detector.bash
+# Source shared profile for PATH and environment setup
+# This is needed for interactive non-login shells
+if [ -f "$HOME/.profile" ]; then
+    source "$HOME/.profile"
+fi
 
 # If not running interactively, don't do anything
 case $- in
@@ -58,116 +58,35 @@ if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then
     debian_chroot=$(cat /etc/debian_chroot)
 fi
 
-# load platform-dependent aliases
-if [[ $PLATFORM_IS_DARWIN -eq 1 ]]; then
-    alias ls='gls -F1B --group-directories-first --color=auto'
-    alias rm='grm -I'
-    alias mv='gmv -iu --strip-trailing-slashes'
-    alias df='gdf -h --total'
-    alias dir='gdir'
-    alias date='gdate'
-else
-    alias ls='ls -F1B --group-directories-first --color=auto'
-    alias rm='rm -I'
-    alias mv='mv -iu --strip-trailing-slashes'
-    alias df='df -h --total'
+# Source shared aliases
+if [ -f "$HOME/.config/shell/aliases" ]; then
+    source "$HOME/.config/shell/aliases"
 fi
 
-export WGETRC="${HOME}/.config/wget/wgetrc"
-alias wget='wget --execute ca_certificate=~/.config/certs/insg3_b64.cer --hsts-file=~/.config/wget/wget-hsts-db'
-
-# enable color support of ls
-alias dir='dir --color=auto'
-alias vdir='vdir --color=auto'
-alias grep='grep --color=auto'
-alias fgrep='fgrep --color=auto'
-alias egrep='egrep --color=auto'
-
-if [ "$PLATFORM_IS_DARWIN" -eq 1 ] && type brew &>/dev/null; then
-    eval $(brew shellenv)
-    export HOMEBREW_CASK_OPTS="--appdir=${HOME}/Applications"
-    export HOMEBREW_NO_ANALYTICS="true"
-    export HOMEBREW_NO_ENV_HINTS="true"
+# Source shared functions
+if [ -f "$HOME/.config/shell/functions" ]; then
+    source "$HOME/.config/shell/functions"
 fi
 
-# colored GCC warnings and errors
-export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
-
-# we always want to use Vim
-export EDITOR="vim"
-export VISUAL="vim"
-export SVN_EDITOR="vim"
+# Set up cd alias and shortcuts
+alias cd='cdbm'
+alias ..='up 1'
+alias ...='up 2'
+alias ....='up 3'
 
 # Set bash to use vi as readline for the command line.
 # Note: this is also done by the settings in .inputrc already. This is extra
 set -o vi
 
-# Set bat as cat alias and a pager for the man command
-alias cat='bat --style=snip'
-export MANPAGER="sh -c 'col -bx | bat -l man -p'"
-export BAT_THEME="Dracula"
-#It might also be necessary to set MANROFFOPT="-c" if you experience formatting problems.
-
-alias ag='ag --hidden'
-
-alias j='jobs'
-alias k1='kill %1'
-alias k2='kill %2'
-alias k3='kill %3'
-
-alias top='htop'
-alias cp='cp -i'
-alias mkdir='mkdir -pv'
-alias diff='colordiff'
-alias du='du -hc'
-alias tree='tree -F'
-# Any symlink to a dir put in this dir will be completed first with the cd command from anyhwhere
-CDPATH=.:~/.config/dir_aliases:$CDPATH
-
-# cd replacement that checks for a directory alias. If it exists, it will cd to that directory with cd -P
-# note that cd output is sent to /dev/null to avoid it echoing the directory it's changing to caused by setting CDPATH
-function cdbm() {
-    local target_dir="$1"
-    local aliases_dir="$HOME/.config/dir_aliases"
-
-    if [[ -z "$target_dir" ]] || [[ $1 == "-" ]] || [[ $1 == "--help" ]] || [[ $1 == "-L" ]]; then
-        builtin cd "$@" >/dev/null && ls
-        return $?
-    fi
-
-    if [[ -d "$aliases_dir/$target_dir" ]]; then
-        builtin cd -P "$target_dir" >/dev/null && ls
-    else
-        builtin cd "$@" >/dev/null && ls
-    fi
-}
-
-alias cd='cdbm'
-
-function up() {
-    local levels="$1"
-    local path=""
-    for ((i = 1; i <= levels; i++)); do
-        path="../$path"
-    done
-    cd "$path"
-}
-
-alias ..='up 1'
-alias ...='up 2'
-alias ....='up 3'
-alias l='ls'
-alias lrt='ls -rt'
-alias ll='ls -ohgBv --group-directories-first'
-alias la='ls -lAhvG --group-directories-first'
-
-eval $(locale)
+# Note: Locale variables (LC_*, LANG) should be set at system/session level,
+# not in shell RC files. Re-exporting them here can cause warnings if the
+# locale values are invalid or not installed. Let the environment handle it.
 
 # load source files
-if [ "$PLATFORM_IS_DARWIN" -eq 1 ]; then
+if [ "$PLATFORM_IS_DARWIN" -eq 1 ] 2>/dev/null; then
     test -f /usr/local/etc/bash_completion.d/git-prompt.sh && source /usr/local/etc/bash_completion.d/git-prompt.sh
 
-    # We don't need hub autocompletion set up on OS X: HomeBrew does that for us
+    # We don't need hub autocompletion set up on macOS: Homebrew does that for us
     if type brew &>/dev/null; then
         HOMEBREW_PREFIX="$(brew --prefix)"
         if [[ -r "${HOMEBREW_PREFIX}/etc/profile.d/bash_completion.sh" ]]; then
@@ -178,15 +97,15 @@ if [ "$PLATFORM_IS_DARWIN" -eq 1 ]; then
             done
         fi
     fi
-elif [ "$PLATFORM_IS_UBUNTU" -eq 1 ]; then
+elif [ "$PLATFORM_IS_UBUNTU" -eq 1 ] 2>/dev/null; then
     test -f /etc/bash_completion.d/git-prompt && source /etc/bash_completion.d/git-prompt
     test -f /usr/share/bash-completion/bash_completion && source /usr/share/bash-completion/bash_completion
     test -f /usr/share/bash-completion/completions/git && source /usr/share/bash-completion/completions/git
-elif [ "$PLATFORM_IS_RASPBERRY" -eq 1 ]; then
+elif [ "$PLATFORM_IS_RASPBERRY" -eq 1 ] 2>/dev/null; then
     test -f /etc/bash_completion.d/git-prompt && source /etc/bash_completion.d/git-prompt
     test -f /usr/share/bash-completion/bash_completion && source /usr/share/bash-completion/bash_completion
     test -f /usr/share/bash-completion/completions/git && source /usr/share/bash-completion/completions/git
-elif [ "$PLATFORM_IS_ANDROID" -eq 1 ]; then
+elif [ "$PLATFORM_IS_ANDROID" -eq 1 ] 2>/dev/null; then
     test -f $PREFIX/etc/bash_completion.d/git-prompt && source $PREFIX/etc/bash_completion.d/git-prompt
     test -f $PREFIX/usr/share/bash-completion/bash_completion && source $PREFIX/usr/share/bash-completion/bash_completion
     test -f $PREFIX/usr/share/bash-completion/completions/git && source $PREFIX/usr/share/bash-completion/completions/git
@@ -316,43 +235,6 @@ __git_complete gp _git_push
 __git_complete gr _git_rebase
 __git_complete gs _git_status
 __git_complete gw _git_log
-
-alias g='git'
-alias ga='g add'
-alias gap='g add -p'
-alias gbl='g bl | grep -v year | grep -v month'
-alias gbr='g brem | grep -v year | grep -v month'
-alias gb='gbm'
-alias gc='g ci'
-alias gco='g co'
-alias gd='clear && g diff'
-alias gdm='g diff origin/master'
-alias gf='g fetch --all'
-alias gfp='g fetch && g pull --recurse-submodules && g delete-merged-branches && git-delete-squashed-branches '
-alias gg='g gr'
-alias gl='g lg'
-alias glm='g lg origin/master..'
-alias glc='g log -1 -u'
-alias gp='g push'
-alias gr='g rebase'
-alias gs='g st'
-alias gw="g log --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %C(white)%s %Cgreen(%cr)%Creset %C(blue)(%an)%Creset %n%+b' --stat --no-merges  --date=relative --ignore-all-space --ignore-blank-lines  --ignore-space-at-eol  --ignore-space-change"
-alias gwip="git add . && git commit -m 'WIP' --no-verify  && git push"
-alias git-delete-local-orphan-branches="git branch -vv | awk '\$1 != \"*\"' | awk '\$4 ~ /gone\]/ || \$3 !~ /\[origin\// {print \$1}' | xargs -p -n 1 git branch -D"
-alias gdom="gd origin/master"
-
-
-if [[ $PLATFORM_IS_DARWIN -eq 1 ]]; then
-    export LC_ALL=en_US.UTF-8
-    export LANG=en_US.UTF-8
-elif [[ $PLATFORM_IS_UBUNTU -eq 1 ]]; then
-    export LC_ALL=en_US.utf8
-    export LANGUAGE=en_US.utf8
-    export LANG=en_US.utf8
-fi
-
-export SDKMAN_DIR="$HOME/.sdkman"
-[[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"
 
 [[ -f ~/.bash-preexec.sh ]] && source ~/.bash-preexec.sh
 

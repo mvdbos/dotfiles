@@ -1,0 +1,56 @@
+name: Validate Dotfiles Setup
+
+on:
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'bash/.bashrc'
+      - 'zsh/.zshrc'
+      - 'shell/.profile'
+      - 'shell/.config/shell/**'
+      - 'setup.sh'
+      - 'validate_setup.sh'
+      - '.github/workflows/copilot-setup-steps.yml'
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'bash/.bashrc'
+      - 'zsh/.zshrc'
+      - 'shell/.profile'
+      - 'shell/.config/shell/**'
+      - 'setup.sh'
+      - 'validate_setup.sh'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y stow zsh
+        
+    - name: Run validation script
+      run: |
+        cd ${{ github.workspace }}
+        chmod +x validate_setup.sh
+        ./validate_setup.sh
+        
+    - name: Check validation results
+      if: failure()
+      run: |
+        echo "❌ Validation failed!"
+        echo "Please ensure all bash tests pass before merging."
+        echo "Run './validate_setup.sh' locally to debug."
+        exit 1
+        
+    - name: Validation successful
+      if: success()
+      run: |
+        echo "✅ All validation tests passed!"
+        echo "Bash configuration is working correctly."
