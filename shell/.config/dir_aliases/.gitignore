@@ -1,0 +1,6 @@
+# Ignore all symlinks in this directory (user's personal bookmarks)
+*
+
+# But keep this .gitignore and the README
+!.gitignore
+!README.md
