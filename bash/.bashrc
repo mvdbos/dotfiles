@@ -1,4 +1,8 @@
-# Source shared profile for common environment setup
+# Mark that .bashrc has been sourced to prevent circular sourcing with .profile
+export BASHRC_SOURCED=1
+
+# Source shared profile for PATH and environment setup
+# This is needed for interactive non-login shells
 if [ -f "$HOME/.profile" ]; then
     source "$HOME/.profile"
 fi

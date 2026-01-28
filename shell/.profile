@@ -70,7 +70,8 @@ if [ -f "$HOME/.profile.local" ]; then
 fi
 
 # For bash login shells, source .bashrc to get interactive configuration
-if [ -n "$BASH_VERSION" ]; then
+# Only do this if .bashrc hasn't been sourced yet (to avoid circular sourcing)
+if [ -n "$BASH_VERSION" ] && [ -z "$BASHRC_SOURCED" ]; then
     if [ -f "$HOME/.bashrc" ]; then
         . "$HOME/.bashrc"
     fi
