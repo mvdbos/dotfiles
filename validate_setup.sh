@@ -24,6 +24,9 @@ cd "$TEST_HOME/.dotfiles"
 # Run stow commands (from setup.sh)
 log_info "Running stow commands..."
 source platform_detector.bash
+source stow_dotfiles.sh
+
+# Stow essential packages individually for better error reporting
 stow -R shell 2>&1 >/dev/null && test_passed "Stowed shell" || test_failed "Stow shell failed"
 stow -R bash 2>&1 >/dev/null && test_passed "Stowed bash" || test_failed "Stow bash failed"
 stow -R zsh 2>&1 >/dev/null && test_passed "Stowed zsh" || test_failed "Stow zsh failed"

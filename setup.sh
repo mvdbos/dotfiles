@@ -38,28 +38,9 @@ git pull --recurse-submodules
 git delete-merged-branches
 git-delete-squashed-branches
 
-echo "Restowing common apps..."
-stow -R shell
-stow -R bash
-stow -R vim
-stow -R certs
-stow -R wget
-stow -R ssh
-
-# Handling annoying replacement of our .gitconfig symlink.
-# If that has happened, simply remove it.
-rm -f ~/.gitconfig
-stow -R git
-
-# Always stow zsh configuration to allow switching shells at will
-echo "Installing zsh configuration..."
-stow -R zsh
-
-if [ "$PLATFORM_NAME" == "Darwin" ]; then
-    echo "Restowing Mac apps..."
-    stow -R phoenix
-    stow -R ideavim
-fi
+# Stow all dotfiles packages
+source stow_dotfiles.sh
+stow_dotfiles
 
 # Add Dracula theme for bat
 echo "Adding Dracula theme for bat..."
