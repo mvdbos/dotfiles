@@ -89,3 +89,13 @@ To use zsh instead of bash:
 3. Log out and log back in (or start a new terminal session)
 
 The zsh configuration is installed by default during setup, so you can switch between bash and zsh at will. Both shells share the same aliases, functions, and utilities, so your workflow remains consistent.
+
+## Troubleshooting
+
+If you encounter "command not found" errors for `cdbm`, `gfp`, or other aliases after installation:
+
+1. **Reload your shell**: Start a new terminal or run `source ~/.bashrc` (or `source ~/.zshrc`)
+2. **Verify stow ran**: Check that symlinks exist: `ls -la ~/.bashrc ~/.config/shell/`
+3. **Check for errors**: Run `bash -x ~/.bashrc` to see detailed execution
+
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for detailed solutions to common issues.
