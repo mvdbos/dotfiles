@@ -81,6 +81,30 @@ alias ....='up 3'
 bindkey -v  # Enable vi mode
 export KEYTIMEOUT=1  # Reduce delay when switching modes
 
+# Vi mode indicator (matches bash .inputrc behavior)
+# Initialize with insert mode (green [INS])
+VI_MODE_INDICATOR="%F{green}[INS]%f "
+
+# Update indicator when keymap changes
+function zle-keymap-select {
+    if [[ ${KEYMAP} == vicmd ]] || [[ $1 = 'block' ]]; then
+        # Command mode - magenta [CMD] (matches bash .inputrc)
+        VI_MODE_INDICATOR="%F{magenta}[CMD]%f "
+    else
+        # Insert mode - green [INS] (matches bash .inputrc)
+        VI_MODE_INDICATOR="%F{green}[INS]%f "
+    fi
+    zle reset-prompt
+}
+zle -N zle-keymap-select
+
+# Reset to insert mode on each new command line
+function zle-line-init {
+    VI_MODE_INDICATOR="%F{green}[INS]%f "
+    zle reset-prompt
+}
+zle -N zle-line-init
+
 # Better vi mode with visual indicators and history search
 bindkey -M viins '^?' backward-delete-char  # Backspace
 bindkey -M viins '^H' backward-delete-char  # Ctrl-H
@@ -212,11 +236,11 @@ precmd() {
     # Build the prompt
     # Create dash line (like bash PS_LINE)
     local ps_line=$(printf -- '- %.0s' {1..200})
-    # Fill with dashes to COLUMNS-8 (leaves room for " [HH:MM]" = 8 chars), then return to start
-    local ps_fill="%F{8}${ps_line:0:$((COLUMNS-8))}%f"$'\r'
+    # Fill with dashes, then return to start
+    local ps_fill="%F{8}\${ps_line:0:\$COLUMNS}%f"$'\r'
     local ps_git='$(git_prompt_info)'
-    # Position time at end of line like bash: COLUMNS-7 for "[HH:MM]" format
-    local ps_time=$'\e['"$((COLUMNS-7))G"'%F{8}[%D{%H:%M}]%f'
+    # Position time at COLUMNS-7 for "[HH:MM]" format (must use escape for column calculation)
+    local ps_time=$'%{\e[$((COLUMNS-7))G%}%F{8}[%D{%H:%M}]%f'
     
     # Info section (with SSH hostname if applicable)
     local prompt_info=""
@@ -235,35 +259,62 @@ precmd() {
     # Add directory (truncated to 3 levels)
     prompt_info+="[%F{blue}%B%3~%b%f]"
     
+    # Vi mode indicator (like bash .inputrc)
+    # This will be replaced by the zle-keymap-select hook
+    local ps_vi_mode='${VI_MODE_INDICATOR}'
+    
     # Set the full prompt
-    PROMPT="${timer_result}${exit_status}"$'\n'"${ps_fill}"$'\r'"${prompt_info}${ps_git} ${ps_time}"$'\n'"%F{8}$%f "
+    PROMPT="${timer_result}${exit_status}"$'\n'"${ps_fill}${prompt_info}${ps_git}${ps_time}"$'\n'"${ps_vi_mode}%F{8}$%f "
 }
 
-# Git prompt info function (matches bash GIT_PS1_SHOWCOLORHINTS behavior)
+# Git prompt info function (matches bash GIT_PS1_SHOWCOLORHINTS=true behavior)
+# Bash with SHOWCOLORHINTS shows branches in GREEN for both clean AND dirty
+# Only the status symbols (* + %) indicate the state
 git_prompt_info() {
     local ref
     ref=$(git symbolic-ref HEAD 2> /dev/null) || ref=$(git rev-parse --short HEAD 2> /dev/null) || return 0
     local branch="${ref#refs/heads/}"
     
-    # Check for changes
+    # Check for changes (matching bash GIT_PS1_SHOWDIRTYSTATE)
     local status_flags=""
     if ! git diff --quiet 2>/dev/null; then
-        status_flags+="*"
+        status_flags+="*"  # unstaged changes
     fi
     if ! git diff --cached --quiet 2>/dev/null; then
-        status_flags+="+"
-    fi
-    if [ -n "$(git ls-files --others --exclude-standard 2>/dev/null)" ]; then
-        status_flags+="%"
+        status_flags+="+"  # staged changes
     fi
     
-    # Show in red when there are changes, green when clean (matches bash GIT_PS1_SHOWCOLORHINTS)
-    if [ -n "$status_flags" ]; then
-        echo " %F{red}(${branch} ${status_flags})%f"
-    else
-        # Clean repo - show in green
-        echo " %F{green}(${branch})%f"
+    # Check for stashed changes (matching bash behavior)
+    if git rev-parse --verify refs/stash >/dev/null 2>&1; then
+        status_flags+="$"
     fi
+    
+    # Check for untracked files (matching bash GIT_PS1_SHOWUNTRACKEDFILES)
+    if [ -n "$(git ls-files --others --exclude-standard 2>/dev/null)" ]; then
+        status_flags+="%"  # untracked files
+    fi
+    
+    # Check upstream status (matching bash GIT_PS1_SHOWUPSTREAM)
+    local upstream_status=""
+    local upstream=$(git rev-parse --abbrev-ref @{upstream} 2>/dev/null)
+    if [ -n "$upstream" ]; then
+        local ahead=$(git rev-list --count @{upstream}..HEAD 2>/dev/null)
+        local behind=$(git rev-list --count HEAD..@{upstream} 2>/dev/null)
+        if [ "$ahead" -gt 0 ] && [ "$behind" -gt 0 ]; then
+            upstream_status="<>"
+        elif [ "$ahead" -gt 0 ]; then
+            upstream_status=">"
+        elif [ "$behind" -gt 0 ]; then
+            upstream_status="<"
+        else
+            upstream_status="="
+        fi
+    fi
+    
+    # Bash with GIT_PS1_SHOWCOLORHINTS=true shows GREEN for clean state
+    # Shows GREEN even with status symbols (the symbols show the state, not color)
+    # Only shows red/yellow during certain git operations (merge, rebase, etc.)
+    echo " %F{green}(${branch}${upstream_status}${status_flags})%f"
 }
 
 # Source local zshrc overrides if they exist
