@@ -85,7 +85,7 @@ The dotfiles support both bash and zsh with a shared core configuration:
 
 To use zsh instead of bash:
 1. Install zsh: `brew install zsh` (macOS) or `apt install zsh` (Linux)
-2. Run setup.sh again (it will detect zsh and install the zsh stow automatically)
-3. Change your default shell: `chsh -s $(which zsh)`
+2. Change your default shell: `chsh -s $(which zsh)`
+3. Log out and log back in (or start a new terminal session)
 
-Both shells share the same aliases, functions, and utilities, so your workflow remains consistent.
+The zsh configuration is installed by default during setup, so you can switch between bash and zsh at will. Both shells share the same aliases, functions, and utilities, so your workflow remains consistent.
