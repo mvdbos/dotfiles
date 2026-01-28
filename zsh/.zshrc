@@ -143,8 +143,24 @@ zstyle ':completion:*:messages' format '%d'
 zstyle ':completion:*:warnings' format 'No matches for: %d'
 zstyle ':completion:*:corrections' format '%B%d (errors: %e)%b'
 
-# Git completion (zsh has built-in git completion)
-# Just need to enable it, which compinit does
+# Git completion for aliases (zsh has built-in git completion)
+# Set up completion for common git aliases
+compdef g=git
+compdef ga=git-add
+compdef gap=git-add
+compdef gb=git-branch
+compdef gc=git-commit
+compdef gco=git-checkout
+compdef gd=git-diff
+compdef gdo=git-diff
+compdef gf=git-fetch
+compdef gg=git-grep
+compdef gl=git-log
+compdef glc=git-log
+compdef gp=git-push
+compdef gr=git-rebase
+compdef gs=git-status
+compdef gw=git-log
 
 # Define colors for prompt
 autoload -U colors && colors
@@ -196,7 +212,8 @@ precmd() {
     # Build the prompt
     local ps_fill="%F{8}${(l:$COLUMNS::-:)}%f"
     local ps_git='$(git_prompt_info)'
-    local ps_time="%F{8}[%*]%f"
+    # Position time at end of line (COLUMNS-8 for "[HH:MM]" format)
+    local ps_time=$'\e['"$((COLUMNS-7))G"' %F{8}[%*]%f'
     
     # Info section (with SSH hostname if applicable)
     local prompt_info=""
