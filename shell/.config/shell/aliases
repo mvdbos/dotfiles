@@ -12,17 +12,17 @@ if [ "$PLATFORM_IS_DARWIN" -eq 1 ] 2>/dev/null; then
     alias rm='grm -I'
     alias mv='gmv -iu --strip-trailing-slashes'
     alias df='gdf -h --total'
-    alias dir='gdir'
+    alias dir='gdir --color=auto'
     alias date='gdate'
 else
     alias ls='ls -F1B --group-directories-first --color=auto'
     alias rm='rm -I'
     alias mv='mv -iu --strip-trailing-slashes'
     alias df='df -h --total'
+    alias dir='dir --color=auto'
 fi
 
-# Color support aliases
-alias dir='dir --color=auto'
+# Color support aliases (vdir, grep variants)
 alias vdir='vdir --color=auto'
 alias grep='grep --color=auto'
 alias fgrep='fgrep --color=auto'

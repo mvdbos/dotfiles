@@ -74,7 +74,15 @@ alias ....='up 3'
 # Note: this is also done by the settings in .inputrc already. This is extra
 set -o vi
 
-eval $(locale) 2>/dev/null
+# Load locale safely without using eval on untrusted data
+while IFS='=' read -r _loc_name _loc_value; do
+    case "${_loc_name}" in
+        LANG|LC_ALL|LC_CTYPE|LC_COLLATE|LC_MESSAGES|LC_TIME|LC_NUMERIC|LC_MONETARY|LC_PAPER|LC_NAME|LC_ADDRESS|LC_TELEPHONE|LC_MEASUREMENT|LC_IDENTIFICATION)
+            export "${_loc_name}=${_loc_value}"
+            ;;
+    esac
+done < <(locale 2>/dev/null)
+unset _loc_name _loc_value
 
 # load source files
 if [ "$PLATFORM_IS_DARWIN" -eq 1 ] 2>/dev/null; then
