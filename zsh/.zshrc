@@ -1,6 +1,10 @@
 # Path to oh-my-zsh installation
 export ZSH="$HOME/.oh-my-zsh"
 
+# Disable insecure directory warnings (useful in CI/test environments)
+# Remove this line if you want the security checks enabled
+ZSH_DISABLE_COMPFIX="true"
+
 # Set oh-my-zsh theme
 # Popular themes: robbyrussell (default), agnoster, powerlevel10k/powerlevel10k
 # See https://github.com/ohmyzsh/ohmyzsh/wiki/Themes
@@ -43,6 +47,30 @@ alias cd='cdbm'
 alias ..='up 1'
 alias ...='up 2'
 alias ....='up 3'
+
+# Custom git aliases that differ from oh-my-zsh defaults
+# Note: oh-my-zsh git plugin provides many aliases, but these are customized
+# These override or supplement the oh-my-zsh git plugin
+alias gd='clear && git diff'                    # Clear screen before diff
+alias gdm='git diff origin/master'              # Diff against origin/master
+alias gfp='git fetch && git pull --recurse-submodules && git delete-merged-branches && git-delete-squashed-branches'
+alias gl='git lg'                               # Use custom 'lg' alias (not git pull)
+alias glm='git lg origin/master..'              # Log from origin/master
+alias glc='git log -1 -u'                       # Last commit with diff
+alias gw="git log --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %C(white)%s %Cgreen(%cr)%Creset %C(blue)(%an)%Creset %n%+b' --stat --no-merges --date=relative --ignore-all-space --ignore-blank-lines --ignore-space-at-eol --ignore-space-change"
+alias gwip="git add . && git commit -m 'WIP' --no-verify && git push"
+alias git-delete-local-orphan-branches="git branch -vv | awk '\$1 != \"*\"' | awk '\$4 ~ /gone\]/ || \$3 !~ /\[origin\// {print \$1}' | xargs -p -n 1 git branch -D"
+alias gdom="gd origin/master"
+
+# Aliases that use git command shortcuts (assumes git config aliases: ci, co, st, lg, bl, brem, gbm, gr)
+# These work if you have git aliases configured in ~/.gitconfig
+alias gbl='git bl | grep -v year | grep -v month'       # Custom git blame filtering
+alias gbr='git brem | grep -v year | grep -v month'     # Custom remote branch filtering  
+alias gb='git gbm'                                       # Uses git gbm alias
+alias gc='git ci'                                        # Uses git ci alias
+alias gs='git st'                                        # Uses git st alias
+alias gr='git rebase'                                    # Standard rebase
+alias gg='git gr'                                        # Uses git gr alias
 
 # User configuration
 

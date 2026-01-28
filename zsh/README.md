@@ -71,17 +71,42 @@ See all plugins: https://github.com/ohmyzsh/ohmyzsh/wiki/Plugins
 
 ### Git Aliases
 
-Oh My Zsh provides comprehensive git aliases through its git plugin. Some examples:
+Oh My Zsh provides comprehensive git aliases through its git plugin, **plus custom aliases** that override or supplement the defaults:
+
+#### Custom Git Aliases (defined in .zshrc)
+These custom aliases are preserved from the original setup and take precedence over oh-my-zsh defaults:
+
+- `gd` - **Clear screen + git diff** (custom behavior)
+- `gdm` - Diff against origin/master
+- `gfp` - Fetch, pull with submodules, delete merged branches (complex workflow)
+- `gl` - Uses custom `git lg` alias (not git pull like oh-my-zsh)
+- `glm` - Log from origin/master
+- `glc` - Last commit with diff
+- `gw` - Detailed log with custom formatting
+- `gwip` - Work in progress: add all, commit, push (no verify)
+- `gdom` - Diff against origin/master
+- `git-delete-local-orphan-branches` - Clean up orphaned local branches
+
+#### Aliases using git config shortcuts
+These assume you have git aliases configured in `~/.gitconfig`:
+- `gbl` - Custom git blame filtering
+- `gbr` - Custom remote branch filtering
+- `gb` - Uses git gbm alias
+- `gc` - Uses git ci alias
+- `gs` - Uses git st alias
+- `gg` - Uses git gr alias
+
+#### Standard Oh-My-Zsh Git Aliases
+All standard oh-my-zsh git aliases are available (unless overridden above):
 - `gst` - git status
 - `gco` - git checkout
 - `gaa` - git add --all
 - `gcmsg` - git commit -m
 - `gp` - git push
-- `gl` - git pull
+
+**Note**: Some oh-my-zsh aliases are overridden by custom ones above (e.g., `gl`, `gd`, `gs`).
 
 Full list: https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/git
-
-If you prefer different git aliases, disable the git plugin in `.zshrc` and define your own in `.zshrc.local`.
 
 ## Shared Files
 
