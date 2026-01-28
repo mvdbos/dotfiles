@@ -144,23 +144,23 @@ zstyle ':completion:*:warnings' format 'No matches for: %d'
 zstyle ':completion:*:corrections' format '%B%d (errors: %e)%b'
 
 # Git completion for aliases (zsh has built-in git completion)
-# Set up completion for common git aliases
-compdef g=git
-compdef ga=git-add
-compdef gap=git-add
-compdef gb=git-branch
-compdef gc=git-commit
-compdef gco=git-checkout
-compdef gd=git-diff
-compdef gdo=git-diff
-compdef gf=git-fetch
-compdef gg=git-grep
-compdef gl=git-log
-compdef glc=git-log
-compdef gp=git-push
-compdef gr=git-rebase
-compdef gs=git-status
-compdef gw=git-log
+# Set up completion for common git aliases using correct zsh syntax
+compdef _git g=git
+compdef _git ga=git-add
+compdef _git gap=git-add
+compdef _git gb=git-branch
+compdef _git gc=git-commit
+compdef _git gco=git-checkout
+compdef _git gd=git-diff
+compdef _git gdo=git-diff
+compdef _git gf=git-fetch
+compdef _git gg=git-grep
+compdef _git gl=git-log
+compdef _git glc=git-log
+compdef _git gp=git-push
+compdef _git gr=git-rebase
+compdef _git gs=git-status
+compdef _git gw=git-log
 
 # Define colors for prompt
 autoload -U colors && colors
@@ -212,8 +212,8 @@ precmd() {
     # Build the prompt
     # Create dash line (like bash PS_LINE)
     local ps_line=$(printf -- '- %.0s' {1..200})
-    # Fill with dashes, then return to start (matches bash PS_FILL behavior)
-    local ps_fill="%F{8}${ps_line:0:$COLUMNS}%f"$'\r'
+    # Fill with dashes to COLUMNS-8 (leaves room for " [HH:MM]" = 8 chars), then return to start
+    local ps_fill="%F{8}${ps_line:0:$((COLUMNS-8))}%f"$'\r'
     local ps_git='$(git_prompt_info)'
     # Position time at end of line like bash: COLUMNS-7 for "[HH:MM]" format
     local ps_time=$'\e['"$((COLUMNS-7))G"'%F{8}[%D{%H:%M}]%f'
@@ -239,7 +239,7 @@ precmd() {
     PROMPT="${timer_result}${exit_status}"$'\n'"${ps_fill}"$'\r'"${prompt_info}${ps_git} ${ps_time}"$'\n'"%F{8}$%f "
 }
 
-# Git prompt info function (matches bash behavior)
+# Git prompt info function (matches bash GIT_PS1_SHOWCOLORHINTS behavior)
 git_prompt_info() {
     local ref
     ref=$(git symbolic-ref HEAD 2> /dev/null) || ref=$(git rev-parse --short HEAD 2> /dev/null) || return 0
@@ -257,12 +257,12 @@ git_prompt_info() {
         status_flags+="%"
     fi
     
-    # Always show in red when there are changes (matches bash __git_ps1 with GIT_PS1_SHOWCOLORHINTS)
+    # Show in red when there are changes, green when clean (matches bash GIT_PS1_SHOWCOLORHINTS)
     if [ -n "$status_flags" ]; then
         echo " %F{red}(${branch} ${status_flags})%f"
     else
-        # Clean repo - show in red too (matches bash default)
-        echo " %F{red}(${branch})%f"
+        # Clean repo - show in green
+        echo " %F{green}(${branch})%f"
     fi
 }
 
