@@ -11,7 +11,7 @@ up() {
         path="../$path"
         i=$((i + 1))
     done
-    cd "$path" || return 1
+    builtin cd "$path" || return 1
 }
 
 # cd replacement that checks for a directory alias and lists contents
