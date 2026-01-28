@@ -74,13 +74,13 @@ alias ....='up 3'
 # Note: this is also done by the settings in .inputrc already. This is extra
 set -o vi
 
-eval $(locale)
+eval $(locale) 2>/dev/null
 
 # load source files
 if [ "$PLATFORM_IS_DARWIN" -eq 1 ] 2>/dev/null; then
     test -f /usr/local/etc/bash_completion.d/git-prompt.sh && source /usr/local/etc/bash_completion.d/git-prompt.sh
 
-    # We don't need hub autocompletion set up on OS X: HomeBrew does that for us
+    # We don't need hub autocompletion set up on macOS: Homebrew does that for us
     if type brew &>/dev/null; then
         HOMEBREW_PREFIX="$(brew --prefix)"
         if [[ -r "${HOMEBREW_PREFIX}/etc/profile.d/bash_completion.sh" ]]; then
