@@ -42,6 +42,15 @@ git-delete-squashed-branches
 source stow_dotfiles.sh
 stow_dotfiles
 
+# Install oh-my-zsh if not already installed
+if [ ! -d "$HOME/.oh-my-zsh" ]; then
+    echo "Installing oh-my-zsh..."
+    # Use unattended installation
+    RUNZSH=no CHSH=no sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+else
+    echo "oh-my-zsh already installed, skipping..."
+fi
+
 # Add Dracula theme for bat
 echo "Adding Dracula theme for bat..."
 theme_dir="$(bat --config-dir)/themes/dracula"
