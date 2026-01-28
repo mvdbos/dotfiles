@@ -64,13 +64,13 @@ alias gdom="gd origin/master"
 
 # Aliases that use git command shortcuts (assumes git config aliases: ci, co, st, lg, bl, brem, gbm, gr)
 # These work if you have git aliases configured in ~/.gitconfig
+# Example git config: [alias] ci = commit, co = checkout, st = status, lg = log --graph --pretty=...
 alias gbl='git bl | grep -v year | grep -v month'       # Custom git blame filtering
 alias gbr='git brem | grep -v year | grep -v month'     # Custom remote branch filtering  
 alias gb='git gbm'                                       # Uses git gbm alias
 alias gc='git ci'                                        # Uses git ci alias
 alias gs='git st'                                        # Uses git st alias
-alias gr='git rebase'                                    # Standard rebase
-alias gg='git gr'                                        # Uses git gr alias
+alias gg='git gr'                                        # Uses git gr alias (git config shortcut)
 
 # User configuration
 

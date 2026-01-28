@@ -76,25 +76,27 @@ alias ....='up 3'
 
 # Bash-specific git aliases (moved from shared shell config)
 # These are kept bash-specific to allow zsh to use oh-my-zsh git plugin
+# Note: Some aliases use git config shortcuts (ci, co, st, lg, bl, brem, gbm, gr)
+# Add these to ~/.gitconfig: [alias] ci = commit, co = checkout, st = status, etc.
 alias g='git'
 alias ga='g add'
 alias gap='g add -p'
-alias gbl='g bl | grep -v year | grep -v month'
-alias gbr='g brem | grep -v year | grep -v month'
-alias gb='gbm'
-alias gc='g ci'
-alias gco='g co'
+alias gbl='g bl | grep -v year | grep -v month'          # Uses git bl alias
+alias gbr='g brem | grep -v year | grep -v month'        # Uses git brem alias
+alias gb='gbm'                                            # Uses git gbm alias
+alias gc='g ci'                                           # Uses git ci alias
+alias gco='g co'                                          # Uses git co alias
 alias gd='clear && g diff'
 alias gdm='g diff origin/master'
 alias gf='g fetch --all'
 alias gfp='g fetch && g pull --recurse-submodules && g delete-merged-branches && git-delete-squashed-branches'
-alias gg='g gr'
-alias gl='g lg'
+alias gg='g gr'                                           # Uses git gr alias
+alias gl='g lg'                                           # Uses git lg alias
 alias glm='g lg origin/master..'
 alias glc='g log -1 -u'
 alias gp='g push'
 alias gr='g rebase'
-alias gs='g st'
+alias gs='g st'                                           # Uses git st alias
 alias gw="g log --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %C(white)%s %Cgreen(%cr)%Creset %C(blue)(%an)%Creset %n%+b' --stat --no-merges  --date=relative --ignore-all-space --ignore-blank-lines  --ignore-space-at-eol  --ignore-space-change"
 alias gwip="git add . && git commit -m 'WIP' --no-verify  && git push"
 alias git-delete-local-orphan-branches="git branch -vv | awk '\$1 != \"*\"' | awk '\$4 ~ /gone\]/ || \$3 !~ /\[origin\// {print \$1}' | xargs -p -n 1 git branch -D"

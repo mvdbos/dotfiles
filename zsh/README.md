@@ -89,12 +89,24 @@ These custom aliases are preserved from the original setup and take precedence o
 
 #### Aliases using git config shortcuts
 These assume you have git aliases configured in `~/.gitconfig`:
+```
+[alias]
+    ci = commit
+    co = checkout
+    st = status
+    lg = log --graph --pretty=...
+    bl = blame
+    brem = branch --remote
+    gbm = branch --merged
+    gr = grep
+```
+Aliases that use these git config shortcuts:
 - `gbl` - Custom git blame filtering
 - `gbr` - Custom remote branch filtering
 - `gb` - Uses git gbm alias
 - `gc` - Uses git ci alias
 - `gs` - Uses git st alias
-- `gg` - Uses git gr alias
+- `gg` - Uses git gr alias (grep)
 
 #### Standard Oh-My-Zsh Git Aliases
 All standard oh-my-zsh git aliases are available (unless overridden above):
