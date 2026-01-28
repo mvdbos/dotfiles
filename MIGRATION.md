@@ -124,11 +124,11 @@ Shared shell scripts (functions, profile) use POSIX-compatible syntax:
 For users migrating from bash to zsh:
 
 1. **Install zsh**: `brew install zsh` or `apt install zsh`
-2. **Run setup.sh**: It will detect zsh and install configs
-3. **Change shell**: `chsh -s $(which zsh)`
+2. **Change shell**: `chsh -s $(which zsh)`
+3. **Log out and back in**: Start a new terminal session
 4. **First login**: May see compinit security warning (safe to accept)
 
-All aliases, functions, and environment remain the same!
+The zsh configuration is installed during setup.sh, so it's ready whenever you want to switch. All aliases, functions, and environment remain the same!
 
 ## Files Organization
 
