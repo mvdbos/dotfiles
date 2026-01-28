@@ -4,7 +4,7 @@ source error_handler.bash
 source platform_detector.bash
 
 if [[ $PLATFORM_IS_DARWIN -eq 1 ]]; then
-    echo "Detected OS X, proceeding with setup..."
+    echo "Detected macOS, proceeding with setup..."
     bash setup_osx.bash
 elif [[ $PLATFORM_IS_LINUX -eq 1 ]]; then
 
@@ -38,23 +38,9 @@ git pull --recurse-submodules
 git delete-merged-branches
 git-delete-squashed-branches
 
-echo "Restowing common apps..."
-stow -R bash
-stow -R vim
-stow -R certs
-stow -R wget
-stow -R ssh
-
-# Handling annoying replacement of our .gitconfig symlink.
-# If that has happened, simply remove it.
-rm -f ~/.gitconfig
-stow -R git
-
-if [ "$PLATFORM_NAME" == "Darwin" ]; then
-    echo "Restowing Mac apps..."
-    stow -R phoenix
-    stow -R ideavim
-fi
+# Stow all dotfiles packages
+source stow_dotfiles.sh
+stow_dotfiles
 
 # Add Dracula theme for bat
 echo "Adding Dracula theme for bat..."

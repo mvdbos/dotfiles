@@ -23,7 +23,7 @@ if [ -z "$1" ]; then
   exit 1
 fi
 
-if [ ! "$1" == "seconds" ]; then
+if [ "$1" != "seconds" ]; then
   echo "Crap I haven't finished this"
   exit 1
 fi
@@ -36,9 +36,9 @@ case $1 in
   M=$((T/60%60))
   H=$((T/60/60%24))
   D=$((T/60/60/24))
-  [[ $D > 0 ]] && printf '%dd%dh' $D $H ||
-  ([[ $H > 0 ]] && printf '%dh%dm' $H $M) ||
-  ([[ $M > 0 ]] && printf '%dm%ds' $M $S) ||
+  (( D > 0 )) && printf '%dd%dh' $D $H ||
+  (( H > 0 )) && printf '%dh%dm' $H $M ||
+  (( M > 0 )) && printf '%dm%ds' $M $S ||
   printf "%ds" $S
   ;;
 esac
