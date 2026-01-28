@@ -1,12 +1,3 @@
-# ============================================================================
-# ZSH Configuration - Optimized for Speed
-# ============================================================================
-
-# ----------------------------------------------------------------------------
-# Performance Profiling (uncomment to debug slow startup)
-# ----------------------------------------------------------------------------
-# zmodload zsh/zprof
-
 # ----------------------------------------------------------------------------
 # Oh My Zsh Configuration
 # ----------------------------------------------------------------------------
@@ -60,15 +51,7 @@ setopt INC_APPEND_HISTORY        # Write to history file immediately
 # ----------------------------------------------------------------------------
 # Completion Configuration
 # ----------------------------------------------------------------------------
-# All completion settings provided by Oh My Zsh (see ~/.oh-my-zsh/lib/completion.zsh)
-# No overrides needed - Oh My Zsh provides:
-#   - Case insensitive completion with partial-word and substring matching
-#   - Menu selection on tab
-#   - Completion caching ($ZSH_CACHE_DIR)
-#   - Smart kill command completion
-#   - Directory navigation optimizations
-
-# Enable completion for git aliases (like `g co`, `g ci`, etc.)
+# Enable completion for `g` (like `g co`, `g ci`, etc.)
 compdef g=git
 # Show git aliases (co, ci, bl, etc.) in completion, not just common commands
 zstyle ':completion:*:*:git:*' tag-order 'common-commands alias-commands'
@@ -100,16 +83,21 @@ function zle-line-init {
   echo -ne "\e[5 q"    # Beam cursor on init
 }
 
+function zle-line-finish {
+  echo -ne '\e[1 q'    # Reset to block cursor before command execution
+}
+
 zle -N zle-keymap-select
 zle -N zle-line-init
+zle -N zle-line-finish
 
 # Better vi mode bindings
-bindkey '^P' up-history
-bindkey '^N' down-history
-bindkey '^?' backward-delete-char
-bindkey '^h' backward-delete-char
-bindkey '^w' backward-kill-word
-bindkey '^r' history-incremental-search-backward
+# bindkey '^P' up-history
+# bindkey '^N' down-history
+# bindkey '^?' backward-delete-char
+# bindkey '^h' backward-delete-char
+# bindkey '^w' backward-kill-word
+# bindkey '^r' history-incremental-search-backward
 
 # ----------------------------------------------------------------------------
 # Prompt Configuration
@@ -129,6 +117,7 @@ ENABLE_CORRECTION="true"
 # ----------------------------------------------------------------------------
 # Disable Oh My Zsh aliases that conflict with custom commands
 unalias gbm 2>/dev/null
+unalias gcm 2>/dev/null
 
 # Source shared aliases
 if [ -f "$HOME/.config/shell/aliases" ]; then
