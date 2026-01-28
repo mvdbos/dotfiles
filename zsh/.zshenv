@@ -1,13 +1,6 @@
 # ~/.zshenv: sourced for ALL zsh invocations (login, interactive, scripts)
 # Use this for environment variables that should be available everywhere
-
-# Platform detection (cached for speed, instead of running detect_platform)
-export PLATFORM_NAME="Darwin"
-export PLATFORM_IS_DARWIN=1
-export PLATFORM_IS_LINUX=0
-export PLATFORM_IS_UBUNTU=0
-export PLATFORM_IS_ANDROID=0
-export PLATFORM_IS_RASPBERRY=0
+# Note: This configuration is Darwin (macOS) only
 
 # Path to your dotfiles (if needed)
 # export DOTFILES="$HOME/.dotfiles"
@@ -48,16 +41,6 @@ typeset -U path
 export EDITOR="vim"
 export VISUAL="vim"
 export SVN_EDITOR="vim"
-
-# Platform-specific environment variables
-if [ "$PLATFORM_IS_DARWIN" -eq 1 ] 2>/dev/null; then
-    export LC_ALL=en_US.UTF-8
-    export LANG=en_US.UTF-8
-elif [ "$PLATFORM_IS_UBUNTU" -eq 1 ] 2>/dev/null; then
-    export LC_ALL=en_US.utf8
-    export LANGUAGE=en_US.utf8
-    export LANG=en_US.utf8
-fi
 
 # Performance: Skip global compinit in /etc/zshrc on macOS
 skip_global_compinit=1
