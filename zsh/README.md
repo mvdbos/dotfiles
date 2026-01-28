@@ -123,10 +123,4 @@ To add local customizations that shouldn't be committed:
 
 ## Platform Support
 
-Fully supports the same platforms as bash:
-- macOS (with Homebrew)
-- Ubuntu Linux
-- Raspberry Pi OS
-- Android (Termux)
-
-Platform-specific completion paths are automatically configured.
+Darwin (macOS) only. This zsh configuration is specifically designed for macOS with Homebrew.
