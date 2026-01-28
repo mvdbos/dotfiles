@@ -210,10 +210,13 @@ precmd() {
     fi
     
     # Build the prompt
-    local ps_fill="%F{8}${(l:$COLUMNS::-:)}%f"
+    # Create dash line (like bash PS_LINE)
+    local ps_line=$(printf -- '- %.0s' {1..200})
+    # Fill with dashes, then return to start (matches bash PS_FILL behavior)
+    local ps_fill="%F{8}${ps_line:0:$COLUMNS}%f"$'\r'
     local ps_git='$(git_prompt_info)'
-    # Position time at end of line (COLUMNS-8 for "[HH:MM]" format)
-    local ps_time=$'\e['"$((COLUMNS-7))G"' %F{8}[%*]%f'
+    # Position time at end of line like bash: COLUMNS-7 for "[HH:MM]" format
+    local ps_time=$'\e['"$((COLUMNS-7))G"'%F{8}[%D{%H:%M}]%f'
     
     # Info section (with SSH hostname if applicable)
     local prompt_info=""
@@ -236,7 +239,7 @@ precmd() {
     PROMPT="${timer_result}${exit_status}"$'\n'"${ps_fill}"$'\r'"${prompt_info}${ps_git} ${ps_time}"$'\n'"%F{8}$%f "
 }
 
-# Git prompt info function (simpler version)
+# Git prompt info function (matches bash behavior)
 git_prompt_info() {
     local ref
     ref=$(git symbolic-ref HEAD 2> /dev/null) || ref=$(git rev-parse --short HEAD 2> /dev/null) || return 0
@@ -254,10 +257,12 @@ git_prompt_info() {
         status_flags+="%"
     fi
     
+    # Always show in red when there are changes (matches bash __git_ps1 with GIT_PS1_SHOWCOLORHINTS)
     if [ -n "$status_flags" ]; then
         echo " %F{red}(${branch} ${status_flags})%f"
     else
-        echo " %F{green}(${branch})%f"
+        # Clean repo - show in red too (matches bash default)
+        echo " %F{red}(${branch})%f"
     fi
 }
 
