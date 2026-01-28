@@ -39,6 +39,7 @@ git delete-merged-branches
 git-delete-squashed-branches
 
 echo "Restowing common apps..."
+stow -R shell
 stow -R bash
 stow -R vim
 stow -R certs
@@ -49,6 +50,14 @@ stow -R ssh
 # If that has happened, simply remove it.
 rm -f ~/.gitconfig
 stow -R git
+
+# Optionally stow zsh configuration if zsh is installed
+if command -v zsh >/dev/null 2>&1; then
+    echo "Zsh detected, installing zsh configuration..."
+    stow -R zsh
+else
+    echo "Zsh not found, skipping zsh configuration..."
+fi
 
 if [ "$PLATFORM_NAME" == "Darwin" ]; then
     echo "Restowing Mac apps..."

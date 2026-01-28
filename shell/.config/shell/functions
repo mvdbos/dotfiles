@@ -1,0 +1,37 @@
+# Shared shell functions for bash and zsh
+# Source this from your shell's rc file
+
+# Function to go up multiple directory levels
+# Usage: up 3 (goes up 3 levels)
+up() {
+    local levels="$1"
+    local path=""
+    for i in $(seq 1 "$levels"); do
+        path="../$path"
+    done
+    cd "$path" || return 1
+}
+
+# cd replacement that checks for a directory alias and lists contents
+# Directory aliases are symlinks in ~/.config/dir_aliases/
+cdbm() {
+    local target_dir="$1"
+    local aliases_dir="$HOME/.config/dir_aliases"
+
+    # Handle special cases
+    if [ -z "$target_dir" ] || [ "$1" = "-" ] || [ "$1" = "--help" ] || [ "$1" = "-L" ]; then
+        builtin cd "$@" >/dev/null && ls
+        return $?
+    fi
+
+    # Check if there's an alias for this directory
+    if [ -d "$aliases_dir/$target_dir" ]; then
+        builtin cd -P "$target_dir" >/dev/null && ls
+    else
+        builtin cd "$@" >/dev/null && ls
+    fi
+}
+
+# Set up the cd alias to use cdbm
+# Note: This should be done in the shell-specific rc file since
+# alias behavior differs between bash and zsh
