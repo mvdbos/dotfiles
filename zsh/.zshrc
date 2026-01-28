@@ -1,63 +1,37 @@
-# Zsh configuration file
-# This is sourced for interactive shells
+# Path to oh-my-zsh installation
+export ZSH="$HOME/.oh-my-zsh"
 
-# If not running interactively, don't do anything
-[[ $- != *i* ]] && return
+# Disable insecure directory warnings (useful in CI/test environments)
+# Remove this line if you want the security checks enabled
+ZSH_DISABLE_COMPFIX="true"
 
-# Source shared profile for common environment setup
-# Only do this for non-login shells, since login shells
-# already source ~/.profile via ~/.zprofile
+# Set oh-my-zsh theme
+# Popular themes: robbyrussell (default), agnoster, powerlevel10k/powerlevel10k
+# See https://github.com/ohmyzsh/ohmyzsh/wiki/Themes
+ZSH_THEME="robbyrussell"
+
+# Oh-My-Zsh plugins
+# Standard plugins: git, docker, kubectl, aws, npm, yarn, etc.
+# Custom plugins can be added to ~/.oh-my-zsh/custom/plugins/
+plugins=(
+    git
+    docker
+    kubectl
+    colored-man-pages
+    command-not-found
+    extract
+)
+
+# Source oh-my-zsh
+source $ZSH/oh-my-zsh.sh
+
+# Source shared profile for PATH and environment variables
+# Only for non-login shells (login shells source .profile via .zprofile)
 if [[ ! -o login ]] && [ -f "$HOME/.profile" ]; then
     source "$HOME/.profile"
 fi
 
-# History configuration
-HISTFILE=~/.zsh_history
-HISTSIZE=100000
-SAVEHIST=100000
-
-# History options (zsh native - much simpler than bash)
-setopt APPEND_HISTORY           # Append to history file
-setopt EXTENDED_HISTORY         # Write the history file in the :start:elapsed;command format
-setopt HIST_EXPIRE_DUPS_FIRST   # Expire duplicate entries first when trimming history
-setopt HIST_FIND_NO_DUPS        # Do not display a line previously found
-setopt HIST_IGNORE_ALL_DUPS     # Delete old recorded entry if new entry is a duplicate
-setopt HIST_IGNORE_DUPS         # Don't record an entry that was just recorded again
-setopt HIST_IGNORE_SPACE        # Don't record an entry starting with a space
-setopt HIST_REDUCE_BLANKS       # Remove superfluous blanks before recording entry
-setopt HIST_SAVE_NO_DUPS        # Don't write duplicate entries in the history file
-setopt HIST_VERIFY              # Don't execute immediately upon history expansion
-setopt INC_APPEND_HISTORY       # Write to the history file immediately, not when the shell exits
-setopt SHARE_HISTORY            # Share history between all sessions
-
-# Shell options
-setopt AUTO_CD              # If a command is a directory name, cd to it
-setopt AUTO_PUSHD           # Make cd push the old directory onto the directory stack
-setopt PUSHD_IGNORE_DUPS    # Don't push multiple copies of the same directory
-setopt PUSHD_MINUS          # Exchange the meanings of '+' and '-' in pushd
-setopt CDABLE_VARS          # If argument to cd is not a directory, try to expand it as a variable
-setopt CORRECT              # Spelling correction for commands
-setopt EXTENDED_GLOB        # Use extended globbing syntax
-setopt GLOB_DOTS            # Include dotfiles in glob matches (like bash's dotglob)
-setopt NO_BEEP              # Don't beep on errors
-setopt MULTIOS              # Perform implicit tees or cats when multiple redirections are attempted
-setopt PROMPT_SUBST         # Enable parameter expansion, command substitution, and arithmetic expansion in prompts
-setopt INTERACTIVE_COMMENTS # Allow comments in interactive shells
-
-# Job control
-setopt CHECK_JOBS           # Report the status of background jobs immediately
-setopt NOTIFY               # Report the status of background jobs immediately
-setopt NO_HUP               # Don't send HUP signal to jobs when shell exits
-
-# set variable identifying the chroot you work in (used in the prompt below)
-if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then
-    debian_chroot=$(cat /etc/debian_chroot)
-fi
-
-# make less more friendly for non-text input files, see lesspipe(1)
-[ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
-
-# Source shared aliases
+# Source shared aliases (non-git aliases only)
 if [ -f "$HOME/.config/shell/aliases" ]; then
     source "$HOME/.config/shell/aliases"
 fi
@@ -68,258 +42,58 @@ if [ -f "$HOME/.config/shell/functions" ]; then
 fi
 
 # Set up cd alias to use the bookmark function
+# This overrides oh-my-zsh's cd if needed
 alias cd='cdbm'
 alias ..='up 1'
 alias ...='up 2'
 alias ....='up 3'
 
-# Note: Locale variables (LC_*, LANG) should be set at system/session level,
-# not in shell RC files. Re-exporting them here can cause warnings if the
-# locale values are invalid or not installed. Let the environment handle it.
+# Custom git aliases that differ from oh-my-zsh defaults
+# Note: oh-my-zsh git plugin provides many aliases, but these are customized
+# These override or supplement the oh-my-zsh git plugin
+alias gd='clear && git diff'                    # Clear screen before diff
+alias gdm='git diff origin/master'              # Diff against origin/master
+alias gfp='git fetch && git pull --recurse-submodules && git delete-merged-branches && git-delete-squashed-branches'
+alias gl='git lg'                               # Use custom 'lg' alias (not git pull)
+alias glm='git lg origin/master..'              # Log from origin/master
+alias glc='git log -1 -u'                       # Last commit with diff
+alias gw="git log --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %C(white)%s %Cgreen(%cr)%Creset %C(blue)(%an)%Creset %n%+b' --stat --no-merges --date=relative --ignore-all-space --ignore-blank-lines --ignore-space-at-eol --ignore-space-change"
+alias gwip="git add . && git commit -m 'WIP' --no-verify && git push"
+alias git-delete-local-orphan-branches="git branch -vv | awk '\$1 != \"*\"' | awk '\$4 ~ /gone\]/ || \$3 !~ /\[origin\// {print \$1}' | xargs -p -n 1 git branch -D"
+alias gdom="gd origin/master"
 
-# Vi mode configuration
-bindkey -v  # Enable vi mode
-export KEYTIMEOUT=1  # Reduce delay when switching modes
+# Aliases that use git command shortcuts (assumes git config aliases: ci, co, st, lg, bl, brem, gbm, gr)
+# These work if you have git aliases configured in ~/.gitconfig
+# Example git config: [alias] ci = commit, co = checkout, st = status, lg = log --graph --pretty=...
+alias gbl='git bl | grep -v year | grep -v month'       # Custom git blame filtering
+alias gbr='git brem | grep -v year | grep -v month'     # Custom remote branch filtering  
+alias gb='git gbm'                                       # Uses git gbm alias
+alias gc='git ci'                                        # Uses git ci alias
+alias gs='git st'                                        # Uses git st alias
+alias gg='git gr'                                        # Uses git gr alias (git config shortcut)
 
-# Vi mode indicator (matches bash .inputrc behavior)
-# Initialize with insert mode (green [INS])
-VI_MODE_INDICATOR="%F{green}[INS]%f "
+# User configuration
 
-# Update indicator when keymap changes
-function zle-keymap-select {
-    if [[ ${KEYMAP} == vicmd ]] || [[ $1 = 'block' ]]; then
-        # Command mode - magenta [CMD] (matches bash .inputrc)
-        VI_MODE_INDICATOR="%F{magenta}[CMD]%f "
-    else
-        # Insert mode - green [INS] (matches bash .inputrc)
-        VI_MODE_INDICATOR="%F{green}[INS]%f "
-    fi
-    zle reset-prompt
-}
-zle -N zle-keymap-select
+# History configuration (oh-my-zsh sets good defaults, but we can override)
+HISTFILE=~/.zsh_history
+HISTSIZE=100000
+SAVEHIST=100000
+setopt HIST_IGNORE_SPACE        # Don't record entries starting with space
+setopt HIST_VERIFY              # Show command with history expansion before running it
 
-# Reset to insert mode on each new command line
-function zle-line-init {
-    VI_MODE_INDICATOR="%F{green}[INS]%f "
-    zle reset-prompt
-}
-zle -N zle-line-init
+# Vi mode (if you prefer vi mode over emacs, uncomment below)
+# bindkey -v
+# export KEYTIMEOUT=1
 
-# Better vi mode with visual indicators and history search
-bindkey -M viins '^?' backward-delete-char  # Backspace
-bindkey -M viins '^H' backward-delete-char  # Ctrl-H
-bindkey -M viins '^W' backward-kill-word    # Ctrl-W
-bindkey -M viins '^U' backward-kill-line    # Ctrl-U
-bindkey -M viins '^A' beginning-of-line     # Ctrl-A
-bindkey -M viins '^E' end-of-line           # Ctrl-E
-bindkey -M viins '^K' kill-line             # Ctrl-K
-bindkey -M viins '^L' clear-screen          # Ctrl-L
-bindkey -M viins '^R' history-incremental-search-backward  # Ctrl-R
+# Additional shell options
+setopt NO_BEEP                  # Don't beep on errors
+setopt AUTO_CD                  # Type directory name to cd into it
+setopt AUTO_PUSHD               # Make cd push old directory onto directory stack
+setopt PUSHD_IGNORE_DUPS        # Don't push multiple copies of same directory
+setopt INTERACTIVE_COMMENTS     # Allow comments in interactive shells
 
-# History search with arrow keys in vi mode
-bindkey -M viins '^[[A' history-search-backward  # Up arrow
-bindkey -M viins '^[[B' history-search-forward   # Down arrow
-bindkey -M vicmd 'k' history-search-backward
-bindkey -M vicmd 'j' history-search-forward
-
-# Alt-. to insert last argument (like bash)
-bindkey -M viins '\e.' insert-last-word
-
-# Load platform-specific completion paths before initializing completion
-if [[ $PLATFORM_IS_DARWIN -eq 1 ]] 2>/dev/null; then
-    # On macOS with Homebrew
-    if type brew &>/dev/null; then
-        FPATH="$(brew --prefix)/share/zsh/site-functions:${FPATH}"
-    fi
-elif [[ $PLATFORM_IS_UBUNTU -eq 1 ]] 2>/dev/null || [[ $PLATFORM_IS_RASPBERRY -eq 1 ]] 2>/dev/null; then
-    # On Ubuntu/Raspberry Pi
-    if [ -d /usr/share/zsh/vendor-completions ]; then
-        fpath=(/usr/share/zsh/vendor-completions $fpath)
-    fi
-elif [[ $PLATFORM_IS_ANDROID -eq 1 ]] 2>/dev/null; then
-    # On Android/Termux
-    if [ -d "$PREFIX/share/zsh/site-functions" ]; then
-        fpath=("$PREFIX/share/zsh/site-functions" $fpath)
-    fi
-fi
-
-# Initialize completion system
-autoload -Uz compinit
-compinit
-
-# Completion options
-setopt ALWAYS_TO_END        # Move cursor to the end of a completed word
-setopt AUTO_MENU            # Show completion menu on successive tab press
-setopt AUTO_LIST            # Automatically list choices on ambiguous completion
-setopt COMPLETE_IN_WORD     # Complete from both ends of a word
-unsetopt MENU_COMPLETE      # Do not autoselect the first completion entry
-
-# Completion styling
-zstyle ':completion:*' menu select  # Enable menu selection
-zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'  # Case-insensitive completion
-zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"    # Use LS_COLORS for file completion
-zstyle ':completion:*' completer _complete _match _approximate
-zstyle ':completion:*:match:*' original only
-zstyle ':completion:*:approximate:*' max-errors 1 numeric
-zstyle ':completion:*' group-name ''
-zstyle ':completion:*:descriptions' format '%B%d%b'
-zstyle ':completion:*:messages' format '%d'
-zstyle ':completion:*:warnings' format 'No matches for: %d'
-zstyle ':completion:*:corrections' format '%B%d (errors: %e)%b'
-
-# Git completion for aliases (zsh has built-in git completion)
-# Set up completion for common git aliases using correct zsh syntax
-compdef _git g=git
-compdef _git ga=git-add
-compdef _git gap=git-add
-compdef _git gb=git-branch
-compdef _git gc=git-commit
-compdef _git gco=git-checkout
-compdef _git gd=git-diff
-compdef _git gdo=git-diff
-compdef _git gf=git-fetch
-compdef _git gg=git-grep
-compdef _git gl=git-log
-compdef _git glc=git-log
-compdef _git gp=git-push
-compdef _git gr=git-rebase
-compdef _git gs=git-status
-compdef _git gw=git-log
-
-# Define colors for prompt
-autoload -U colors && colors
-
-# Timer and command tracking for prompt
-typeset -g __command_start_time
-typeset -g __previous_command
-typeset -g __command_duration
-
-# Preexec hook - runs before each command
-preexec() {
-    __command_start_time=$SECONDS
-    __previous_command="$1"
-}
-
-# Precmd hook - runs before each prompt
-precmd() {
-    local exit_code=$?
-    
-    # Calculate command duration
-    if [ -n "$__command_start_time" ]; then
-        __command_duration=$((SECONDS - __command_start_time))
-    else
-        __command_duration=0
-    fi
-    unset __command_start_time
-    
-    # Format duration using our shared script
-    local timer_show
-    if [ $__command_duration -gt 0 ]; then
-        timer_show=$(format-duration seconds $__command_duration)
-    else
-        timer_show="0s"
-    fi
-    
-    # Build prompt components
-    local timer_result=""
-    local exit_status=""
-    local long_runtime=60
-    
-    if [ $__command_duration -gt $long_runtime ]; then
-        timer_result=$'\n'"%F{yellow}%B(runtime: ~${timer_show})%b%f "
-    fi
-    
-    if [ $exit_code -ne 0 ]; then
-        exit_status=$'\n'"%F{red}(exit: ${exit_code}, cmd: \`${__previous_command}\`)%f "
-    fi
-    
-    # Build the prompt
-    # Create dash line (like bash PS_LINE)
-    local ps_line=$(printf -- '- %.0s' {1..200})
-    # Fill with dashes, then return to start
-    local ps_fill="%F{8}\${ps_line:0:\$COLUMNS}%f"$'\r'
-    local ps_git='$(git_prompt_info)'
-    # Position time at COLUMNS-7 for "[HH:MM]" format (must use escape for column calculation)
-    local ps_time=$'%{\e[$((COLUMNS-7))G%}%F{8}[%D{%H:%M}]%f'
-    
-    # Info section (with SSH hostname if applicable)
-    local prompt_info=""
-    
-    # Check for background jobs
-    local jobs_info=$(jobs | wc -l | tr -d ' ')
-    if [ "$jobs_info" -gt 0 ]; then
-        prompt_info+="%F{yellow}%B(jobs: $jobs_info)%b%f "
-    fi
-    
-    # Show hostname if SSH
-    if [ -n "$SSH_CLIENT" ] || [ -n "$SSH_TTY" ]; then
-        prompt_info+="%F{magenta}%m%f:"
-    fi
-    
-    # Add directory (truncated to 3 levels)
-    prompt_info+="[%F{blue}%B%3~%b%f]"
-    
-    # Vi mode indicator (like bash .inputrc)
-    # This will be replaced by the zle-keymap-select hook
-    local ps_vi_mode='${VI_MODE_INDICATOR}'
-    
-    # Set the full prompt
-    PROMPT="${timer_result}${exit_status}"$'\n'"${ps_fill}${prompt_info}${ps_git}${ps_time}"$'\n'"${ps_vi_mode}%F{8}$%f "
-}
-
-# Git prompt info function (matches bash GIT_PS1_SHOWCOLORHINTS=true behavior)
-# Bash with SHOWCOLORHINTS shows branches in GREEN for both clean AND dirty
-# Only the status symbols (* + %) indicate the state
-git_prompt_info() {
-    local ref
-    ref=$(git symbolic-ref HEAD 2> /dev/null) || ref=$(git rev-parse --short HEAD 2> /dev/null) || return 0
-    local branch="${ref#refs/heads/}"
-    
-    # Check for changes (matching bash GIT_PS1_SHOWDIRTYSTATE)
-    local status_flags=""
-    if ! git diff --quiet 2>/dev/null; then
-        status_flags+="*"  # unstaged changes
-    fi
-    if ! git diff --cached --quiet 2>/dev/null; then
-        status_flags+="+"  # staged changes
-    fi
-    
-    # Check for stashed changes (matching bash behavior)
-    if git rev-parse --verify refs/stash >/dev/null 2>&1; then
-        status_flags+="$"
-    fi
-    
-    # Check for untracked files (matching bash GIT_PS1_SHOWUNTRACKEDFILES)
-    if [ -n "$(git ls-files --others --exclude-standard 2>/dev/null)" ]; then
-        status_flags+="%"  # untracked files
-    fi
-    
-    # Check upstream status (matching bash GIT_PS1_SHOWUPSTREAM)
-    local upstream_status=""
-    local upstream=$(git rev-parse --abbrev-ref @{upstream} 2>/dev/null)
-    if [ -n "$upstream" ]; then
-        local ahead=$(git rev-list --count @{upstream}..HEAD 2>/dev/null)
-        local behind=$(git rev-list --count HEAD..@{upstream} 2>/dev/null)
-        if [ "$ahead" -gt 0 ] && [ "$behind" -gt 0 ]; then
-            upstream_status="<>"
-        elif [ "$ahead" -gt 0 ]; then
-            upstream_status=">"
-        elif [ "$behind" -gt 0 ]; then
-            upstream_status="<"
-        else
-            upstream_status="="
-        fi
-    fi
-    
-    # Bash with GIT_PS1_SHOWCOLORHINTS=true shows GREEN for clean state
-    # Shows GREEN even with status symbols (the symbols show the state, not color)
-    # Only shows red/yellow during certain git operations (merge, rebase, etc.)
-    echo " %F{green}(${branch}${upstream_status}${status_flags})%f"
-}
-
-# Source local zshrc overrides if they exist
+# Source local overrides if they exist
 [ -f ~/.zshrc.local ] && source ~/.zshrc.local
 
-# Make this the last return value,
-# so we don't have an exit status from the test command on our prompt
+# Make this the last return value
 true

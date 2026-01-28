@@ -57,27 +57,5 @@ alias lrt='ls -rt'
 alias ll='ls -ohgBv --group-directories-first'
 alias la='ls -lAhvG --group-directories-first'
 
-# Git aliases
-alias g='git'
-alias ga='g add'
-alias gap='g add -p'
-alias gbl='g bl | grep -v year | grep -v month'
-alias gbr='g brem | grep -v year | grep -v month'
-alias gb='gbm'
-alias gc='g ci'
-alias gco='g co'
-alias gd='clear && g diff'
-alias gdm='g diff origin/master'
-alias gf='g fetch --all'
-alias gfp='g fetch && g pull --recurse-submodules && g delete-merged-branches && git-delete-squashed-branches'
-alias gg='g gr'
-alias gl='g lg'
-alias glm='g lg origin/master..'
-alias glc='g log -1 -u'
-alias gp='g push'
-alias gr='g rebase'
-alias gs='g st'
-alias gw="g log --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %C(white)%s %Cgreen(%cr)%Creset %C(blue)(%an)%Creset %n%+b' --stat --no-merges  --date=relative --ignore-all-space --ignore-blank-lines  --ignore-space-at-eol  --ignore-space-change"
-alias gwip="git add . && git commit -m 'WIP' --no-verify  && git push"
-alias git-delete-local-orphan-branches="git branch -vv | awk '\$1 != \"*\"' | awk '\$4 ~ /gone\]/ || \$3 !~ /\[origin\// {print \$1}' | xargs -p -n 1 git branch -D"
-alias gdom="gd origin/master"
+# Git aliases moved to bash/.bashrc (bash-specific)
+# Zsh users should use oh-my-zsh git plugin or define aliases in .zshrc.local

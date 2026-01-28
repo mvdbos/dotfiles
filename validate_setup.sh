@@ -56,29 +56,41 @@ echo "$bash_output" | grep -q "TEST:BASH_CD_OK" && test_passed "Bash: cd works" 
 
 # Test zsh if available
 if command -v zsh >/dev/null 2>&1; then
-    log_info "Testing zsh..."
+    log_info "Testing zsh configuration..."
     chmod -R 755 "$TEST_HOME/.config" 2>/dev/null || true
     
-    # Use expect to auto-answer compinit prompt, or skip interactive test
+    # Test basic zsh configuration (without oh-my-zsh to speed up validation)
+    # Oh-My-Zsh is tested during actual setup.sh execution
     zsh_output=$(HOME="$TEST_HOME" zsh -c '
+# Source shared profile and functions directly
+[ -f "$HOME/.profile" ] && source "$HOME/.profile"
+[ -f "$HOME/.config/shell/functions" ] && source "$HOME/.config/shell/functions"
 type cdbm >/dev/null 2>&1 && echo "TEST:ZSH_CDBM_OK"
-alias gfp >/dev/null 2>&1 && echo "TEST:ZSH_GFP_OK"
+type up >/dev/null 2>&1 && echo "TEST:ZSH_UP_OK"
+[ -L "$HOME/.zshrc" ] && echo "TEST:ZSH_RC_SYMLINK_OK"
 exit 0
-' 2>&1 || echo "ZSH_NONINTERACTIVE")
+' 2>&1)
     
-    # Note: zsh tests are informational only in CI (non-interactive shells don't source .zshrc)
-    # These tests are expected to fail in GitHub Actions but work in interactive shells
+    # Check results (these are informational for zsh)
     if echo "$zsh_output" | grep -q "TEST:ZSH_CDBM_OK"; then
-        test_passed "Zsh: cdbm function"
+        test_passed "Zsh: cdbm function available"
     else
-        log_info "ℹ Zsh: cdbm not loaded (expected in non-interactive shell)"
+        log_info "ℹ Zsh: cdbm function check (informational)"
     fi
     
-    if echo "$zsh_output" | grep -q "TEST:ZSH_GFP_OK"; then
-        test_passed "Zsh: gfp alias"
+    if echo "$zsh_output" | grep -q "TEST:ZSH_UP_OK"; then
+        test_passed "Zsh: up function available"
     else
-        log_info "ℹ Zsh: gfp not loaded (expected in non-interactive shell)"
+        log_info "ℹ Zsh: up function check (informational)"
     fi
+    
+    if echo "$zsh_output" | grep -q "TEST:ZSH_RC_SYMLINK_OK"; then
+        test_passed "Zsh: .zshrc symlink"
+    else
+        log_info "ℹ Zsh: .zshrc symlink check"
+    fi
+    
+    log_info "ℹ Note: Full oh-my-zsh testing requires running ./setup.sh"
 else
     log_info "Zsh not installed, skipping zsh tests"
 fi
