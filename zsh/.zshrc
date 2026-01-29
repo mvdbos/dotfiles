@@ -24,6 +24,9 @@ plugins=(
   zsh-syntax-highlighting
 )
 
+# Add custom completions to fpath
+fpath=(~/.dotfiles/zsh/.zsh/completions $fpath)
+
 source $ZSH/oh-my-zsh.sh
 
 # Override Dracula's directory function to show last 3 dirs with '...' prefix if truncated
@@ -131,6 +134,9 @@ fi
 
 # Alias cd to use cdbm function
 alias cd='cdbm'
+
+# Enable completion for cdbm (used by cd alias)
+compdef _cdbm cdbm
 
 # ----------------------------------------------------------------------------
 # External Configurations
