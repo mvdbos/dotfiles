@@ -28,10 +28,10 @@ cdbm() {
 
     # Check if there's an alias for this directory
     if [ -d "$aliases_dir/$target_dir" ]; then
-        builtin cd -P "$target_dir" >/dev/null && ls
+        builtin cd -P "$target_dir" >/dev/null
         return $?
     else
-        builtin cd "$@" >/dev/null && ls
+        builtin cd "$@" >/dev/null
     fi
 }
 
