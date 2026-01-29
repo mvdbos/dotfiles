@@ -45,3 +45,6 @@ export SVN_EDITOR="vim"
 # Performance: Skip global compinit in /etc/zshrc on macOS
 skip_global_compinit=1
 
+# Source local customizations
+[[ -s ~/.zshenv.local ]] && source ~/.zshenv.local
+
