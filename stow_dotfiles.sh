@@ -19,7 +19,8 @@ stow_all() {
     echo "Restowing common apps..."
     
     # Essential packages
-    stow -R shell
+    # Use --no-folding for shell to allow user symlinks in dir_aliases
+    stow --no-folding -R shell
     stow -R bash
     
     # Optional packages
@@ -72,7 +73,8 @@ stow_dotfiles() {
     # Execute appropriate stow function
     if [ "$essential_only" = "true" ]; then
         # Only stow essential packages (for validation)
-        stow -R shell
+        # Use --no-folding for shell to allow user symlinks in dir_aliases
+        stow --no-folding -R shell
         stow -R bash
         stow -R zsh
     else
