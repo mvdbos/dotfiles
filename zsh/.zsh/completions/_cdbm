@@ -1,0 +1,23 @@
+#compdef cdbm
+
+_cdbm() {
+    local -a dir_aliases
+    local aliases_dir="$HOME/.config/dir_aliases"
+    
+    # Get directory aliases (only directories, excluding README.md)
+    if [[ -d "$aliases_dir" ]]; then
+        dir_aliases=(${aliases_dir}/*(N-/:t))
+        # Remove README.md if present
+        dir_aliases=(${dir_aliases:#README.md})
+    fi
+    
+    # Call standard _cd completion
+    _cd "$@"
+    
+    # Add directory aliases mixed into the completion
+    if (( $#dir_aliases > 0 )); then
+        _describe 'directory alias' dir_aliases
+    fi
+}
+
+_cdbm "$@"
