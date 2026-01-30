@@ -84,3 +84,6 @@
 	gitHubAccountFiltering = false
 [credential "https://dev.azure.com"]
 	useHttpPath = true
+[REMOVED AZURE CREDENTIALS]
+
+

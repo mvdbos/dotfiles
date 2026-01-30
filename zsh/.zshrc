@@ -121,6 +121,7 @@ ENABLE_CORRECTION="true"
 # Disable Oh My Zsh aliases that conflict with custom commands
 unalias gbm 2>/dev/null
 unalias gcm 2>/dev/null
+unalias grm 2>/dev/null
 
 # Source shared aliases
 if [ -f "$HOME/.config/shell/aliases" ]; then
@@ -139,12 +140,6 @@ alias cd='cdbm'
 compdef _cdbm cdbm
 
 # ----------------------------------------------------------------------------
-# External Configurations
-# ----------------------------------------------------------------------------
-# Note: Environment variables are in .zshenv (sourced for all zsh shells)
-# .profile is preserved for bash compatibility only
-
-# ----------------------------------------------------------------------------
 # Plugin Configurations
 # ----------------------------------------------------------------------------
 # zsh-autosuggestions: Use history only for speed (not completion)
@@ -155,8 +150,3 @@ ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=20
 # Performance: Return true to avoid bad exit status on prompt
 # ----------------------------------------------------------------------------
 true
-
-# ----------------------------------------------------------------------------
-# Performance Profiling (uncomment to see startup time breakdown)
-# ----------------------------------------------------------------------------
-# zprof
