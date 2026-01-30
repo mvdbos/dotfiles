@@ -19,5 +19,23 @@
       "git rebase*": "ask",
       "git filter-branch*": "ask"
     }
+  },
+  "mcp": {
+    "azure-devops": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@azure-devops/mcp",
+        "{env:AZURE_DEVOPS_ORG}",
+        "-d",
+        "core",
+        "work",
+        "work-items",
+        "repositories",
+        "pipelines"
+      ],
+      "enabled": true
+    }
   }
 }
