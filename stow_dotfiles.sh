@@ -37,6 +37,10 @@ stow_all() {
     echo "Installing zsh configuration..."
     stow -R zsh
     
+    # OpenCode configuration
+    echo "Installing OpenCode configuration..."
+    stow -R opencode
+    
     # Platform-specific packages
     if [ "$PLATFORM_NAME" = "Darwin" ]; then
         echo "Restowing Mac apps..."

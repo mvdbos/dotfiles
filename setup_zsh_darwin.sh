@@ -145,6 +145,21 @@ source ./stow_dotfiles.sh
 stow_dotfiles
 echo_success "Dotfiles stowed successfully"
 
+# Install OpenCode dependencies if needed
+if [ -f ~/.config/opencode/package.json ] && [ ! -d ~/.config/opencode/node_modules ]; then
+    echo_info "Installing OpenCode dependencies..."
+    if command -v bun &> /dev/null; then
+        (cd ~/.config/opencode && bun install)
+        echo_success "OpenCode dependencies installed (bun)"
+    elif command -v npm &> /dev/null; then
+        (cd ~/.config/opencode && npm install)
+        echo_success "OpenCode dependencies installed (npm)"
+    else
+        echo_info "Neither bun nor npm found. Skipping OpenCode dependencies."
+        echo_info "Install manually later: cd ~/.config/opencode && npm install"
+    fi
+fi
+
 # Optional: Change default shell to zsh
 current_shell="$(dscl . -read ~/ UserShell | awk '{print $2}')"
 zsh_path="$(command -v zsh)"
