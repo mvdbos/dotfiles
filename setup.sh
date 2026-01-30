@@ -42,6 +42,19 @@ git-delete-squashed-branches
 source stow_dotfiles.sh
 stow_dotfiles
 
+# Install OpenCode dependencies if needed
+if [ -f ~/.config/opencode/package.json ] && [ ! -d ~/.config/opencode/node_modules ]; then
+    echo "Installing OpenCode dependencies..."
+    if command -v bun &> /dev/null; then
+        (cd ~/.config/opencode && bun install)
+    elif command -v npm &> /dev/null; then
+        (cd ~/.config/opencode && npm install)
+    else
+        echo "Warning: Neither bun nor npm found. OpenCode dependencies not installed."
+        echo "Please install manually: cd ~/.config/opencode && npm install"
+    fi
+fi
+
 # Add Dracula theme for bat
 echo "Adding Dracula theme for bat..."
 theme_dir="$(bat --config-dir)/themes/dracula"
