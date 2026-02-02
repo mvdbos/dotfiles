@@ -82,8 +82,5 @@
 	gitHubAccountFiltering = false
 	helper = 
 	helper = /usr/local/share/gcm-core/git-credential-manager
-[REMOVED AZURE CREDENTIALS]
-
-
 [credential "https://dev.azure.com"]
 	useHttpPath = true
