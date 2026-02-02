@@ -11,6 +11,10 @@ set enc=utf-8
 set hidden
 set number
 
+" Performance settings
+set updatetime=250    " Reduce CursorHold delay (default 4000ms)
+set lazyredraw        " Don't redraw during macros/scripts
+
 set tabstop=4
 set softtabstop=4
 set expandtab                 " Use spaces instead of tabs for indenting
@@ -52,6 +56,8 @@ nnoremap L $
 " Disable realtime gitgutter for better interaction between plugins
 let g:gitgutter_realtime = 0
 let g:gitgutter_eager = 0
+let g:gitgutter_async = 1
+let g:gitgutter_max_signs = 500
 
 set backupdir=~/.vim/tmp/backup//
 set backup
@@ -71,26 +77,6 @@ let g:vim_markdown_toc_autofit = 1
 let g:vim_markdown_auto_insert_bullets=0
 let g:vim_markdown_new_list_item_indent=0
 
-au BufReadPost,BufNewFile *.md setlocal nonumber
-au BufReadPost,BufNewFile *.md setlocal textwidth=0 wrapmargin=0
-
-" These settings are for soft wrap
-au BufReadPost,BufNewFile *.md setlocal linebreak wrap
-au BufReadPost,BufNewFile *.md setlocal breakindent breakindentopt=shift:2
-au BufReadPost,BufNewFile *.md let &showbreak='> '
-
-au BufReadPost,BufNewFile *.md setlocal conceallevel=2
-au BufReadPost,BufNewFile *.md setlocal foldlevel=3
-au BufReadPost,BufNewFile *.md setlocal ts=4 sw=4 expandtab smarttab
-
-" enable completion from spell dict in spell mode
-au BufReadPost,BufNewFile *.md setlocal complete+=kspell
-" makes completions match case with typed text
-au BufReadPost,BufNewFile *.md setlocal infercase
-
-" au FileType markdown set columns=120
-" autocmd VimResized,BufWinEnter,BufReadPost,BufNewFile *.md set columns=120
-
 " Markdown folding: ensure performance by setting manual in insert mode
 function! s:setFoldManual()
     let w:last_fdm = &foldmethod
@@ -102,8 +88,8 @@ function! s:resFoldMethod()
 endfunction
 augroup fold
     autocmd!
-    autocmd InsertEnter * call s:setFoldManual()
-    autocmd InsertLeave * call s:resFoldMethod()
+    autocmd InsertEnter *.md call s:setFoldManual()
+    autocmd InsertLeave *.md call s:resFoldMethod()
 augroup END
 
 " Completion pop-up settings
@@ -136,6 +122,15 @@ vnoremap < <gv
 colorscheme dracula
 
 let g:airline_powerline_fonts = 0
+
+" Performance optimizations
+let g:airline_highlighting_cache = 1
+
+" Disable expensive extensions
+let g:airline#extensions#tagbar#enabled = 0
+let g:airline#extensions#hunks#enabled = 0
+let g:airline#extensions#whitespace#enabled = 0
+let g:airline#extensions#disable_rtp_load = 1
 
 if !exists('g:airline_symbols')
     let g:airline_symbols = {}
@@ -236,14 +231,14 @@ highlight ExtraWhitespace ctermbg=red guibg=red
 match ExtraWhitespace /\s\+$/
 augroup whitespace
     autocmd!
-    autocmd BufWinEnter * match ExtraWhitespace /\s\+$/
-    autocmd InsertEnter * match ExtraWhitespace /\s\+\%#\@<!$/
-    autocmd InsertLeave * match ExtraWhitespace /\s\+$/
+    autocmd BufWinEnter * if &modifiable && !&readonly | match ExtraWhitespace /\s\+$/ | endif
+    autocmd InsertEnter * if &modifiable | match ExtraWhitespace /\s\+\%#\@<!$/ | endif
+    autocmd InsertLeave * if &modifiable | match ExtraWhitespace /\s\+$/ | endif
     autocmd BufWinLeave * call clearmatches()
 augroup END
 
-" Tagbar
-noremap <leader>\ :TagbarToggle<CR>
+" Tagbar (lazy-loaded on demand)
+noremap <leader>\ :packadd tagbar<CR>:TagbarToggle<CR>
 
 " Bclose() {{{2
 " delete buffer without closing window
@@ -275,7 +270,10 @@ fun! TrimWhitespace()
     call winrestview(l:save)
 endfun
 
-autocmd FileType c,cpp,python,ruby,java,php,text,vim autocmd BufWritePre * :call TrimWhitespace()
+augroup trim_whitespace
+    autocmd!
+    autocmd BufWritePre *.c,*.cpp,*.h,*.hpp,*.py,*.rb,*.java,*.php,*.txt,*.vim call TrimWhitespace()
+augroup END
 noremap <Leader>sw :call TrimWhitespace()<CR>
 
 " Automaticall close quickfix and location windows on pressing enter
