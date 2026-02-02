@@ -77,9 +77,9 @@
 [diff-so-fancy]
 	first-run = false
 [credential]
+	gitHubAccountFiltering = false
 	helper = 
 	helper = /usr/local/share/gcm-core/git-credential-manager
-	gitHubAccountFiltering = false
 [REMOVED AZURE CREDENTIALS]
 
 
