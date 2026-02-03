@@ -84,3 +84,6 @@
 	helper = /usr/local/share/gcm-core/git-credential-manager
 [credential "https://dev.azure.com"]
 	useHttpPath = true
+[credential "azrepos:org/INGCDaaS"]
+	azureAuthority = https://login.microsoftonline.com/587b6ea1-3db9-4fe1-a9d7-85d4c64ce5cc
+	username = Matthijs.van.den.Bos@ing.com
