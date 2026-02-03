@@ -122,6 +122,7 @@ ENABLE_CORRECTION="true"
 unalias gbm 2>/dev/null
 unalias gcm 2>/dev/null
 unalias grm 2>/dev/null
+unalias gam 2>/dev/null
 
 # Source shared aliases
 if [ -f "$HOME/.config/shell/aliases" ]; then
