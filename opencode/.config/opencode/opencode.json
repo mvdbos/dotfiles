@@ -37,5 +37,9 @@
       ],
       "enabled": true
     }
+  },
+  "keybinds": {
+      "model_cycle_favorite": "ctrl+m",
+      "app_exit": "ctrl+d,<leader>q"
   }
 }

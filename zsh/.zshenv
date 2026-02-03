@@ -32,6 +32,11 @@ if [ -d "$HOME/.local/bin" ]; then
     PATH="$HOME/.local/bin:$PATH"
 fi
 
+
+if [ -d "$HOME/.opencode/bin" ]; then
+    PATH="$HOME/.opencode/bin:$PATH"
+fi
+
 export PATH
 
 # Skip duplicate path entries
