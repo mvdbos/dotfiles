@@ -140,6 +140,29 @@ alias cd='cdbm'
 # Enable completion for cdbm (used by cd alias)
 compdef _cdbm cdbm
 
+# Enable completion for custom git aliases (matching bash completions)
+# Create wrapper functions for git aliases to ensure proper completion
+_gb_completion() {
+    service=git-branch _git
+}
+compdef _gb_completion gb
+compdef _gb_completion gbm
+
+compdef _git ga=git-add
+compdef _git gap=git-add
+compdef _git gc=git-commit
+compdef _git gco=git-checkout
+compdef _git gd=git-diff
+compdef _git gdo=git-diff
+compdef _git gf=git-fetch
+compdef _git gg=git-grep
+compdef _git gl=git-log
+compdef _git glc=git-log
+compdef _git gp=git-push
+compdef _git gr=git-rebase
+compdef _git gs=git-status
+compdef _git gw=git-log
+
 # ----------------------------------------------------------------------------
 # Plugin Configurations
 # ----------------------------------------------------------------------------
