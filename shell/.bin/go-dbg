@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+
+set -e
+
+# Default values
+PORT=2345
+
+# Parse optional --port flag
+if [[ "$1" == "--port" ]]; then
+    PORT="$2"
+    shift 2
+fi
+
+# Check if binary path is provided
+if [[ -z "$1" ]]; then
+    printf "Usage: %s [--port PORT] <binary> [args...]\n" "$(basename "$0")"
+    printf "\nOptions:\n"
+    printf "  --port PORT    Port for debugger to listen on (default: 2345)\n"
+    printf "\nExample:\n"
+    printf "  %s /path/to/binary arg1 arg2\n" "$(basename "$0")"
+    printf "  %s --port 3000 /path/to/binary arg1 arg2\n" "$(basename "$0")"
+    exit 1
+fi
+
+BINARY="$1"
+shift
+
+# Check if delve (dlv) is installed
+if ! command -v dlv &> /dev/null; then
+    printf "Error: delve (dlv) is not installed. Install it with:\n"
+    printf "go install github.com/go-delve/delve/cmd/dlv@latest\n"
+    exit 1
+fi
+
+# Check if binary exists and is executable
+if [[ ! -f "$BINARY" ]]; then
+    printf "Error: Binary '%s' not found\n" "$BINARY"
+    exit 1
+fi
+
+if [[ ! -x "$BINARY" ]]; then
+    printf "Error: Binary '%s' is not executable\n" "$BINARY"
+    exit 1
+fi
+
+printf "Starting delve debugger...\n"
+printf "Binary: %s\n" "$BINARY"
+printf "Port: %s\n" "$PORT"
+printf "Connect your debugger to localhost:%s\n" "$PORT"
+printf "Press Ctrl+C to stop the debugger\n\n"
+
+# Run delve exec as a background process
+dlv exec --headless --listen=":$PORT" --api-version=2 --accept-multiclient "$BINARY" -- "$@" &
+DLV_PID=$!
+
+# Function to cleanup on exit
+cleanup() {
+    printf "\nStopping debugger...\n"
+    kill "$DLV_PID" 2>/dev/null || true
+    wait "$DLV_PID" 2>/dev/null || true
+    printf "Debugger stopped.\n"
+    exit 0
+}
+
+# Trap signals to cleanup properly
+trap cleanup INT TERM
+
+# Wait for dlv process
+wait "$DLV_PID"
