@@ -174,3 +174,6 @@ ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=20
 # Performance: Return true to avoid bad exit status on prompt
 # ----------------------------------------------------------------------------
 true
+
+# opencode
+export PATH=/Users/matthijs/.opencode/bin:$PATH
