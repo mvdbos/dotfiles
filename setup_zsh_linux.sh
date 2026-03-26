@@ -124,12 +124,12 @@ echo_success "Dotfiles stowed successfully"
 
 # Change default shell to zsh
 zsh_path="$(command -v zsh)"
-current_shell="$(getent passwd "$USER" | cut -d: -f7)"
+current_user="$(whoami)"
+current_shell="$(getent passwd "$current_user" | cut -d: -f7)"
 
 if [[ "$current_shell" != "$zsh_path" ]]; then
     echo_info "Changing default shell to zsh..."
-    sudo chsh -s "$zsh_path" "$USER"
-    echo_success "Default shell set to zsh"
+    sudo chsh -s "$zsh_path" "$current_user" && echo_success "Default shell set to zsh" || echo_info "Could not change default shell (set it manually with: chsh -s $zsh_path)"
 else
     echo_success "Default shell is already zsh"
 fi
