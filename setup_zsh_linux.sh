@@ -112,7 +112,9 @@ bat cache --build > /dev/null 2>&1
 echo_success "Dracula theme for bat installed"
 
 # Stow shell, bash, and zsh dotfiles
+# Remove pre-existing files the base OS image ships that would conflict with stow
 echo_info "Stowing dotfiles configuration..."
+rm -f "$HOME/.profile" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.zshrc" "$HOME/.zprofile"
 cd "$(dirname "$0")"
 
 export PLATFORM_NAME="Linux"
