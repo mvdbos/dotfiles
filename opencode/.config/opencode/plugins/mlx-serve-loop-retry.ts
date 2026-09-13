@@ -20,7 +20,6 @@ function logEvent(event: string, fields: RecordValue = {}) {
 
 function resolveSettings(options: PluginOptions | undefined) {
   const invalid: string[] = []
-  if (!options) invalid.push("options")
 
   const rawRetries = options?.retries
   const retries =

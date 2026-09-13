@@ -47,7 +47,7 @@ across restarts, child-session retries, retries for any other finish cause.
 - `retries`: integer >= 0, default 3. `0` disables: the fetch wrapper is not installed and the
   plugin is a no-op.
 - `provider`: provider config id, default `"mlx-serve"`; overridable for renamed providers.
-- Invalid or missing options fall back to defaults and log once.
+- Invalid options fall back to defaults and log once; missing options silently use defaults.
 
 ## 4. Runtime design
 
