@@ -3,3 +3,4 @@
 Brewfile.lock.json
 .zshenv.local
 .bashrc.local
+node_modules/
