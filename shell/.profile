@@ -67,3 +67,8 @@ if [ -n "$BASH_VERSION" ] && [ -z "$BASHRC_SOURCED" ]; then
         . "$HOME/.bashrc"
     fi
 fi
+
+# Added by LM Studio CLI (lms)
+export PATH="$PATH:/Users/matthijs/.lmstudio/bin"
+# End of LM Studio CLI section
+
