@@ -1,21 +1,10 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "azure-devops": {
+  "lsp": {
+    "typescript": {
       "command": [
-        "npx",
-        "-y",
-        "@azure-devops/mcp",
-        "{env:AZURE_DEVOPS_ORG}",
-        "-d",
-        "core",
-        "work",
-        "work-items",
-        "repositories",
-        "pipelines"
-      ],
-      "enabled": true,
-      "type": "local"
+        "ts-lsp"
+      ]
     }
   },
   "permission": {
@@ -34,26 +23,281 @@
       "*": "ask",
       "/private/tmp/**": "allow",
       "/tmp/**": "allow",
+      "/var/folders/*/*/T/**": "allow",
+      "/private/var/folders/*/*/T/**": "allow",
       "~/.config/**": "allow",
-      "~/.dotfiles/**": "allow"
+      "~/.dotfiles/**": "allow",
+      "~/.cache/**": "allow",
+      "~/.agents/**": "allow"
     }
   },
   "provider": {
-    "ollama": {
+    "deepseek": {
+      "blacklist": [
+        "deepseek-v4-flash",
+        "deepseek-v4-flash-vision-exp",
+        "deepseek-v4-pro"
+      ],
       "models": {
-        "devstral-small-2": {
-          "_launch": true,
-          "name": "devstral-small-2"
-        },
-        "qwen3-coder:30b": {
-          "_launch": true,
-          "name": "qwen3-coder:30b"
+        "deepseek-flash": {
+          "name": "DeepSeek V4.1 Flash",
+          "description": "DeepSeek-V4.1-Flash: causal encoder-decoder, 8B active (16B output), native vision, replaces deepseek-v4-flash",
+          "attachment": true,
+          "reasoning": true,
+          "reasoning_options": [
+            {
+              "type": "toggle"
+            },
+            {
+              "type": "effort",
+              "values": [
+                "low",
+                "high",
+                "max"
+              ]
+            }
+          ],
+          "tool_call": true,
+          "structured_output": true,
+          "temperature": true,
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "limit": {
+            "context": 1000000,
+            "output": 384000
+          },
+          "cost": {
+            "input": 0.15,
+            "output": 0.6,
+            "reasoning": 0.6,
+            "cache_read": 0.003
+          }
         }
+      }
+    },
+    "omlx": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "oMLX",
+      "options": {
+        "baseURL": "http://127.0.0.1:8888/v1",
+        "apiKey": "{env:OMLX_API_KEY}"
       },
-      "name": "Ollama",
+      "models": {
+        "Qwen3.8-27B-MLX-affine-Q8-g64-native-MTP": {
+          "name": "Qwen3.8-27B-MLX-affine-Q8-g64-native-MTP",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "attachment": true,
+          "limit": {
+            "context": 262144,
+            "output": 32768
+          }
+        },
+        "Qwen3.8-Flash-Next-oQ4e-mtp": {
+          "name": "Qwen3.8-Flash-Next-oQ4e-mtp",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "attachment": true,
+          "limit": {
+            "context": 262144,
+            "output": 32768
+          }
+        },
+        "Qwen3.6-35B-A3B-Uncensored-Heretic-MLX-6bit": {
+          "name": "Qwen3.6-35B-A3B-Uncensored-Heretic-MLX-6bit",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "attachment": true,
+          "limit": {
+            "context": 131072,
+            "output": 8192
+          }
+        },
+        "Qwen3.6-35B-A3B-bf16": {
+          "name": "Qwen3.6-35B-A3B-bf16",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "attachment": true,
+          "limit": {
+            "context": 221184,
+            "output": 32768
+          }
+        }
+      }
+    },
+    "ds4": {
+      "name": "ds4.c (local)",
       "npm": "@ai-sdk/openai-compatible",
       "options": {
-        "baseURL": "http://127.0.0.1:11434/v1"
+        "baseURL": "http://127.0.0.1:8000/v1",
+        "apiKey": "{env:DS4_API_KEY}"
+      },
+      "models": {
+        "deepseek-v4-flash": {
+          "name": "DeepSeek V4 Flash (ds4.c local)",
+          "limit": {
+            "context": 131072,
+            "output": 384000
+          }
+        }
+      }
+    },
+    "mlx-serve": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "MLX Serve",
+      "options": {
+        "baseURL": "http://127.0.0.1:11234/v1",
+        "apiKey": "{env:MLX_SERVE_API_KEY}"
+      },
+      "models": {
+        "ddalcu/Qwen3.8-Flash-Next-MLX-Serve-mixed-4-8bit": {
+          "name": "ddalcu/Qwen3.8-Flash-Next-MLX-Serve-mixed-4-8bit",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "attachment": true,
+          "limit": {
+            "context": 262144,
+            "output": 32768
+          },
+          "reasoning": true,
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            }
+          }
+        },
+        "lmstudio-community/Qwen3.5-4B-MLX-8bit": {
+          "name": "lmstudio-community/Qwen3.5-4B-MLX-8bit",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "attachment": true,
+          "limit": {
+            "context": 262144,
+            "output": 32768
+          },
+          "reasoning": true,
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            }
+          }
+        }
+      }
+    }
+  },
+  "disabled_providers": [],
+  "model": "mlx-serve/ddalcu/Qwen3.8-Flash-Next-MLX-Serve-mixed-4-8bit",
+  "small_model": "mlx-serve/lmstudio-community/Qwen3.5-4B-MLX-8bit",
+  "agent": {
+    "build": {
+      "model": "mlx-serve/ddalcu/Qwen3.8-Flash-Next-MLX-Serve-mixed-4-8bit",
+      "permission": {
+        "websearch": "allow",
+        "webfetch": "allow",
+        "todowrite": "allow",
+        "skill": "allow",
+        "task": {
+          "*": "deny",
+          "explore": "allow"
+        }
+      }
+    },
+    "plan": {
+      "model": "mlx-serve/ddalcu/Qwen3.8-Flash-Next-MLX-Serve-mixed-4-8bit",
+      "permission": {
+        "edit": "deny",
+        "websearch": "allow",
+        "webfetch": "allow",
+        "todowrite": "allow",
+        "skill": "allow",
+        "task": {
+          "*": "deny",
+          "explore": "allow"
+        }
+      }
+    },
+    "explore": {
+      "prompt": "{file:./explore-controls/explore-prompt.txt}",
+      "description": "Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. \"src/components/**/*.tsx\"), search code for keywords (eg. \"API endpoints\"), or answer questions about the codebase (eg. \"how do API endpoints work?\"). Keep each task focused and bounded; split broad investigations into smaller tasks. Search budget and context are limited, so findings may be partial. Use only for exploration and evidence gathering, not code reviews or audits.",
+      "model": "mlx-serve/lmstudio-community/Qwen3.5-4B-MLX-8bit",
+      "temperature": 0.7,
+      "top_p": 0.8,
+      "options": {
+        "top_k": 20,
+        "min_p": 0.0,
+        "presence_penalty": 1.5,
+        "repetition_penalty": 1.0,
+        "enable_thinking": false
+      },
+      "steps": 10,
+      "permission": {
+        "edit": "deny",
+        "bash": "deny",
+        "webfetch": "deny",
+        "websearch": "deny",
+        "task": "deny",
+        "todowrite": "deny"
       }
     }
   }
