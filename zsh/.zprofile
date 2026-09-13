@@ -18,3 +18,6 @@ export CDPATH
 export HOMEBREW_CASK_OPTS="--appdir=${HOME}/Applications"
 export HOMEBREW_NO_ANALYTICS="true"
 export HOMEBREW_NO_ENV_HINTS="true"
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+export PATH="/Users/matthijs/.local/bin:$PATH"
+

@@ -7,16 +7,15 @@
 
 # Homebrew environment (cached instead of calling 'brew shellenv' every time)
 # This saves ~750ms on startup. Update manually if brew location changes.
-export HOMEBREW_PREFIX="/usr/local"
-export HOMEBREW_CELLAR="/usr/local/Cellar"
-export HOMEBREW_REPOSITORY="/usr/local/Homebrew"
-export PATH="/usr/local/bin:/usr/local/sbin${PATH+:$PATH}"
-export MANPATH="/usr/local/share/man${MANPATH+:$MANPATH}:"
-export INFOPATH="/usr/local/share/info:${INFOPATH:-}"
+export HOMEBREW_PREFIX="/opt/homebrew"
+export HOMEBREW_CELLAR="/opt/homebrew/Cellar"
+export HOMEBREW_REPOSITORY="/opt/homebrew"
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin${PATH+:$PATH}"
+export MANPATH="/opt/homebrew/share/man${MANPATH+:$MANPATH}:"
+export INFOPATH="/opt/homebrew/share/info:${INFOPATH:-}"
 
 # Additional PATH entries
 PATH="$HOME/.bin:$PATH"
-PATH="/opt/homebrew/bin:$PATH"
 
 # Make the GNU coreutils preferred over the BSD ones on macOS
 if [ -n "$HOMEBREW_PREFIX" ]; then
