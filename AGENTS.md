@@ -29,6 +29,7 @@ Run `./validate_setup.sh` after editing `bash/.bashrc`, `zsh/.zshrc`, `shell/.pr
 - Tests (Bun, already installed):
   - explore-controls, from `opencode/.config/opencode/`: `bun test ./explore-controls/*.test.ts` (individual files work too).
   - todo-reconcile, from its directory: `bun run test:unit` (fast, no server), `bun test` (unit + integration), `bun run typecheck`. Integration tests need a real OpenCode binary (`OPENCODE_BIN` overrides the path).
+  - mlx-serve-loop-retry, from `opencode/.config/opencode/`: `bun test ./mlx-serve-loop-retry/helpers.test.ts` (hermetic helpers), `bun test ./mlx-serve-loop-retry/integration` (real OpenCode binary and a local fixture, `OPENCODE_BIN` overrides the path). The live mlx-serve test is opt-in: `MLX_SERVE_LIVE=1 bun test ./mlx-serve-loop-retry/integration/live-mlx-serve.integration.test.ts` (model loops are stochastic, so it asserts detection + retry, not exhaustion).
 - Canonical runtime deps for the global config are `opencode/.config/opencode/package.json` (installed by `setup.sh`); `todo-reconcile` pins its own SDK version. Root `package.json`/`node_modules` pins a different, unrelated `@opencode-ai/plugin` (1.1.48) — don't assume version bumps there affect plugins.
 - `plugins/rtk.ts` only delegates to the `rtk` binary; rewrite rules live in rtk's Rust registry, not this repo.
 

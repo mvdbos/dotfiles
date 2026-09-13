@@ -1,6 +1,6 @@
 # mlx-serve repetition-loop retry plugin — spec
 
-Status: approved (design confirmed 2026-09-13). Implementation not started.
+Status: implemented (2026-09-13). Test plan A and B automated; C manual.
 Target: opencode 1.18.30 (commit `3104c1428ec91f809e5ab86631300de41eb6952e`). Re-verify the
 plugin hooks and SDK methods on any opencode upgrade before trusting this document.
 
@@ -174,6 +174,10 @@ C. Manual: TUI run shows attempt and give-up toasts; `opencode run` shows log li
 
 ## 8. Files
 
-- Plugin: `~/.config/opencode/plugins/mlx-serve-loop-retry.ts`
+- Plugin: `~/.config/opencode/plugins/mlx-serve-loop-retry.ts`. The plugin loader treats every
+  export in this file as a plugin, so it exports only `MlxServeLoopRetryPlugin`.
+- Pure helpers and typed glue: `~/.config/opencode/mlx-serve-loop-retry/helpers.ts`.
+- Tests: `~/.config/opencode/mlx-serve-loop-retry/helpers.test.ts` (plan A) and
+  `~/.config/opencode/mlx-serve-loop-retry/integration/` (plan B, fixture + harness).
 - Spec (this document): `~/.config/opencode/docs/mlx-serve-loop-retry.spec.md`
 - Integration fixture lives outside the config dir (temp dir), per test plan B.
