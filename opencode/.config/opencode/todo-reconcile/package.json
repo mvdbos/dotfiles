@@ -1,0 +1,21 @@
+{
+  "name": "opencode-todo-reconcile",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "OpenCode plugin: restore persisted todos after compaction and ask the resumed agent to reconcile them",
+  "scripts": {
+    "build": "bun build src/plugin.ts --outfile dist/todo-reconcile.js --target node --format esm",
+    "test": "bun test",
+    "test:unit": "bun test test/reminder.test.ts test/lifecycle.test.ts",
+    "test:integration": "bun test test/integration",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "1.18.30",
+    "@opencode-ai/sdk": "1.18.30",
+    "@types/bun": "^1.4.2",
+    "@types/node": "^22.13.9",
+    "typescript": "^5.8.2"
+  }
+}
