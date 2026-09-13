@@ -227,7 +227,7 @@
           },
           "attachment": true,
           "limit": {
-            "context": 262144,
+            "context": 131072,
             "output": 32768
           },
           "reasoning": true,
