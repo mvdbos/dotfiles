@@ -243,3 +243,8 @@ test -f ~/.bashrc.local && source ~/.bashrc.local
 # Make this the last return value,
 # so we don't have an exit status of the test command on our prompt
 true
+
+# Added by LM Studio CLI (lms)
+export PATH="$PATH:/Users/matthijs/.lmstudio/bin"
+# End of LM Studio CLI section
+
