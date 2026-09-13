@@ -33,4 +33,7 @@
 	url = git@github.com:dracula/iterm.git
 [submodule "vim/.vim/pack/my-plugins/start/tagbar"]
 	path = vim/.vim/pack/my-plugins/start/tagbar
-	url = https://github.com/preservim/tagbar
+	url = https://github.com/preservim/tagbar.git
+[submodule "vim/.vim/pack/my-plugins/start/vim-go"]
+	path = vim/.vim/pack/my-plugins/start/vim-go
+	url = https://github.com/fatih/vim-go.git
