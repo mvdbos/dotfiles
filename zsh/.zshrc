@@ -177,3 +177,10 @@ true
 
 # opencode
 export PATH=/Users/matthijs/.opencode/bin:$PATH
+
+source /opt/homebrew/opt/git-extras/share/git-extras/git-extras-completion.zsh
+
+# Hermes Agent — ensure ~/.local/bin is on PATH
+export PATH="$HOME/.local/bin:$PATH"
+export PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH"
+
