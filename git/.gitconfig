@@ -80,3 +80,7 @@
 	gitHubAccountFiltering = false
 	helper = 
 	helper = /usr/local/share/gcm-core/git-credential-manager
+[safe]
+	directory = /tmp/pi-benchmark/aiomonitor-task-snapshots-diff/repo
+	directory = /tmp/pi-benchmark/etree-xml-diff-patch/repo
+	directory = /tmp/pi-benchmark/kombu-virtual-queue-dead-lettering/repo
