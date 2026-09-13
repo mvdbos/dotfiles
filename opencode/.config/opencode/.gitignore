@@ -2,3 +2,5 @@ node_modules/
 bun.lock
 package-lock.json
 yarn.lock
+service.json
+*.bak*
