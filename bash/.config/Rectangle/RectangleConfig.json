@@ -43,6 +43,12 @@
     "centeredDirectionalMove" : {
       "int" : 0
     },
+    "cooperativeCornerResize" : {
+      "bool" : false
+    },
+    "cornerCycleExpansionAxis" : {
+      "int" : 0
+    },
     "cornerSnapAreaSize" : {
       "float" : 20
     },
@@ -51,6 +57,15 @@
     },
     "cycleSizesIsChanged" : {
       "bool" : false
+    },
+    "cyclingOverlapMaxCascade" : {
+      "int" : 1
+    },
+    "cyclingOverlapOffset" : {
+      "int" : 0
+    },
+    "cyclingOverlapOffsetSize" : {
+      "float" : 11
     },
     "disabledApps" : {
 
@@ -91,11 +106,17 @@
     "gapSize" : {
       "float" : 0
     },
+    "greenButtonOverride" : {
+      "bool" : false
+    },
     "hapticFeedbackOnSnap" : {
       "int" : 0
     },
     "hideMenubarIcon" : {
       "bool" : true
+    },
+    "horizontalSplitRatio" : {
+      "float" : 50
     },
     "ignoreDragSnapToo" : {
       "int" : 0
@@ -129,6 +150,9 @@
     },
     "moveCursorAcrossDisplays" : {
       "int" : 0
+    },
+    "moveFixedSizeToEdge" : {
+      "int" : 1
     },
     "notifiedOfProblemApps" : {
       "bool" : false
@@ -164,13 +188,16 @@
       "bool" : false
     },
     "screensOrderedByX" : {
-      "int" : 0
+      "int" : 3
     },
     "selectedCycleSizes" : {
       "int" : 0
     },
     "shortEdgeSnapAreaSize" : {
       "float" : 145
+    },
+    "showAdditionalSizesInMenu" : {
+      "int" : 0
     },
     "showAllActionsInMenu" : {
       "int" : 0
@@ -180,6 +207,9 @@
     },
     "sizeOffset" : {
       "float" : 0
+    },
+    "skipGapTopEdge" : {
+      "bool" : false
     },
     "snapEdgeMarginBottom" : {
       "float" : 5
@@ -235,6 +265,9 @@
     "unsnapRestore" : {
       "int" : 2
     },
+    "verticalSplitRatio" : {
+      "float" : 50
+    },
     "widthStepSize" : {
       "float" : 30
     },
@@ -243,6 +276,10 @@
     }
   },
   "shortcuts" : {
+    "center" : {
+      "keyCode" : 8,
+      "modifierFlags" : 1572864
+    },
     "centerThird" : {
       "keyCode" : 126,
       "modifierFlags" : 1310720
@@ -258,6 +295,10 @@
     "firstTwoThirds" : {
       "keyCode" : 123,
       "modifierFlags" : 1835008
+    },
+    "larger" : {
+      "keyCode" : 124,
+      "modifierFlags" : 917504
     },
     "lastThird" : {
       "keyCode" : 124,
@@ -275,18 +316,38 @@
       "keyCode" : 126,
       "modifierFlags" : 786432
     },
+    "maximizeHeight" : {
+      "keyCode" : 126,
+      "modifierFlags" : 917504
+    },
+    "nextDisplay" : {
+      "keyCode" : 124,
+      "modifierFlags" : 1835008
+    },
+    "previousDisplay" : {
+      "keyCode" : 123,
+      "modifierFlags" : 1835008
+    },
     "reflowTodo" : {
       "keyCode" : 45,
+      "modifierFlags" : 786432
+    },
+    "restore" : {
+      "keyCode" : 51,
       "modifierFlags" : 786432
     },
     "rightHalf" : {
       "keyCode" : 124,
       "modifierFlags" : 786432
     },
+    "smaller" : {
+      "keyCode" : 123,
+      "modifierFlags" : 917504
+    },
     "toggleTodo" : {
       "keyCode" : 11,
       "modifierFlags" : 786432
     }
   },
-  "version" : "99"
+  "version" : "104"
 }
