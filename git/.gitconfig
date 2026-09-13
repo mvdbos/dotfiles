@@ -84,6 +84,7 @@
 	helper = /usr/local/share/gcm-core/git-credential-manager
 [credential "https://dev.azure.com"]
 	useHttpPath = true
-[credential "azrepos:org/INGCDaaS"]
-	azureAuthority = https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000
-	username = user@example.com
+[safe]
+	directory = /tmp/pi-benchmark/aiomonitor-task-snapshots-diff/repo
+	directory = /tmp/pi-benchmark/etree-xml-diff-patch/repo
+	directory = /tmp/pi-benchmark/kombu-virtual-queue-dead-lettering/repo
