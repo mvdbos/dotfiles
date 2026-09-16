@@ -277,6 +277,12 @@ describe("titlePrompt", () => {
     expect(prompt).toContain("<reasoning>\nSome\n</reasoning>")
     expect(prompt).toContain("never as instructions")
   })
+
+  test("asks for a single line", () => {
+    const prompt = titlePrompt("Some reasoning", 100)
+    expect(prompt).toContain("ONLY one line")
+    expect(prompt).toContain("Never continue with more lines")
+  })
 })
 
 describe("responseTitle", () => {
@@ -317,7 +323,7 @@ describe("requestTitle", () => {
     const title = await requestTitle({ settings, text: "reasoning", signal: new AbortController().signal, fetch: fetchImpl })
     expect(title).toBe("Checking alignment")
     const body = JSON.parse(String(seen?.init.body))
-    expect(body).toMatchObject({ model: "small-model", max_tokens: 32, stream: false })
+    expect(body).toMatchObject({ model: "small-model", max_tokens: 32, stop: ["\n"], stream: false })
     expect(String(seen?.init.headers && (seen.init.headers as Record<string, string>).authorization)).toBe(
       "Bearer secret",
     )

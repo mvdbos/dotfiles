@@ -240,6 +240,47 @@ describe("async reasoning titles plugin", () => {
     harness.dispose()
   })
 
+  test("waits for the min-chars floor before titling a streaming block", async () => {
+    setup()
+    const text = "x".repeat(50)
+    const parts = new Map<string, TestPart[]>([
+      ["msg_1", [reasoningPart({ text, time: { start: 1 } })]],
+    ])
+    const harness = createApi({ parts })
+    await start(harness.api, { model: "mock/small-model" })
+
+    harness.emit(partUpdated(reasoningPart({ text, time: { start: 1 } })))
+    await Bun.sleep(30)
+    expect(fetchCalls).toHaveLength(0)
+
+    const done = reasoningPart({ text })
+    parts.set("msg_1", [done])
+    harness.emit(partUpdated(done))
+    await waitFor(() => fetchCalls.length === 1)
+    harness.dispose()
+  })
+
+  test("honors a custom minChars floor while streaming", async () => {
+    setup()
+    const text = "x".repeat(30)
+    const parts = new Map<string, TestPart[]>([
+      ["msg_1", [reasoningPart({ text, time: { start: 1 } })]],
+    ])
+    const harness = createApi({ parts })
+    await start(harness.api, { model: "mock/small-model", minChars: 20 })
+
+    harness.emit(partUpdated(reasoningPart({ text, time: { start: 1 } })))
+    await waitFor(() => fetchCalls.length === 1)
+    expect(harness.updates).toHaveLength(0)
+
+    const done = reasoningPart({ text })
+    parts.set("msg_1", [done])
+    harness.emit(partUpdated(done))
+    await waitFor(() => harness.updates.length === 1)
+    expect(harness.updates[0]?.part.text).toBe(`**Checking alignment**\n\n${text}`)
+    harness.dispose()
+  })
+
   test("drops an early title when the block turns out to be signed", async () => {
     setup()
     const text = "x".repeat(60)

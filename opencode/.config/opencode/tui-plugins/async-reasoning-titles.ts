@@ -20,6 +20,7 @@ const PREFIX = "[async-reasoning-titles]"
 const THINKING_KEY = "thinking_mode"
 const DEFAULT_CONCURRENCY = 1
 const MODE_POLL_MS = 1000
+const DEFAULT_MIN_CHARS = 200
 
 type PendingTitle = {
   title: string
@@ -33,6 +34,7 @@ type Settings = {
   enabled: boolean
   model?: string
   maxInputChars?: number
+  minChars?: number
   maxTokens?: number
   temperature?: number
   timeoutMs?: number
@@ -55,6 +57,7 @@ function resolveSettings(options: Record<string, unknown> | undefined): Settings
     model: typeof raw.model === "string" ? raw.model : undefined,
     maxInputChars:
       typeof raw.maxInputChars === "number" && raw.maxInputChars > 0 ? raw.maxInputChars : undefined,
+    minChars: typeof raw.minChars === "number" && raw.minChars > 0 ? raw.minChars : undefined,
     maxTokens: typeof raw.maxTokens === "number" && raw.maxTokens > 0 ? raw.maxTokens : undefined,
     temperature: typeof raw.temperature === "number" ? raw.temperature : undefined,
     timeoutMs: typeof raw.timeoutMs === "number" && raw.timeoutMs > 0 ? raw.timeoutMs : undefined,
@@ -172,11 +175,13 @@ const plugin: TuiPlugin = async (api, options) => {
       return
     }
 
-    // Long blocks are titled while still streaming: once the capped prefix is
-    // available it will not change, so the request can overlap the remaining
-    // reasoning. Shorter blocks wait for completion as before.
+    // Generation starts while the block is still streaming: once the text
+    // passes the min-chars floor (capped by maxInputChars) the queued prefix
+    // will not change, so the request overlaps the remaining reasoning.
+    // Blocks shorter than the floor wait for completion as before.
     const complete = isCompleteReasoning(part)
-    if (!complete && part.text.length < titleConfig.maxInputChars) return
+    const floor = Math.min(settings.minChars ?? DEFAULT_MIN_CHARS, titleConfig.maxInputChars)
+    if (!complete && part.text.length < floor) return
 
     const source = truncateSource(part.text, titleConfig.maxInputChars)
     attempted.add(key)

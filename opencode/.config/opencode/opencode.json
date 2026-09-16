@@ -90,8 +90,8 @@
         "apiKey": "{env:OMLX_API_KEY}"
       },
       "models": {
-        "Qwen3.8-27B-MLX-affine-Q8-g64-native-MTP": {
-          "name": "Qwen3.8-27B-MLX-affine-Q8-g64-native-MTP",
+        "LFM2.5-1.2B-Instruct-MLX-8bit": {
+          "name": "LFM2.5-1.2B-Instruct-MLX-8bit",
           "modalities": {
             "input": [
               "text",
@@ -103,8 +103,37 @@
           },
           "attachment": true,
           "limit": {
-            "context": 262144,
-            "output": 32768
+            "context": 32768,
+            "output": 128
+          },
+          "reasoning": true,
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            }
+          }
+        },
+        "LFM2.5-350M-MLX-bf16": {
+          "name": "LFM2.5-350M-MLX-bf16",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "attachment": true,
+          "limit": {
+            "context": 32768,
+            "output": 512
           },
           "reasoning": true,
           "variants": {
@@ -132,7 +161,7 @@
           },
           "attachment": true,
           "limit": {
-            "context": 262144,
+            "context": 8192,
             "output": 8192
           },
           "reasoning": true,
@@ -163,35 +192,6 @@
           "limit": {
             "context": 131072,
             "output": 8192
-          },
-          "reasoning": true,
-          "variants": {
-            "low": {
-              "reasoningEffort": "low"
-            },
-            "medium": {
-              "reasoningEffort": "medium"
-            },
-            "high": {
-              "reasoningEffort": "high"
-            }
-          }
-        },
-        "Qwen3.6-35B-A3B-bf16": {
-          "name": "Qwen3.6-35B-A3B-bf16",
-          "modalities": {
-            "input": [
-              "text",
-              "image"
-            ],
-            "output": [
-              "text"
-            ]
-          },
-          "attachment": true,
-          "limit": {
-            "context": 221184,
-            "output": 32768
           },
           "reasoning": true,
           "variants": {
@@ -269,45 +269,6 @@
           }
         }
       }
-    },
-    "mlx-serve": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "MLX Serve",
-      "options": {
-        "baseURL": "http://127.0.0.1:11234/v1",
-        "apiKey": "{env:MLX_SERVE_API_KEY}"
-      },
-      "models": {
-        "lmstudio-community/Qwen3.5-0.8B-MLX-8bit": {
-          "name": "lmstudio-community/Qwen3.5-0.8B-MLX-8bit",
-          "modalities": {
-            "input": [
-              "text",
-              "image"
-            ],
-            "output": [
-              "text"
-            ]
-          },
-          "attachment": true,
-          "limit": {
-            "context": 262144,
-            "output": 32768
-          },
-          "reasoning": true,
-          "variants": {
-            "low": {
-              "reasoningEffort": "low"
-            },
-            "medium": {
-              "reasoningEffort": "medium"
-            },
-            "high": {
-              "reasoningEffort": "high"
-            }
-          }
-        }
-      }
     }
   },
   "disabled_providers": [],
@@ -339,7 +300,7 @@
       }
     },
     "title": {
-      "model": "omlx/Qwen3.5-0.8B-8bit"
+      "model": "omlx/LFM2.5-1.2B-Instruct-MLX-8bit"
     },
     "explore": {
       "prompt": "{file:./explore-controls/explore-prompt.txt}",
