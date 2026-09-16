@@ -105,10 +105,22 @@
           "limit": {
             "context": 262144,
             "output": 32768
+          },
+          "reasoning": true,
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            }
           }
         },
-        "Qwen3.8-Flash-Next-oQ4e-mtp": {
-          "name": "Qwen3.8-Flash-Next-oQ4e-mtp",
+        "Qwen3.5-0.8B-8bit": {
+          "name": "Qwen3.5-0.8B-8bit",
           "modalities": {
             "input": [
               "text",
@@ -121,7 +133,19 @@
           "attachment": true,
           "limit": {
             "context": 262144,
-            "output": 32768
+            "output": 8192
+          },
+          "reasoning": true,
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            }
           }
         },
         "Qwen3.6-35B-A3B-Uncensored-Heretic-MLX-6bit": {
@@ -139,6 +163,18 @@
           "limit": {
             "context": 131072,
             "output": 8192
+          },
+          "reasoning": true,
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            }
           }
         },
         "Qwen3.6-35B-A3B-bf16": {
@@ -156,6 +192,18 @@
           "limit": {
             "context": 221184,
             "output": 32768
+          },
+          "reasoning": true,
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            }
           }
         }
       }
@@ -291,7 +339,7 @@
       }
     },
     "title": {
-      "model": "mlx-serve/lmstudio-community/Qwen3.5-0.8B-MLX-8bit"
+      "model": "omlx/Qwen3.5-0.8B-8bit"
     },
     "explore": {
       "prompt": "{file:./explore-controls/explore-prompt.txt}",
