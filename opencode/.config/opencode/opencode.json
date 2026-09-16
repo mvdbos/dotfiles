@@ -168,11 +168,56 @@
         "apiKey": "{env:DS4_API_KEY}"
       },
       "models": {
-        "deepseek-v4-flash": {
-          "name": "DeepSeek V4 Flash (ds4.c local)",
+        "qwen3.8-flash-next": {
+          "name": "Qwen3.8 Flash Next Q4 (ds4.c local)",
+          "description": "Qwen3.8-Flash-Next Q4 via ds4-server: Metal, vision, MTP speculation",
+          "attachment": true,
+          "reasoning": true,
+          "tool_call": true,
+          "temperature": true,
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          },
           "limit": {
-            "context": 131072,
-            "output": 384000
+            "context": 262144,
+            "output": 32768
+          },
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            }
+          }
+        },
+        "qwen3.8-flash-next-chat": {
+          "name": "Qwen3.8 Flash Next Q4 Chat (ds4.c local)",
+          "description": "Same Qwen3.8-Flash-Next Q4, thinking disabled",
+          "attachment": true,
+          "tool_call": true,
+          "temperature": true,
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "limit": {
+            "context": 262144,
+            "output": 32768
           }
         }
       }
@@ -185,8 +230,8 @@
         "apiKey": "{env:MLX_SERVE_API_KEY}"
       },
       "models": {
-        "ddalcu/Qwen3.8-Flash-Next-MLX-Serve-mixed-4-8bit": {
-          "name": "ddalcu/Qwen3.8-Flash-Next-MLX-Serve-mixed-4-8bit",
+        "lmstudio-community/Qwen3.5-0.8B-MLX-8bit": {
+          "name": "lmstudio-community/Qwen3.5-0.8B-MLX-8bit",
           "modalities": {
             "input": [
               "text",
@@ -213,45 +258,14 @@
               "reasoningEffort": "high"
             }
           }
-        },
-        "lmstudio-community/Qwen3.5-4B-MLX-8bit": {
-          "name": "lmstudio-community/Qwen3.5-4B-MLX-8bit",
-          "modalities": {
-            "input": [
-              "text",
-              "image"
-            ],
-            "output": [
-              "text"
-            ]
-          },
-          "attachment": true,
-          "limit": {
-            "context": 131072,
-            "output": 32768
-          },
-          "reasoning": true,
-          "variants": {
-            "low": {
-              "reasoningEffort": "low"
-            },
-            "medium": {
-              "reasoningEffort": "medium"
-            },
-            "high": {
-              "reasoningEffort": "high"
-            }
-          }
         }
       }
     }
   },
   "disabled_providers": [],
-  "model": "mlx-serve/ddalcu/Qwen3.8-Flash-Next-MLX-Serve-mixed-4-8bit",
-  "small_model": "mlx-serve/lmstudio-community/Qwen3.5-4B-MLX-8bit",
+  "model": "ds4/qwen3.8-flash-next",
   "agent": {
     "build": {
-      "model": "mlx-serve/ddalcu/Qwen3.8-Flash-Next-MLX-Serve-mixed-4-8bit",
       "permission": {
         "websearch": "allow",
         "webfetch": "allow",
@@ -264,7 +278,6 @@
       }
     },
     "plan": {
-      "model": "mlx-serve/ddalcu/Qwen3.8-Flash-Next-MLX-Serve-mixed-4-8bit",
       "permission": {
         "edit": "deny",
         "websearch": "allow",
@@ -277,17 +290,13 @@
         }
       }
     },
+    "title": {
+      "model": "mlx-serve/lmstudio-community/Qwen3.5-0.8B-MLX-8bit"
+    },
     "explore": {
       "prompt": "{file:./explore-controls/explore-prompt.txt}",
       "description": "Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. \"src/components/**/*.tsx\"), search code for keywords (eg. \"API endpoints\"), or answer questions about the codebase (eg. \"how do API endpoints work?\"). Keep each task focused and bounded; split broad investigations into smaller tasks. Search budget and context are limited, so findings may be partial. Use only for exploration and evidence gathering, not code reviews or audits.",
-      "model": "mlx-serve/lmstudio-community/Qwen3.5-4B-MLX-8bit",
-      "temperature": 0.7,
-      "top_p": 0.8,
       "options": {
-        "top_k": 20,
-        "min_p": 0.0,
-        "presence_penalty": 1.5,
-        "repetition_penalty": 1.0,
         "enable_thinking": false
       },
       "steps": 10,
