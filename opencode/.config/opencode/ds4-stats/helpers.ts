@@ -55,6 +55,10 @@ export type SessionStats = {
   hitRead: number
   hitTotal: number
   hitPercent?: number
+  // ds4 server busy seconds across matched requests: prefill + decode time.
+  // Tool execution and user idle time live outside the log, so they never
+  // enter this number.
+  durationSecs: number
 }
 
 export type Level = "good" | "warn" | "bad" | "none"
@@ -264,6 +268,7 @@ export function sessionStats(
     decodeSecs: 0,
     hitRead: 0,
     hitTotal: 0,
+    durationSecs: 0,
   }
   for (const message of messages) {
     const tokens = message.tokens
@@ -274,6 +279,7 @@ export function sessionStats(
     const request = links.get(message.id)
     if (!request) continue
     stats.matched += 1
+    stats.durationSecs += (request.prefillSecs ?? 0) + (request.decodeSecs ?? 0)
     if (request.prefillSecs !== undefined && request.prefillSecs > 0) {
       stats.prefillTokens += request.prefetched
       stats.prefillSecs += request.prefillSecs
@@ -307,6 +313,23 @@ export function hitLevel(value: number | undefined): Level {
 export function formatRate(value: number | undefined): string {
   if (value === undefined || !Number.isFinite(value)) return "--"
   return value.toFixed(1)
+}
+
+export function formatCount(value: number | undefined): string {
+  if (value === undefined || !Number.isFinite(value)) return "--"
+  return Math.round(value).toString()
+}
+
+// Minutes below an hour, hours (plus minutes when nonzero) above; nothing
+// below a full minute (callers hide it).
+export function formatDuration(secs: number | undefined): string | undefined {
+  if (secs === undefined || !Number.isFinite(secs)) return undefined
+  const total = Math.floor(secs)
+  if (total < 60) return undefined
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  if (hours === 0) return `${minutes}m`
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`
 }
 
 export function formatHit(value: number | undefined): string {

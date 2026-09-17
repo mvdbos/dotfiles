@@ -4,8 +4,8 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { Message } from "@opencode-ai/sdk/v2"
-import { createParser } from "./helpers"
-import plugin from "../tui-plugins/ds4-stats"
+import { createParser, usageMessages } from "./helpers"
+import plugin, { fetchAllMessages } from "../tui-plugins/ds4-stats"
 
 const FIXTURE = [
   "chat ctx=0..100:100 prompt start",
@@ -71,5 +71,80 @@ describe("fixture sanity", () => {
     for (const line of FIXTURE.split("\n")) parser.push(line)
     expect(parser.requests).toHaveLength(1)
     expect(parser.requests[0].total).toBe(100)
+  })
+})
+
+function fakeMessages(count: number): Message[] {
+  return Array.from({ length: count }, (_, index) =>
+    ({
+      id: `msg_${String(index).padStart(4, "0")}`,
+      sessionID: "ses_test",
+      role: "assistant",
+      parentID: "msg_user",
+      modelID: "qwen3.8-flash-next",
+      providerID: "ds4",
+      mode: "build",
+      path: { cwd: "/tmp", root: "/tmp" },
+      cost: 0,
+      time: { created: index + 1 },
+      tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+    }) as unknown as Message,
+  )
+}
+
+// Mirrors GET /session/:sessionID/message: newest-first pages of `limit`, the
+// next-page cursor in the X-Next-Cursor header, each page returned ascending.
+function pagingClient(all: Message[]) {
+  const calls: Array<{ limit?: number; before?: string }> = []
+  const encode = (message: Message) =>
+    Buffer.from(JSON.stringify({ id: message.id, time: message.time.created })).toString("base64url")
+  return {
+    calls,
+    client: {
+      session: {
+        messages: async (options: { sessionID: string; limit?: number; before?: string }) => {
+          calls.push({ limit: options.limit, before: options.before })
+          const limit = options.limit ?? 0
+          const before = options.before
+            ? (JSON.parse(Buffer.from(options.before, "base64url").toString("utf8")) as { id: string; time: number })
+            : undefined
+          const ordered = [...all].sort(
+            (a, b) => b.time.created - a.time.created || (a.id > b.id ? -1 : a.id < b.id ? 1 : 0),
+          )
+          const eligible = before
+            ? ordered.filter(
+                (message) =>
+                  message.time.created < before.time ||
+                  (message.time.created === before.time && message.id < before.id),
+              )
+            : ordered
+          const slice = limit > 0 ? eligible.slice(0, limit) : eligible
+          const more = limit > 0 && eligible.length > limit
+          const items = [...slice].reverse().map((info) => ({ info, parts: [] }))
+          const tail = slice.at(-1)
+          const next = more && tail ? encode(tail) : undefined
+          return {
+            data: items,
+            error: undefined,
+            request: new Request("http://localhost/session/ses_test/message"),
+            response: new Response("null", { headers: next ? { "x-next-cursor": next } : undefined }),
+          }
+        },
+      },
+    },
+  }
+}
+
+describe("fetchAllMessages", () => {
+  test("pages past the TUI store's 100-message window", async () => {
+    const fake = pagingClient(fakeMessages(150))
+    const fetched = await fetchAllMessages(fake.client as never, "ses_test")
+
+    expect(fake.calls.length).toBeGreaterThan(1)
+    expect(fake.calls.every((call) => call.limit !== undefined)).toBe(true)
+    expect(fetched).toHaveLength(150)
+    expect(fetched[0]?.id).toBe("msg_0000")
+    expect(fetched[149]?.id).toBe("msg_0149")
+    expect(usageMessages(fetched, ["ds4"])).toHaveLength(150)
   })
 })

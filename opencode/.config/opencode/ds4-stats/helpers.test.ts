@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test"
 import {
   createParser,
   ds4ProviderIDs,
+  formatCount,
+  formatDuration,
   formatHit,
   formatRate,
   hitLevel,
@@ -202,6 +204,7 @@ describe("sessionStats", () => {
     expect(stats.prefillRate).toBeCloseTo(200 / 4, 5)
     expect(stats.decodeRate).toBeCloseTo(80 / 2, 5)
     expect(stats.hitPercent).toBeCloseTo((100 / 300) * 100, 5)
+    expect(stats.durationSecs).toBeCloseTo(6, 5)
   })
 
   test("reports undefined rates without links but keeps cache hit", () => {
@@ -210,6 +213,7 @@ describe("sessionStats", () => {
     expect(stats.prefillRate).toBeUndefined()
     expect(stats.decodeRate).toBeUndefined()
     expect(stats.hitPercent).toBeCloseTo((100 / 300) * 100, 5)
+    expect(stats.durationSecs).toBe(0)
   })
 })
 
@@ -292,7 +296,19 @@ describe("levels and formatting", () => {
   test("formats one decimal or a dash", () => {
     expect(formatRate(41.234)).toBe("41.2")
     expect(formatRate(undefined)).toBe("--")
+    expect(formatCount(1246.4)).toBe("1246")
+    expect(formatCount(undefined)).toBe("--")
     expect(formatHit(87.01)).toBe("87.0%")
     expect(formatHit(undefined)).toBe("--")
+  })
+
+  test("formats elapsed time as minutes or hours+minutes, hidden below a minute", () => {
+    expect(formatDuration(59.9)).toBeUndefined()
+    expect(formatDuration(60)).toBe("1m")
+    expect(formatDuration(3599)).toBe("59m")
+    expect(formatDuration(3600)).toBe("1h")
+    expect(formatDuration(5160)).toBe("1h 26m")
+    expect(formatDuration(3720)).toBe("1h 2m")
+    expect(formatDuration(undefined)).toBeUndefined()
   })
 })

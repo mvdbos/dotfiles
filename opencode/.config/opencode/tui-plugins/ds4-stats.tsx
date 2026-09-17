@@ -5,15 +5,16 @@ import { basename } from "node:path"
 import { createEffect, createSignal } from "solid-js"
 import type { BoxRenderable, TextRenderable } from "@opentui/core"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
-import type { Message } from "@opencode-ai/sdk/v2"
+import type { OpencodeClient } from "@opencode-ai/sdk/v2"
 import {
   createParser,
   ds4ProviderIDs,
+  formatCount,
+  formatDuration,
   formatHit,
   formatRate,
   hitLevel,
   linkMessages,
-  rateLevel,
   resolveSource,
   sessionModelRef,
   sessionStats,
@@ -93,27 +94,49 @@ function readFrom(path: string, offset: number): { text: string; size: number } 
   }
 }
 
-function assistantMessages(messages: ReadonlyArray<Message>): MessageLike[] {
-  return messages.flatMap((message) =>
-    message.role === "assistant"
-      ? [
-          {
-            id: message.id,
-            role: message.role,
-            providerID: message.providerID,
-            modelID: message.modelID,
-            time: message.time,
-            tokens: message.tokens,
-          },
-        ]
-      : [],
-  )
+const HISTORY_PAGE = 100
+
+const compareMessages = (a: MessageLike, b: MessageLike): number => {
+  const created = (a.time?.created ?? 0) - (b.time?.created ?? 0)
+  if (created !== 0) return created
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+}
+
+// The TUI store only keeps the last 100 messages of a session (its own
+// session.messages call passes limit 100 and drops older entries), so
+// session-wide stats cannot come from api.state.session.messages. The HTTP
+// route pages newest-first and hands back an X-Next-Cursor header pointing at
+// the next older page, so follow it until it is gone, then sort ascending.
+// Only message info is kept; parts are discarded.
+export async function fetchAllMessages(
+  client: OpencodeClient,
+  sessionID: string,
+): Promise<MessageLike[]> {
+  const messages: MessageLike[] = []
+  const seen = new Set<string>()
+  let before: string | undefined
+  for (;;) {
+    const result = await client.session.messages({
+      sessionID,
+      limit: HISTORY_PAGE,
+      ...(before ? { before } : {}),
+    })
+    if (!Array.isArray(result.data) || result.data.length === 0) break
+    for (const entry of result.data) messages.push(entry.info as MessageLike)
+    const cursor = result.response.headers.get("x-next-cursor")
+    if (!cursor || seen.has(cursor)) break
+    seen.add(cursor)
+    before = cursor
+  }
+  return messages.sort(compareMessages)
 }
 
 // Renders the active session's averages, and only for sessions actually
 // talking to the local ds4 server. The log supplies real server-side
-// prefill/decode rates; message token usage supplies the cache hit percentage
-// (and stays exact per session even when attribution lags).
+// prefill/decode rates and busy seconds; message token usage supplies the
+// cache hit percentage (and stays exact per session even when attribution
+// lags). Rate numbers are neutral by design: prefill/decode speed swings with
+// workload, so only cache hit carries good/warn/bad coloring.
 //
 // OpenCode 1.18.31 loads external file plugins without the Solid JSX transform
 // (verified: dynamic JSX in a file plugin never re-evaluates), so this
@@ -127,9 +150,11 @@ export function Stats(props: {
   stats: (sessionID: string) => SessionStats | undefined
 }) {
   let box: BoxRenderable | undefined
-  let decode: TextRenderable | undefined
-  let prefill: TextRenderable | undefined
+  let pp: TextRenderable | undefined
+  let tg: TextRenderable | undefined
   let cache: TextRenderable | undefined
+  let durSeparator: TextRenderable | undefined
+  let dur: TextRenderable | undefined
 
   const theme = props.api.theme.current
   const color = (level: Level) =>
@@ -141,38 +166,47 @@ export function Stats(props: {
           ? theme.error
           : theme.textMuted
 
-  const write = (node: TextRenderable | undefined, value: string, level: Level) => {
-    if (!node) return
-    node.content = value.padStart(8)
-    node.fg = color(level)
+  // Fixed-width right-aligned numbers keep the labels from shifting as values
+  // change width.
+  const set = (node: TextRenderable | undefined, value: string, width: number) => {
+    if (node) node.content = value.padStart(width)
   }
 
   createEffect(() => {
     const stats = props.stats(props.sessionID)
     if (box) box.visible = stats !== undefined
     if (!stats) return
-    write(decode, formatRate(stats.decodeRate), rateLevel(stats.decodeRate))
-    write(prefill, formatRate(stats.prefillRate), rateLevel(stats.prefillRate))
-    write(cache, formatHit(stats.hitPercent), hitLevel(stats.hitPercent))
+    set(pp, formatCount(stats.prefillRate), 4)
+    set(tg, formatRate(stats.decodeRate), 5)
+    if (cache) {
+      cache.content = formatHit(stats.hitPercent).padStart(5)
+      cache.fg = color(hitLevel(stats.hitPercent))
+    }
+    const duration = formatDuration(stats.durationSecs)
+    if (durSeparator) durSeparator.visible = duration !== undefined
+    if (dur) {
+      dur.visible = duration !== undefined
+      if (duration) dur.content = duration
+    }
   })
 
   return (
     <box ref={(node) => (box = node)} flexDirection="column">
       <text fg={theme.textMuted}>{`${props.source.label} · session avg`}</text>
       <box flexDirection="row">
-        <text fg={theme.textMuted}>decode </text>
-        <text ref={(node) => (decode = node)}>--</text>
+        <text fg={theme.textMuted}>pp </text>
+        <text ref={(node) => (pp = node)}>--</text>
+        <text fg={theme.textMuted}> · tg </text>
+        <text ref={(node) => (tg = node)}>--</text>
         <text fg={theme.textMuted}> tok/s</text>
       </box>
       <box flexDirection="row">
-        <text fg={theme.textMuted}>prefill</text>
-        <text ref={(node) => (prefill = node)}>--</text>
-        <text fg={theme.textMuted}> tok/s</text>
-      </box>
-      <box flexDirection="row">
-        <text fg={theme.textMuted}>cache  </text>
+        <text fg={theme.textMuted}>cache </text>
         <text ref={(node) => (cache = node)}>--</text>
-        <text fg={theme.textMuted}> hit</text>
+        <text ref={(node) => (durSeparator = node)} fg={theme.textMuted}>
+          {" · work "}
+        </text>
+        <text ref={(node) => (dur = node)}>--</text>
       </box>
     </box>
   )
@@ -184,6 +218,8 @@ const plugin: TuiPlugin = async (api, options) => {
 
   const parser = createParser()
   const claims = new Map<string, number>()
+  const history = new Map<string, MessageLike[]>()
+  const loading = new Set<string>()
   const [version, setVersion] = createSignal(0)
   let offset = 0
   let partial = ""
@@ -207,15 +243,42 @@ const plugin: TuiPlugin = async (api, options) => {
     setVersion((current) => current + 1)
   }
 
+  const load = (sessionID: string) => {
+    if (disposed || loading.has(sessionID)) return
+    loading.add(sessionID)
+    fetchAllMessages(api.client, sessionID)
+      .then((messages) => {
+        if (disposed) return
+        // Event upserts that landed while the pages were in flight are newer
+        // than the snapshot; keep them over the fetched copy.
+        const byID = new Map(messages.map((message) => [message.id, message]))
+        for (const message of history.get(sessionID) ?? []) byID.set(message.id, message)
+        history.set(sessionID, [...byID.values()].sort(compareMessages))
+        setVersion((current) => current + 1)
+      })
+      .catch(() => {})
+      .finally(() => loading.delete(sessionID))
+  }
+
   const compute = (sessionID: string): SessionStats | undefined => {
     version()
+    const providers = settings.providers ?? ds4ProviderIDs(api.state.config, process.env)
+    const messages = history.get(sessionID)
+    if (!messages) {
+      // Gate the full-history fetch on the TUI store's live tail: the newest
+      // messages are exactly what it still holds. An empty tail means the
+      // store has not loaded this session yet, so fetch rather than wait for
+      // an event that will never come.
+      const tail = api.state.session.messages(sessionID)
+      const model = sessionModelRef(tail)
+      if (tail.length === 0 || (model !== undefined && providers.includes(model.providerID))) load(sessionID)
+      return undefined
+    }
     try {
-      const messages = api.state.session.messages(sessionID)
       const model = sessionModelRef(messages)
       if (!model) return undefined
-      const providers = settings.providers ?? ds4ProviderIDs(api.state.config, process.env)
       if (!providers.includes(model.providerID)) return undefined
-      const likes = usageMessages(assistantMessages(messages), providers)
+      const likes = usageMessages(messages, providers)
       const links = linkMessages({ messages: likes, requests: parser.requests, claims })
       return sessionStats(likes, links)
     } catch {
@@ -231,9 +294,25 @@ const plugin: TuiPlugin = async (api, options) => {
     } catch {}
   }, settings.pollMs)
 
-  const unsubscribe = api.event.on("message.updated", (event) => {
+  const unsubscribeUpdated = api.event.on("message.updated", (event) => {
     const info = event.properties.info
+    const cached = history.get(info.sessionID)
+    if (cached) {
+      const index = cached.findIndex((message) => message.id === info.id)
+      if (index >= 0) cached[index] = info as MessageLike
+      else cached.push(info as MessageLike)
+    }
     if (info.role === "assistant" && info.time.completed) setVersion((current) => current + 1)
+  })
+
+  const unsubscribeRemoved = api.event.on("message.removed", (event) => {
+    const { sessionID, messageID } = event.properties
+    const cached = history.get(sessionID)
+    if (!cached) return
+    const next = cached.filter((message) => message.id !== messageID)
+    if (next.length === cached.length) return
+    history.set(sessionID, next)
+    setVersion((current) => current + 1)
   })
 
   api.slots.register({
@@ -247,7 +326,8 @@ const plugin: TuiPlugin = async (api, options) => {
   api.lifecycle.onDispose(() => {
     disposed = true
     clearInterval(timer)
-    unsubscribe()
+    unsubscribeUpdated()
+    unsubscribeRemoved()
   })
 }
 
