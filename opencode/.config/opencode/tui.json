@@ -13,6 +13,7 @@
         "minChars": 400
       }
     ],
-    "./tui-plugins/image-preview.ts"
+    "./tui-plugins/image-preview.ts",
+    "./tui-plugins/ds4-stats.tsx"
   ]
 }
