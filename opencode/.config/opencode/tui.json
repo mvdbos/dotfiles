@@ -9,7 +9,8 @@
     [
       "./tui-plugins/async-reasoning-titles.ts",
       {
-        "model": "omlx/LFM2.5-1.2B-Instruct-MLX-8bit"
+        "model": "omlx/Qwen3.5-0.8B-8bit",
+        "minChars": 400
       }
     ]
   ]

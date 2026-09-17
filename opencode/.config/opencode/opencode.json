@@ -90,64 +90,6 @@
         "apiKey": "{env:OMLX_API_KEY}"
       },
       "models": {
-        "LFM2.5-1.2B-Instruct-MLX-8bit": {
-          "name": "LFM2.5-1.2B-Instruct-MLX-8bit",
-          "modalities": {
-            "input": [
-              "text",
-              "image"
-            ],
-            "output": [
-              "text"
-            ]
-          },
-          "attachment": true,
-          "limit": {
-            "context": 32768,
-            "output": 128
-          },
-          "reasoning": true,
-          "variants": {
-            "low": {
-              "reasoningEffort": "low"
-            },
-            "medium": {
-              "reasoningEffort": "medium"
-            },
-            "high": {
-              "reasoningEffort": "high"
-            }
-          }
-        },
-        "LFM2.5-350M-MLX-bf16": {
-          "name": "LFM2.5-350M-MLX-bf16",
-          "modalities": {
-            "input": [
-              "text",
-              "image"
-            ],
-            "output": [
-              "text"
-            ]
-          },
-          "attachment": true,
-          "limit": {
-            "context": 32768,
-            "output": 512
-          },
-          "reasoning": true,
-          "variants": {
-            "low": {
-              "reasoningEffort": "low"
-            },
-            "medium": {
-              "reasoningEffort": "medium"
-            },
-            "high": {
-              "reasoningEffort": "high"
-            }
-          }
-        },
         "Qwen3.5-0.8B-8bit": {
           "name": "Qwen3.5-0.8B-8bit",
           "modalities": {
@@ -163,6 +105,35 @@
           "limit": {
             "context": 8192,
             "output": 8192
+          },
+          "reasoning": true,
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            }
+          }
+        },
+        "Qwen3.5-4B-oQ4e-mtp": {
+          "name": "Qwen3.5-4B-oQ4e-mtp",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "attachment": true,
+          "limit": {
+            "context": 114688,
+            "output": 16384
           },
           "reasoning": true,
           "variants": {
@@ -300,9 +271,10 @@
       }
     },
     "title": {
-      "model": "omlx/LFM2.5-1.2B-Instruct-MLX-8bit"
+      "model": "omlx/Qwen3.5-0.8B-8bit"
     },
     "explore": {
+      "model": "omlx/Qwen3.5-4B-oQ4e-mtp",
       "prompt": "{file:./explore-controls/explore-prompt.txt}",
       "description": "Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. \"src/components/**/*.tsx\"), search code for keywords (eg. \"API endpoints\"), or answer questions about the codebase (eg. \"how do API endpoints work?\"). Keep each task focused and bounded; split broad investigations into smaller tasks. Search budget and context are limited, so findings may be partial. Use only for exploration and evidence gathering, not code reviews or audits.",
       "options": {
