@@ -32,7 +32,7 @@ declare const Bun: {
 declare module "bun:test" {
   export function afterAll(callback: () => void | Promise<void>): void
   export function afterEach(callback: () => void | Promise<void>): void
-  export function beforeAll(callback: () => void | Promise<void>): void
+  export function beforeAll(callback: () => void | Promise<void>, timeout?: number): void
   export function describe(name: string, callback: () => void): void
   export function expect(value: unknown): any
   export function test(name: string, callback: () => void | Promise<void>, timeout?: number): void
