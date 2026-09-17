@@ -204,7 +204,7 @@ export function Stats(props: {
         <text fg={theme.textMuted}>cache </text>
         <text ref={(node) => (cache = node)}>--</text>
         <text ref={(node) => (durSeparator = node)} fg={theme.textMuted}>
-          {" · work "}
+          {" · model work "}
         </text>
         <text ref={(node) => (dur = node)}>--</text>
       </box>

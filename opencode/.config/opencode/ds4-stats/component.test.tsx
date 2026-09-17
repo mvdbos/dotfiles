@@ -54,7 +54,7 @@ test("writes stats into the frame and refreshes when they change", async () => {
   expect(first).toContain("500")
   expect(first).toContain("tg")
   expect(first).toContain("80.0%")
-  expect(first).toContain("work")
+  expect(first).toContain("model work")
   expect(first).toContain("1h 26m")
 
   setDecode(42)
