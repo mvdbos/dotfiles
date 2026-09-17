@@ -12,6 +12,7 @@
         "model": "omlx/Qwen3.5-0.8B-8bit",
         "minChars": 400
       }
-    ]
+    ],
+    "./tui-plugins/image-preview.ts"
   ]
 }
