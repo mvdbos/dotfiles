@@ -19,6 +19,7 @@
       }
     ],
     "./tui-plugins/image-preview.ts",
-    "./tui-plugins/ds4-stats.tsx"
+    "./tui-plugins/ds4-stats.tsx",
+    "@prevalentware/opencode-goal-plugin"
   ]
 }
