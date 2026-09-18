@@ -288,7 +288,7 @@
       "options": {
         "enable_thinking": false
       },
-      "steps": 10,
+      "steps": 15,
       "permission": {
         "edit": "deny",
         "bash": "deny",
