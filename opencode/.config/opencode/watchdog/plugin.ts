@@ -194,7 +194,7 @@ export class WatchdogRuntime {
     }
     if (classification.kind === "foreign") {
       applyForeignContinuation(state, classification.patternID ?? "foreign")
-      if (state.inFlight?.trigger.kind === "idle") this.cancelInFlight(state, "foreign")
+      if (state.inFlight?.trigger.kind === "idle") void this.cancelInFlight(state, "foreign")
       this.deps.explore.markEnded(input.sessionID)
       return
     }
@@ -267,14 +267,24 @@ export class WatchdogRuntime {
     const admission = state.idleAdmission
     if (!admission || admission.generation !== generation) return
     state.idleAdmission = undefined
+    state.busy = false
     if (state.turnEpoch !== admission.epoch) return
     if (state.latestUserKind !== "real") return
+    if (state.continuationClaim) return
     if (!(await this.markRootIfUnparented(sessionID))) return
     if (this.childSessions.has(sessionID)) return
 
     const idleKey = snapshotKey(state.latestAssistantMessageID, this.currentSnapshotKey(state))
     if (state.lastIdleCheckKey === idleKey) return
     state.lastIdleCheckKey = idleKey
+
+    const advisory = state.activeAdvisory
+    if (advisory?.findingHash && advisory.installedAtEpoch === state.turnEpoch && advisory.deliveredAtEpoch !== state.turnEpoch) {
+      state.pendingIdle = undefined
+      void this.deliverIdleConcern(sessionID, state, advisory, advisory.findingHash)
+      return
+    }
+
     const claim = claimIdle(state, {
       idleKey,
       snapshotKey: this.currentSnapshotKey(state),
@@ -331,6 +341,7 @@ export class WatchdogRuntime {
 
     const abort = new AbortController()
     const checkID = `check-${this.now()}-${Math.floor(Math.random() * 1e6)}`
+    this.clearPending(state, claim)
     state.inFlight = {
       checkID,
       epoch: state.turnEpoch,
@@ -347,12 +358,12 @@ export class WatchdogRuntime {
     }
 
     const model = parseModelRef(this.deps.config.model)
-    const result = await this.runner.run({
+    const run = this.runner.run({
       rootSessionID: root,
       agent: WATCHDOG_AGENT_NAME,
       model,
       prompt: fitted.prompt,
-      ...(claim.kind === "cadence" || claim.kind === "idle"
+      ...(claim.kind === "cadence" || claim.kind === "idle" || claim.kind === "revalidation"
         ? {
             minimalPrompt: (() => {
               const minimal = fitUserPrompt(packet, { maxBytes: Math.min(6_000, 16_384) })
@@ -363,8 +374,21 @@ export class WatchdogRuntime {
       timeoutMs: this.deps.config.timeoutMs,
       signal: abort.signal,
     })
+    state.inFlight.run = run
 
-    this.finishAttempt(root, state, checkID, claim, result, packet)
+    const result = await run
+    this.finishAttempt(root, state, checkID, claim, result, fitted.packet)
+  }
+
+  private reclaimCadenceIfEligible(state: SessionState): void {
+    if (state.pendingTrigger) return
+    if (cadenceEligibleCount(state, this.deps.config.everyTools) < this.deps.config.everyTools) return
+    const claim = claimCadence(state, {
+      everyTools: this.deps.config.everyTools,
+      snapshotKey: this.currentSnapshotKey(state),
+      maxRecentTools: this.deps.config.maxRecentTools,
+    })
+    if (claim) state.pendingTrigger = claim
   }
 
   private pickRoot(): string | undefined {
@@ -418,18 +442,14 @@ export class WatchdogRuntime {
     packet: WatchdogPacket,
   ): void {
     const won = settleInFlight(state, { checkID, outcome: "completed" })
+    if (won === "lost") return
+
     if (state.inFlight?.slowToastTimer) this.clearTimer(state.inFlight.slowToastTimer)
     const lease = state.inFlight?.lease
     state.inFlight = undefined
-    this.clearPending(state, claim)
     if (lease) this.deps.lease.release(lease)
 
-    if (won === "lost") {
-      void this.requestAdmission()
-      return
-    }
-
-    const completed = result.kind === "ok" || result.kind === "concern" || result.kind === "malformed"
+    const completed = result.kind === "ok" || result.kind === "concern"
     settleClaim(state, claim, completed)
 
     if (result.kind === "timeout" || result.kind === "error" || result.kind === "context_overflow" || result.kind === "cancelled") {
@@ -443,8 +463,12 @@ export class WatchdogRuntime {
     }
     state.consecutiveFailures = 0
 
+    if (result.kind === "malformed") {
+      void this.requestAdmission()
+      return
+    }
+
     if (result.kind !== "concern") {
-      if (completed && claim.kind !== "revalidation" && state.latestUserKind === "real") this.maybeRequestIdleFollowUp(state)
       void this.requestAdmission()
       return
     }
@@ -493,9 +517,11 @@ export class WatchdogRuntime {
     state.deliveredConcernHashes.add(hash)
     state.lastConcernToolSeq = state.toolSeq
     state.lastConcernEvidenceFingerprint = packetFingerprint
+    state.previousConcern = { category: concern.category, message: concern.message, evidenceFingerprint: packetFingerprint }
 
     if (state.latestUserKind === "foreign") {
       this.retainAdvisory(state, concern, hash)
+      void this.showConcernToast(state, concern, hash)
       void this.requestAdmission()
       return
     }
@@ -511,12 +537,15 @@ export class WatchdogRuntime {
       return
     }
 
+    if (state.busy && claim.kind !== "idle") {
+      this.retainAdvisory(state, concern, hash)
+      void this.showConcernToast(state, concern, hash)
+      void this.requestAdmission()
+      return
+    }
+
     void this.deliverIdleConcern(root, state, concern, hash)
     void this.requestAdmission()
-  }
-
-  private maybeRequestIdleFollowUp(state: SessionState): void {
-    if (state.pendingIdle || state.pendingRevalidation || state.pendingTrigger) return
   }
 
   private retainAdvisory(state: SessionState, concern: AcceptedConcern, findingHash: string): void {
@@ -574,6 +603,7 @@ export class WatchdogRuntime {
       turnEpoch: epoch,
     })
     if (!state.activeAdvisory) this.retainAdvisory(state, concern, findingHash)
+    if (state.activeAdvisory) state.activeAdvisory.deliveredAtEpoch = epoch
     void this.showConcernToast(state, concern, findingHash)
     try {
       await this.deps.client.session.prompt({ path: { id: root }, body: { ...body } })
@@ -646,36 +676,49 @@ export class WatchdogRuntime {
     this.compactionSkips.clear(sessionID)
     this.advisorySeen.delete(sessionID)
     const state = this.states.get(sessionID)
-    if (state?.inFlight) this.cancelInFlight(state, "deleted")
+    if (state?.inFlight) void this.cancelInFlight(state, "deleted")
     this.states.delete(sessionID)
     this.knownRoots.delete(sessionID)
   }
 
-  cancelInFlight(state: SessionState, reason: string): void {
+  async cancelInFlight(state: SessionState, reason: string): Promise<void> {
     const inFlight = state.inFlight
     if (!inFlight) return
     if (settleInFlight(state, { checkID: inFlight.checkID, outcome: "cancelling" }) !== "won") return
     if (inFlight.slowToastTimer) this.clearTimer(inFlight.slowToastTimer)
     inFlight.abort.abort()
-    if (inFlight.lease) this.deps.lease.release(inFlight.lease)
+
+    let confirmTimer: ReturnType<typeof setTimeout> | undefined
+    const settled = await Promise.race([
+      Promise.resolve(inFlight.run).then(
+        () => true,
+        () => true,
+      ),
+      new Promise<boolean>((resolve) => {
+        confirmTimer = this.setTimer(() => resolve(false), this.deps.config.timeoutMs + 500)
+      }),
+    ])
+    if (confirmTimer) this.clearTimer(confirmTimer)
+
+    if (state.inFlight?.checkID !== inFlight.checkID) return
+    if (!settled) {
+      this.log(`watchdog check cancellation unconfirmed (${reason}); lease retained`)
+      return
+    }
+
+    state.inFlight.settlement = "completed"
     this.clearPending(state, inFlight.trigger)
     deferClaim(state, inFlight.trigger)
     state.inFlight = undefined
-    if (cadenceEligibleCount(state, this.deps.config.everyTools) >= this.deps.config.everyTools) {
-      const claim = claimCadence(state, {
-        everyTools: this.deps.config.everyTools,
-        snapshotKey: this.currentSnapshotKey(state),
-        maxRecentTools: this.deps.config.maxRecentTools,
-      })
-      if (claim) state.pendingTrigger = claim
-    }
+    if (inFlight.lease) this.deps.lease.release(inFlight.lease)
+    this.reclaimCadenceIfEligible(state)
     this.log(`watchdog check cancelled (${reason})`)
   }
 
   async preemptForExplore(): Promise<void> {
     if (!this.deps.explore.isActive()) return
     for (const state of this.states.values()) {
-      if (state.inFlight) this.cancelInFlight(state, "explore")
+      if (state.inFlight) await this.cancelInFlight(state, "explore")
     }
   }
 
@@ -752,6 +795,8 @@ export function createWatchdogHooks(runtime: WatchdogRuntime): Hooks {
       }
       if (event.type === "session.idle") {
         if (sessionID) {
+          const state = runtime.states.get(sessionID)
+          if (state) state.busy = false
           runtime.exploreGate.markEnded(sessionID)
           runtime.handleIdle(sessionID)
         }
@@ -759,6 +804,10 @@ export function createWatchdogHooks(runtime: WatchdogRuntime): Hooks {
       }
       if (event.type === "session.status") {
         const status = (event.properties as { status?: { type?: unknown } }).status
+        if (sessionID) {
+          const state = runtime.states.get(sessionID)
+          if (state) state.busy = status?.type === "busy" || status?.type === "retry"
+        }
         if (status?.type === "idle" && sessionID) runtime.handleIdle(sessionID)
         return
       }

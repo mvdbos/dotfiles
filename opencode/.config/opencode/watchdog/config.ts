@@ -190,7 +190,6 @@ export function buildCriticAgent(config: WatchdogConfig): Record<string, unknown
     prompt: CRITIC_SYSTEM_PROMPT,
     description: "Internal observation-only trajectory critic.",
     hidden: true,
-    steps: 1,
     options: { enable_thinking: false },
     permission: { "*": "deny" },
   }

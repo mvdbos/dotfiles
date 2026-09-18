@@ -115,7 +115,7 @@ describe("parseWatchdogConfig", () => {
     expect(loadWatchdogConfig(goodPath).enabled).toBe(true)
   })
 
-  test("builds the dedicated hidden one-step critic agent", () => {
+  test("builds the dedicated hidden critic agent without a step limit", () => {
     const result = parseWatchdogConfig({ enabled: true, model: "omlx/qwen" })
     const agent = buildCriticAgent(result.config)
     expect(WATCHDOG_AGENT_NAME).toBe("watchdog-critic")
@@ -123,10 +123,10 @@ describe("parseWatchdogConfig", () => {
       model: "omlx/qwen",
       prompt: CRITIC_SYSTEM_PROMPT,
       hidden: true,
-      steps: 1,
       options: { enable_thinking: false },
       permission: { "*": "deny" },
     })
+    expect(agent.steps).toBeUndefined()
   })
 
   test("parses model refs without fallback", () => {

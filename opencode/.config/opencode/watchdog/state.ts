@@ -119,6 +119,7 @@ export type InFlight = {
   settlement: "active" | "cancelling" | "completed"
   abort: AbortController
   lease?: SubagentLease
+  run?: Promise<unknown>
   slowToastTimer?: ReturnType<typeof setTimeout>
   slowToastShown: boolean
 }
@@ -129,6 +130,7 @@ export type ActiveAdvisory = AcceptedConcern & {
   installedText?: string
   concernToast?: { status: "pending" | "delivered" | "failed"; attempts: 1 | 2 }
   installedAtEpoch: number
+  deliveredAtEpoch?: number
 }
 
 export type IdleAdmission = {
@@ -178,6 +180,7 @@ export type SessionState = {
   previousConcern?: PreviousConcern
   activity?: string
   cleanupInProgress?: boolean
+  busy?: boolean
 }
 
 export function createSessionState(): SessionState {

@@ -1,6 +1,6 @@
 {
-  "enabled": false,
-  "model": "omlx/Qwen3.5-4B-oQ4e-mtp",
+  "enabled": true,
+  "model": "omlx/Qwen3.6-35B-A3B-Uncensored-Heretic-MLX-6bit",
   "everyTools": 10,
   "onIdle": true,
   "maxRecentTools": 12,

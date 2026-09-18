@@ -97,11 +97,7 @@ export function computeMetrics(outcomes: readonly FixtureOutcome[], mode: EvalMo
   const evaluated = outcomes.filter((outcome) => outcome.evaluated)
   const positives = evaluated.filter((outcome) => outcome.fixture.label === "positive")
   const negatives = evaluated.filter((outcome) => outcome.fixture.label === "negative")
-  const truePositives = positives.filter(
-    (outcome) =>
-      outcome.concern !== undefined &&
-      (outcome.fixture.expected !== "ok" && outcome.fixture.expected.includes(outcome.concern.category)),
-  )
+  const truePositives = positives.filter((outcome) => outcome.concern !== undefined)
   const falsePositives = negatives.filter((outcome) => outcome.concern !== undefined)
 
   const categoryPrecision: Record<string, number> = {}

@@ -101,7 +101,7 @@ describe("watchdog plugin runtime", () => {
     const hooks = createWatchdogHooks(runtime)
     const configInput: { agent?: Record<string, unknown> } = {}
     await hooks.config?.(configInput as never)
-    expect(configInput.agent?.[WATCHDOG_AGENT_NAME]).toMatchObject({ model: "probe/critic-model", hidden: true, steps: 1 })
+    expect(configInput.agent?.[WATCHDOG_AGENT_NAME]).toMatchObject({ model: "probe/critic-model", hidden: true })
 
     const output = { temperature: 0, topP: 0, topK: 0, maxOutputTokens: undefined as number | undefined, options: {} }
     await hooks["chat.params"]?.({ sessionID: "child-x", agent: WATCHDOG_AGENT_NAME } as never, output as never)
@@ -339,7 +339,7 @@ describe("watchdog plugin runtime", () => {
     expect(state.latestUserKind).toBe("foreign")
     expect(state.inFlight?.trigger.kind).toBe("cadence")
     expect(fake.calls.aborts).toHaveLength(0)
-    runtime.cancelInFlight(state, "cleanup")
+    await runtime.cancelInFlight(state, "cleanup")
   })
 
   test("three consecutive provider failures open a bounded circuit breaker", async () => {
@@ -398,7 +398,7 @@ describe("watchdog plugin runtime", () => {
     expect(fake.calls.prompts.filter((call) => call.id === "root")).toHaveLength(0)
     const state = runtime.states.get("root")!
     expect(state.pendingRevalidation ?? (state.inFlight?.trigger.kind === "revalidation" ? state.inFlight : undefined)).toBeDefined()
-    runtime.cancelInFlight(state, "cleanup")
+    await runtime.cancelInFlight(state, "cleanup")
   })
 
   test("a slow cadence check shows exactly one informational activity toast", async () => {
@@ -426,7 +426,7 @@ describe("watchdog plugin runtime", () => {
     expect(activityToasts).toHaveLength(1)
     await Bun.sleep(200)
     expect(fake.calls.toasts.filter((toast) => String(toast.message).includes("reviewing recent progress"))).toHaveLength(1)
-    runtime.cancelInFlight(runtime.states.get("root")!, "cleanup")
+    await runtime.cancelInFlight(runtime.states.get("root")!, "cleanup")
   })
 
   test("a failed idle follow-up clears the continuation claim and does not retry that turn", async () => {
@@ -490,7 +490,7 @@ describe("watchdog plugin runtime", () => {
     fake.releaseCritic()
     await Bun.sleep(60)
     expect(fake.calls.create.length).toBeGreaterThanOrEqual(2)
-    runtime.cancelInFlight(runtime.states.get("root")!, "cleanup")
+    await runtime.cancelInFlight(runtime.states.get("root")!, "cleanup")
   })
 
   test("a late foreign continuation after admission fires blocks further watchdog idle prompts", async () => {
@@ -574,7 +574,7 @@ describe("watchdog plugin runtime", () => {
     }
     await Bun.sleep(30)
     runtime.exploreGate.markAdmitted("explore-session")
-    runtime.cancelInFlight(runtime.states.get("root")!, "cleanup")
+    await runtime.cancelInFlight(runtime.states.get("root")!, "cleanup")
     await Bun.sleep(900)
     expect(cancelled.calls.toasts.filter((toast) => String(toast.message).includes("reviewing recent progress"))).toHaveLength(0)
     runtime.exploreGate.markEnded("explore-session")
@@ -611,5 +611,172 @@ describe("watchdog plugin runtime", () => {
     await Bun.sleep(20)
     expect(state.activeAdvisory!.concernToast).toBeUndefined()
     expect(original.concernToast?.status).toBe("delivered")
+  })
+
+  test("malformed critic output restores cadence ownership without delivering", async () => {
+    const fake = fakeClient({ criticText: "not json at all" })
+    const runtime = new WatchdogRuntime({
+      client: fake.client,
+      config: configFor({}, { everyTools: 5, foreignContinuationSettleMs: 0 }),
+      patterns: compileForeignPatterns(undefined).patterns,
+      lease: new WatchdogLease({ path: ":memory:" }),
+      explore: new ExploreGate(),
+      log: () => {},
+    })
+    await realTurn(runtime)
+    for (let seq = 1; seq <= 5; seq += 1) {
+      runtime.recordTerminalTool("root", {
+        type: "tool",
+        tool: "bash",
+        callID: `call-${seq}`,
+        state: { status: "completed", input: { command: `echo ${seq}` }, output: `out-${seq}` },
+      })
+    }
+    await Bun.sleep(40)
+    const state = runtime.states.get("root")!
+    expect(state.lastCheckToolSeq).toBe(0)
+    expect(state.unclaimedSignificantTools).toBe(5)
+    expect(fake.calls.prompts.some((call) => call.id === "root")).toBe(false)
+    await runtime.dispose()
+  })
+
+  test("an accepted cadence concern with no later provider boundary is delivered through idle", async () => {
+    const concern = JSON.stringify({
+      status: "concern",
+      severity: "warning",
+      category: "repeated_failure",
+      message: "The same failing command was repeated with identical errors.",
+    })
+    const fake = fakeClient({ criticText: concern })
+    const runtime = new WatchdogRuntime({
+      client: fake.client,
+      config: configFor({ midRunDelivery: true }, { everyTools: 5, foreignContinuationSettleMs: 0 }),
+      patterns: compileForeignPatterns(undefined).patterns,
+      lease: new WatchdogLease({ path: ":memory:" }),
+      explore: new ExploreGate(),
+      log: () => {},
+    })
+    await realTurn(runtime)
+    for (let seq = 1; seq <= 5; seq += 1) {
+      runtime.recordTerminalTool("root", {
+        type: "tool",
+        tool: "bash",
+        callID: `call-${seq}`,
+        state: { status: "completed", input: { command: `echo ${seq}` }, output: `out-${seq}` },
+      })
+    }
+    await Bun.sleep(40)
+    expect(runtime.states.get("root")!.activeAdvisory).toBeDefined()
+
+    runtime.recordAssistantText("root", "a2", "Turn finished without another provider call.")
+    runtime.handleIdle("root")
+    await Bun.sleep(40)
+    const rootPrompts = fake.calls.prompts.filter((call) => call.id === "root")
+    expect(rootPrompts).toHaveLength(1)
+    expect(rootPrompts[0]!.body.parts[0].text.startsWith("[watchdog advisory:")).toBe(true)
+    expect(fake.calls.create).toHaveLength(1)
+    await runtime.dispose()
+  })
+
+  test("a revalidation completing during a busy turn never root-prompts mid-turn", async () => {
+    const concern = JSON.stringify({
+      status: "concern",
+      severity: "warning",
+      category: "plan_drift",
+      message: "The implementation departed from the stated plan for the parser.",
+    })
+    const fake = fakeClient({ criticText: concern })
+    fake.holdCritic()
+    const runtime = new WatchdogRuntime({
+      client: fake.client,
+      config: configFor({}, { foreignContinuationSettleMs: 0, timeoutMs: 5_000 }),
+      patterns: compileForeignPatterns(undefined).patterns,
+      lease: new WatchdogLease({ path: ":memory:" }),
+      explore: new ExploreGate(),
+      log: () => {},
+    })
+    await realTurn(runtime)
+    runtime.handleIdle("root")
+    await Bun.sleep(20)
+    await runtime.handleChatMessage(
+      { sessionID: "root", agent: "build", messageID: "u2" },
+      { parts: [{ type: "text", text: "New real instruction while the check runs." }] },
+    )
+    const state = runtime.states.get("root")!
+    state.busy = true
+    fake.releaseCritic()
+    await Bun.sleep(60)
+    expect(state.inFlight?.trigger.kind).toBe("revalidation")
+    fake.releaseCritic()
+    await Bun.sleep(60)
+    expect(fake.calls.prompts.filter((call) => call.id === "root")).toHaveLength(0)
+    expect(state.activeAdvisory).toBeDefined()
+    await runtime.cancelInFlight(state, "cleanup")
+  })
+
+  test("an accepted concern records previousConcern with the final packet fingerprint", async () => {
+    const concern = JSON.stringify({
+      status: "concern",
+      severity: "warning",
+      category: "requirement_drift",
+      message: "The implementation renames the public endpoint required by the task.",
+    })
+    const fake = fakeClient({ criticText: concern })
+    const runtime = new WatchdogRuntime({
+      client: fake.client,
+      config: configFor({}, { foreignContinuationSettleMs: 0 }),
+      patterns: compileForeignPatterns(undefined).patterns,
+      lease: new WatchdogLease({ path: ":memory:" }),
+      explore: new ExploreGate(),
+      log: () => {},
+    })
+    await realTurn(runtime)
+    runtime.handleIdle("root")
+    await Bun.sleep(40)
+    const state = runtime.states.get("root")!
+    expect(state.previousConcern).toMatchObject({
+      category: "requirement_drift",
+      message: "The implementation renames the public endpoint required by the task.",
+    })
+    expect(state.previousConcern!.evidenceFingerprint).toHaveLength(64)
+    await runtime.dispose()
+  })
+
+  test("cancellation awaits critic termination before releasing the lease", async () => {
+    const fake = fakeClient()
+    fake.holdCritic()
+    const runtime = new WatchdogRuntime({
+      client: fake.client,
+      config: configFor({}, { everyTools: 5, foreignContinuationSettleMs: 0, timeoutMs: 5_000 }),
+      patterns: compileForeignPatterns(undefined).patterns,
+      lease: new WatchdogLease({ path: ":memory:" }),
+      explore: new ExploreGate(),
+      log: () => {},
+    })
+    await realTurn(runtime)
+    for (let seq = 1; seq <= 5; seq += 1) {
+      runtime.recordTerminalTool("root", {
+        type: "tool",
+        tool: "bash",
+        callID: `call-${seq}`,
+        state: { status: "completed", input: { command: `echo ${seq}` }, output: `out-${seq}` },
+      })
+    }
+    await Bun.sleep(30)
+    const state = runtime.states.get("root")!
+    expect(state.inFlight).toBeDefined()
+
+    runtime.exploreGate.markAdmitted("explore-session")
+    await runtime.cancelInFlight(state, "explore")
+    expect(state.inFlight).toBeUndefined()
+    expect(fake.calls.aborts).toContain("child-1")
+    expect(fake.calls.create).toHaveLength(1)
+    expect(state.deferredCadenceClaim ?? state.pendingTrigger).toBeDefined()
+
+    runtime.exploreGate.markEnded("explore-session")
+    void runtime.requestAdmission()
+    await Bun.sleep(30)
+    expect(fake.calls.create.length).toBeGreaterThanOrEqual(2)
+    await runtime.dispose()
   })
 })

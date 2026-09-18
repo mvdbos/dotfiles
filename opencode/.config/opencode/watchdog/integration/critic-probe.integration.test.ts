@@ -117,8 +117,8 @@ describe("watchdog critic provider contract", () => {
     const critic = config.agent?.["watchdog-critic"]
     expect(critic, `watchdog-critic missing from merged config: ${JSON.stringify(Object.keys(config.agent ?? {}))}`).toBeDefined()
     expect(critic.hidden, `hidden was not preserved: ${JSON.stringify(critic)}`).toBe(true)
-    expect(critic.steps, `steps was not preserved: ${JSON.stringify(critic)}`).toBe(1)
     expect(critic.options?.enable_thinking, `thinking option was not preserved: ${JSON.stringify(critic)}`).toBe(false)
+    expect(critic.steps, `steps must stay unset: a step limit injects a MAXIMUM STEPS REACHED notice into critic requests (${JSON.stringify(critic)})`).toBeUndefined()
     expect(critic.permission?.["*"], `permission deny was not preserved: ${JSON.stringify(critic)}`).toBe("deny")
   })
 

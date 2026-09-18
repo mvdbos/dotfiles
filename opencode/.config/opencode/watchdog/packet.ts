@@ -153,15 +153,15 @@ export function sha256(input: string): string {
 }
 
 function boundedTool(tool: ToolObservation, budgets: Budgets): ToolObservation {
+  const input = sanitizeText(tool.input)
+  const result = sanitizeText(tool.result)
+  const resultLimit = budgets.toolResultHead + budgets.toolResultTail
   return {
     seq: tool.seq,
     name: headText(tool.name, 80),
     status: tool.status,
-    input: headText(sanitizeText(tool.input), budgets.toolInputHead),
-    result: `${headText(sanitizeText(tool.result), budgets.toolResultHead)}${tailText(
-      sanitizeText(tool.result),
-      budgets.toolResultTail,
-    )}`.slice(0, budgets.toolResultHead + budgets.toolResultTail + 2),
+    input: headText(input, budgets.toolInputHead),
+    result: result.length <= resultLimit ? result : `${headText(result, budgets.toolResultHead)}${tailText(result, budgets.toolResultTail)}`,
   }
 }
 
@@ -310,7 +310,7 @@ export function fitUserPrompt(packet: WatchdogPacket, options: { maxBytes?: numb
       {
         name: "tools",
         apply: () => {
-          const index = current.tools.findIndex((tool) => tool.status === "completed")
+          const index = current.tools.findLastIndex((tool) => tool.status === "completed")
           const target = index >= 0 ? index : current.tools.length - 1
           if (target < 0) return false
           current.tools.splice(target, 1)

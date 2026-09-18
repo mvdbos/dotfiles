@@ -247,4 +247,61 @@ describe("evidence identity", () => {
     expect(prompt.startsWith("Inspect this bounded observation packet.")).toBe(true)
     expect(prompt.endsWith("</watchdog_packet>")).toBe(true)
   })
+
+  test("short tool results are preserved once, not duplicated by head+tail", () => {
+    const bounded = boundEvidence(
+      { task: { original: "t", current: "t" }, tools: [{ seq: 1, name: "bash", status: "completed", input: "i", result: "SHORT" }] },
+      { maxRecentTools: 4 },
+    )
+    expect(bounded.tools[0]!.result).toBe("SHORT")
+  })
+
+  test("reduction removes the oldest successful tool first", () => {
+    const tool = (seq: number) => ({
+      seq,
+      name: "edit",
+      status: "completed" as const,
+      sincePreviousCheck: true,
+      input: "x".repeat(280),
+      result: "y".repeat(560),
+    })
+    const packet = materializePacket(
+      { task: { original: "t", current: "t" }, tools: [tool(1), tool(2), tool(3)] },
+      "cadence",
+      { lastCheckToolSeq: 0, previousChangeHashes: new Map() },
+    )
+    const fitted = fitUserPrompt(packet, { maxBytes: 2200 })
+    if ("error" in fitted) throw new Error(fitted.error)
+    expect(fitted.packet.tools.length).toBeGreaterThan(0)
+    expect(fitted.packet.tools.length).toBeLessThan(3)
+    expect(fitted.packet.tools.map((entry) => entry.seq)).toContain(3)
+    expect(fitted.packet.tools.map((entry) => entry.seq)).not.toContain(1)
+  })
+
+  test("fingerprints describe the final reduced packet, not the untruncated evidence", () => {
+    const emoji = "😀".repeat(3000)
+    const tool = (seq: number) => ({
+      seq,
+      name: "bash",
+      status: "completed" as const,
+      input: emoji,
+      result: emoji,
+    })
+    const evidence = boundEvidence(
+      {
+        task: { original: emoji, current: emoji },
+        tools: [tool(1), tool(2), tool(3), tool(4)],
+        recentAssistantText: emoji,
+      },
+      { maxRecentTools: 4 },
+    )
+    const packet = materializePacket(evidence, "cadence", {
+      lastCheckToolSeq: 0,
+      previousChangeHashes: new Map(),
+    })
+    const fitted = fitUserPrompt(packet)
+    if ("error" in fitted) throw new Error(fitted.error)
+    expect(fitted.omissions.length).toBeGreaterThan(0)
+    expect(evidenceFingerprint(fitted.packet)).not.toBe(evidenceFingerprint(packet))
+  })
 })
