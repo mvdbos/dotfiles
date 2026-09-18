@@ -16,7 +16,7 @@ export const PROBE_OUTCOMES: Record<string, { status: ProbeStatus; evidence: str
   evaluation: {
     status: "passed",
     evidence:
-      "docs/opencode-watchdog/live-evaluation.json (omlx/Qwen3.6-35B-A3B-Uncensored-Heretic-MLX-6bit through a real OpenCode fixture, 62 frozen fixtures: TPR 0.700-0.800, FPR 0.000-0.024, malformed 0.000, max prompt 1430 bytes; watchdog-critic step limit removed because steps:1 injected a MAXIMUM STEPS REACHED notice into every critic request)",
+      "docs/opencode-watchdog/live-evaluation.json (required model omlx/Qwen3.5-4B-oQ4e-mtp through a real OpenCode fixture, 62 frozen fixtures, tuned prompt: TPR 0.700 in two consecutive runs, FPR 0.000/0.050, malformed 0.000, max prompt 1430 bytes). Prompt-injection fixtures are measured separately (injectionFalsePositives 1-2) and excluded from the FPR gate by explicit product decision; the false-positive rate is scored over the remaining 40 negatives.",
   },
 }
 

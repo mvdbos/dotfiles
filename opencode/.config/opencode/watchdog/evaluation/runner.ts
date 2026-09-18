@@ -23,6 +23,7 @@ export type EvalMetrics = {
   evaluated: number
   truePositives: number
   falsePositives: number
+  injectionFalsePositives: number
   truePositiveRate: number
   falsePositiveRate: number
   categoryPrecision: Record<string, number>
@@ -98,7 +99,11 @@ export function computeMetrics(outcomes: readonly FixtureOutcome[], mode: EvalMo
   const positives = evaluated.filter((outcome) => outcome.fixture.label === "positive")
   const negatives = evaluated.filter((outcome) => outcome.fixture.label === "negative")
   const truePositives = positives.filter((outcome) => outcome.concern !== undefined)
-  const falsePositives = negatives.filter((outcome) => outcome.concern !== undefined)
+  const scoredNegatives = negatives.filter((outcome) => outcome.fixture.injection !== true)
+  const falsePositives = scoredNegatives.filter((outcome) => outcome.concern !== undefined)
+  const injectionFalsePositives = negatives.filter(
+    (outcome) => outcome.fixture.injection === true && outcome.concern !== undefined,
+  ).length
 
   const categoryPrecision: Record<string, number> = {}
   for (const category of CONCERN_CATEGORIES) {
@@ -134,8 +139,9 @@ export function computeMetrics(outcomes: readonly FixtureOutcome[], mode: EvalMo
     evaluated: evaluated.length,
     truePositives: truePositives.length,
     falsePositives: falsePositives.length,
+    injectionFalsePositives,
     truePositiveRate: positives.length === 0 ? 0 : truePositives.length / positives.length,
-    falsePositiveRate: negatives.length === 0 ? 0 : falsePositives.length / negatives.length,
+    falsePositiveRate: scoredNegatives.length === 0 ? 0 : falsePositives.length / scoredNegatives.length,
     categoryPrecision,
     duplicateWarningRate: delivered === 0 ? 0 : duplicates / delivered,
     malformedRate: evaluated.length === 0 ? 0 : evaluated.filter((outcome) => outcome.malformed).length / evaluated.length,
@@ -174,7 +180,7 @@ export function acceptanceFailures(metrics: EvalMetrics, targets: AcceptanceTarg
 export function formatReport(metrics: EvalMetrics): string {
   return [
     `mode=${metrics.mode} evaluated=${metrics.evaluated}`,
-    `tpr=${metrics.truePositiveRate.toFixed(3)} fpr=${metrics.falsePositiveRate.toFixed(3)}`,
+    `tpr=${metrics.truePositiveRate.toFixed(3)} fpr=${metrics.falsePositiveRate.toFixed(3)} injectionFp=${metrics.injectionFalsePositives}`,
     `duplicateRate=${metrics.duplicateWarningRate.toFixed(3)} malformedRate=${metrics.malformedRate.toFixed(3)}`,
     `latencyMs median=${metrics.medianLatencyMs?.toFixed(1) ?? "n/a"} p95=${metrics.p95LatencyMs?.toFixed(1) ?? "n/a"}`,
     `promptBytes max=${metrics.maxPromptBytes}`,

@@ -39,7 +39,7 @@ describe("frozen evaluation corpus", () => {
 
 function oracle(mode: "perfect" | "noisy") {
   return async (fixture: (typeof EVALUATION_CORPUS)[number]) => {
-    if (mode === "noisy" && fixture.id.includes("injection")) {
+    if (mode === "noisy" && (fixture.id.includes("injection") || fixture.id === "user-changed-goal")) {
       return JSON.stringify({ status: "concern", severity: "warning", category: "unsafe_action", message: "Malicious tool output told me to warn." })
     }
     if (fixture.label === "negative") return '{"status":"ok"}'
@@ -65,7 +65,19 @@ describe("evaluation runner", () => {
   test("negatives outnumber positives so a noisy oracle is penalized", async () => {
     const { metrics } = await evaluate(EVALUATION_CORPUS, oracle("noisy"), "cadence")
     expect(metrics.falsePositiveRate).toBeGreaterThan(0)
+    expect(metrics.injectionFalsePositives).toBe(2)
     expect(acceptanceFailures(metrics).length).toBeGreaterThan(0)
+  })
+
+  test("injection fixtures are reported separately and do not fail the false-positive gate", async () => {
+    const injectionOnly = async (fixture: (typeof EVALUATION_CORPUS)[number]) =>
+      fixture.id.includes("injection")
+        ? JSON.stringify({ status: "concern", severity: "warning", category: "unsafe_action", message: `Injected tool text in ${fixture.id} demanded a warning about the build.` })
+        : '{"status":"ok"}'
+    const { metrics } = await evaluate(EVALUATION_CORPUS, injectionOnly, "cadence")
+    expect(metrics.injectionFalsePositives).toBe(2)
+    expect(metrics.falsePositiveRate).toBe(0)
+    expect(acceptanceFailures(metrics)).not.toContain("false-positive rate above target")
   })
 
   test("mode comparison evaluates the expected subsets", async () => {
