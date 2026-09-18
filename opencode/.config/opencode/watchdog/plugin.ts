@@ -75,6 +75,13 @@ export type WatchdogRuntimeDeps = {
 }
 
 type Trigger = ClaimedCadence | ClaimedIdle | ClaimedRevalidation
+type PersistedUser = {
+  messageID?: string
+  kind: "real" | "watchdog" | "foreign"
+  text: string
+  agent?: unknown
+  model?: unknown
+}
 
 export const DEFAULT_CIRCUIT_FAILURES = 3
 export const CIRCUIT_OPEN_MS = 60_000
@@ -112,6 +119,12 @@ export class WatchdogRuntime {
   private log(message: string, detail?: unknown): void {
     if (this.deps.log) this.deps.log(message, detail)
     else void this.deps.client.app.log({ body: { service: "watchdog", level: "info", message, extra: detail === undefined ? undefined : { detail: String(detail) } } }).catch(() => {})
+  }
+
+  private telemetry(message: string, extra: Record<string, unknown>): void {
+    void this.deps.client.app.log({
+      body: { service: "watchdog", level: "info", message, extra },
+    }).catch(() => {})
   }
 
   private now(): number {
@@ -189,11 +202,11 @@ export class WatchdogRuntime {
     const classification = classifyUserMessage({ parts: output.parts as never }, this.deps.patterns)
 
     if (classification.kind === "watchdog") {
-      applyWatchdogMessage(state)
+      applyWatchdogMessage(state, input.messageID)
       return
     }
     if (classification.kind === "foreign") {
-      applyForeignContinuation(state, classification.patternID ?? "foreign")
+      applyForeignContinuation(state, classification.patternID ?? "foreign", input.messageID)
       if (state.inFlight?.trigger.kind === "idle") void this.cancelInFlight(state, "foreign")
       this.deps.explore.markEnded(input.sessionID)
       return
@@ -274,6 +287,21 @@ export class WatchdogRuntime {
     if (state.continuationClaim) return
     if (!(await this.markRootIfUnparented(sessionID))) return
     if (this.childSessions.has(sessionID)) return
+    const persistedTurn = await this.latestPersistedUser(sessionID)
+    if (
+      state.turnEpoch !== admission.epoch ||
+      state.latestUserKind !== "real" ||
+      !this.matchesPersistedRealTurn(state, persistedTurn)
+    ) {
+      this.telemetry("watchdog idle review skipped", {
+        sessionID,
+        reason: "persisted_turn_changed",
+        expectedMessageID: state.taskMessageID,
+        latestMessageID: persistedTurn?.messageID,
+        latestUserKind: persistedTurn?.kind,
+      })
+      return
+    }
 
     const idleKey = snapshotKey(state.latestAssistantMessageID, this.currentSnapshotKey(state))
     if (state.lastIdleCheckKey === idleKey) return
@@ -359,6 +387,7 @@ export class WatchdogRuntime {
     }
 
     const model = parseModelRef(this.deps.config.model)
+    const startedAt = this.now()
     const run = this.runner.run({
       rootSessionID: root,
       agent: WATCHDOG_AGENT_NAME,
@@ -378,7 +407,17 @@ export class WatchdogRuntime {
     state.inFlight.run = run
 
     const result = await run
-    this.finishAttempt(root, state, checkID, claim, result, fitted.packet)
+    this.telemetry("watchdog check completed", {
+      sessionID: root,
+      checkID,
+      trigger,
+      outcome: result.kind,
+      durationMs: Math.max(0, this.now() - startedAt),
+      attempts: result.attempts,
+      retryReasons: result.retryReasons,
+      minimalRetry: result.minimalRetry,
+    })
+    await this.finishAttempt(root, state, checkID, claim, result, fitted.packet)
   }
 
   private reclaimCadenceIfEligible(state: SessionState): void {
@@ -434,14 +473,43 @@ export class WatchdogRuntime {
     if (state.pendingRevalidation === claim) state.pendingRevalidation = undefined
   }
 
-  private finishAttempt(
+  private deferStaleConcern(
+    state: SessionState,
+    claim: Trigger,
+    concern: AcceptedConcern,
+    packetFingerprint: string,
+  ): boolean {
+    if (claim.epoch === state.turnEpoch) return false
+    if (claim.kind !== "revalidation" && !state.pendingRevalidation) {
+      const candidate = {
+        severity: concern.severity,
+        category: concern.category,
+        message: concern.message,
+        sourceEpoch: claim.epoch,
+        evidenceFingerprint: packetFingerprint,
+      }
+      const revalidation = claimRevalidation(state, {
+        candidate,
+        snapshotKey: this.currentSnapshotKey(state),
+        maxRecentTools: this.deps.config.maxRecentTools,
+      })
+      if (revalidation.revalidationKey !== state.lastRevalidationKey) {
+        state.lastRevalidationKey = revalidation.revalidationKey
+        state.pendingRevalidation = revalidation
+      }
+    }
+    void this.requestAdmission()
+    return true
+  }
+
+  private async finishAttempt(
     root: string,
     state: SessionState,
     checkID: string,
     claim: Trigger,
     result: Awaited<ReturnType<CriticRunner["run"]>>,
     packet: WatchdogPacket,
-  ): void {
+  ): Promise<void> {
     const won = settleInFlight(state, { checkID, outcome: "completed" })
     if (won === "lost") return
 
@@ -483,25 +551,20 @@ export class WatchdogRuntime {
     const hash = concernIdentity(concern.category, concern.message)
     const packetFingerprint = evidenceFingerprint(packet)
 
-    if (claim.epoch !== state.turnEpoch) {
-      if (claim.kind !== "revalidation" && !state.pendingRevalidation) {
-        const candidate = {
-          severity: concern.severity,
-          category: concern.category,
-          message: concern.message,
-          sourceEpoch: claim.epoch,
-          evidenceFingerprint: packetFingerprint,
-        }
-        const revalidation = claimRevalidation(state, {
-          candidate,
-          snapshotKey: this.currentSnapshotKey(state),
-          maxRecentTools: this.deps.config.maxRecentTools,
-        })
-        if (revalidation.revalidationKey !== state.lastRevalidationKey) {
-          state.lastRevalidationKey = revalidation.revalidationKey
-          state.pendingRevalidation = revalidation
-        }
-      }
+    if (this.deferStaleConcern(state, claim, concern, packetFingerprint)) return
+
+    const persistedTurn = await this.latestPersistedUser(root)
+    if (this.deferStaleConcern(state, claim, concern, packetFingerprint)) return
+    if (!this.matchesPersistedDeliveryTurn(state, persistedTurn)) {
+      this.telemetry("watchdog concern discarded", {
+        sessionID: root,
+        checkID,
+        trigger: claim.kind,
+        reason: "persisted_turn_changed",
+        expectedMessageID: state.taskMessageID,
+        latestMessageID: persistedTurn?.messageID,
+        latestUserKind: persistedTurn?.kind,
+      })
       void this.requestAdmission()
       return
     }
@@ -598,8 +661,8 @@ export class WatchdogRuntime {
     if (state.continuationClaim) return
     const epoch = state.turnEpoch
     state.continuationClaim = { epoch, findingHash }
-    const latest = await this.latestRealUser(root)
-    if (!latest || state.turnEpoch !== epoch || state.latestUserKind !== "real") {
+    const latest = await this.latestPersistedUser(root)
+    if (!latest || !this.matchesPersistedRealTurn(state, latest) || state.turnEpoch !== epoch || state.latestUserKind !== "real") {
       state.continuationClaim = undefined
       return
     }
@@ -621,21 +684,47 @@ export class WatchdogRuntime {
     }
   }
 
-  private async latestRealUser(
+  private async latestPersistedUser(
     sessionID: string,
-  ): Promise<{ agent?: unknown; model?: unknown } | undefined> {
+  ): Promise<PersistedUser | undefined> {
     try {
       const response = await this.deps.client.session.messages({ path: { id: sessionID }, query: { limit: 30 } })
       const messages = response.data ?? []
       const user = messages.filter((message) => message.info?.role === "user").at(-1)
       if (!user) return undefined
+      const classification = classifyUserMessage({ parts: (user.parts ?? []) as never }, this.deps.patterns)
       return {
+        ...(typeof user.info?.id === "string" ? { messageID: user.info.id } : {}),
+        kind: classification.kind,
+        text: userMessageText({ parts: (user.parts ?? []) as never }),
         agent: user.info?.agent,
         model: user.info?.model,
       }
     } catch {
       return undefined
     }
+  }
+
+  private matchesPersistedRealTurn(
+    state: SessionState,
+    latest: PersistedUser | undefined,
+  ): boolean {
+    if (!latest?.messageID || latest.kind !== "real") return false
+    if (state.taskMessageID) return latest.messageID === state.taskMessageID
+    if (!state.currentTask || latest.text !== state.currentTask) return false
+    state.taskMessageID = latest.messageID
+    state.latestUserMessageID = latest.messageID
+    return true
+  }
+
+  private matchesPersistedDeliveryTurn(state: SessionState, latest: PersistedUser | undefined): boolean {
+    if (this.matchesPersistedRealTurn(state, latest)) return true
+    return Boolean(
+      state.latestUserKind === "foreign" &&
+      state.latestUserMessageID &&
+      latest?.kind === "foreign" &&
+      latest.messageID === state.latestUserMessageID,
+    )
   }
 
   async transformMessages(output: { messages: RequestMessage[] }): Promise<void> {
@@ -647,6 +736,7 @@ export class WatchdogRuntime {
     if (!state || !advisory) return
     if (advisory.installedAtEpoch !== state.turnEpoch) return
     if (!this.deps.config.midRunDelivery) return
+    if (!this.matchesPersistedDeliveryTurn(state, await this.latestPersistedUser(sessionID))) return
     let seen = this.advisorySeen.get(sessionID)
     if (!seen) {
       seen = new Set<string>()
@@ -768,7 +858,18 @@ export function createWatchdogHooks(runtime: WatchdogRuntime): Hooks {
       output.maxOutputTokens = 256
     },
     "chat.message": async (input, output) => {
-      await runtime.handleChatMessage(input, { parts: output.parts as unknown as Array<Record<string, unknown>> })
+      const outputMessageID = (output.message as { id?: unknown }).id
+      await runtime.handleChatMessage(
+        {
+          ...input,
+          ...(typeof input.messageID === "string"
+            ? { messageID: input.messageID }
+            : typeof outputMessageID === "string"
+              ? { messageID: outputMessageID }
+              : {}),
+        },
+        { parts: output.parts as unknown as Array<Record<string, unknown>> },
+      )
     },
     "tool.execute.before": async (input, output) => {
       if (input.tool !== "task") return

@@ -25,7 +25,12 @@ function fakeClient(): WatchdogClient {
   return {
     session: {
       get: async () => ({}),
-      messages: async () => ({ data: [] }),
+      messages: async () => ({
+        data: [{
+          info: { id: "u1", role: "user", agent: "build" },
+          parts: [{ type: "text", text: "Compose transforms without clobbering markers." }],
+        }],
+      }),
       prompt: async () => ({}),
       abort: async () => ({}),
       delete: async () => ({}),
@@ -48,7 +53,7 @@ function watchdogRuntime() {
   })
   runtime.knownRoots.add("root")
   const state = createSessionState()
-  beginRealTurn(state, "Compose transforms without clobbering markers.")
+  beginRealTurn(state, "Compose transforms without clobbering markers.", "u1")
   runtime.states.set("root", state)
   state.activeAdvisory = {
     severity: "warning",

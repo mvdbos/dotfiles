@@ -25,7 +25,23 @@ describe("significant tool classification", () => {
     for (const tool of ["bash", "read", "glob", "grep", "edit", "write", "apply_patch", "task", "webfetch", "custom-tool"]) {
       expect(isSignificantTool(tool)).toBe(true)
     }
-    for (const tool of ["todowrite", "question", "skill", "image_display", "image_dismiss", "ToDoWrite"]) {
+    for (const tool of [
+      "todowrite",
+      "question",
+      "skill",
+      "image_display",
+      "image_dismiss",
+      "get_goal",
+      "get_goal_history",
+      "list_all_goals",
+      "create_goal",
+      "set_goal",
+      "clear_goal",
+      "update_goal",
+      "update_goal_objective",
+      "update_goal_status",
+      "ToDoWrite",
+    ]) {
       expect(isSignificantTool(tool)).toBe(false)
     }
   })

@@ -6,6 +6,15 @@ export const DEFAULT_EXCLUDED_TOOLS: ReadonlySet<string> = new Set([
   "skill",
   "image_display",
   "image_dismiss",
+  "get_goal",
+  "get_goal_history",
+  "list_all_goals",
+  "create_goal",
+  "set_goal",
+  "clear_goal",
+  "update_goal",
+  "update_goal_objective",
+  "update_goal_status",
 ])
 
 export type ToolPartLike = {

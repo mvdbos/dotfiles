@@ -38,7 +38,14 @@ export type CriticRunOptions = {
   signal?: AbortSignal
 }
 
-export type CriticRunResult =
+export type CriticRetryReason = "context_overflow" | "missing_text" | "malformed_output"
+
+type CriticRunMetadata = {
+  attempts: number
+  retryReasons: CriticRetryReason[]
+}
+
+export type CriticRunResult = (
   | { kind: "ok"; raw: string; childID: string; minimalRetry: boolean }
   | { kind: "concern"; concern: AcceptedConcern; raw: string; childID: string; minimalRetry: boolean }
   | { kind: "malformed"; detail: string; raw: string; childID: string; minimalRetry: boolean }
@@ -48,6 +55,7 @@ export type CriticRunResult =
       childID?: string
       minimalRetry: boolean
     }
+  ) & CriticRunMetadata
 
 export type CriticRunnerDeps = {
   client: CriticClient
@@ -105,7 +113,7 @@ export class CriticRunner {
   }
 
   async run(options: CriticRunOptions): Promise<CriticRunResult> {
-    return this.attempt(options, options.prompt, false, false)
+    return this.attempt(options, options.prompt, false, false, 1, [])
   }
 
   private async attempt(
@@ -113,10 +121,13 @@ export class CriticRunner {
     prompt: string,
     minimalRetry: boolean,
     malformedRetry: boolean,
+    attempts: number,
+    retryReasons: CriticRetryReason[],
   ): Promise<CriticRunResult> {
+    const metadata = { attempts, retryReasons }
     const childID = await this.createChild(options.rootSessionID)
     if (!childID) {
-      return { kind: "error", detail: "critic child session could not be created", minimalRetry }
+      return { kind: "error", detail: "critic child session could not be created", minimalRetry, ...metadata }
     }
 
     let disposed = false
@@ -139,6 +150,7 @@ export class CriticRunner {
           detail: attempt.type === "timeout" ? `critic timed out after ${options.timeoutMs}ms` : "critic run was cancelled",
           childID,
           minimalRetry,
+          ...metadata,
         }
       }
 
@@ -149,7 +161,14 @@ export class CriticRunner {
           deleteSucceeded = await this.deleteChild(childID)
           disposed = true
           this.deps.log?.("watchdog critic hit context overflow; retrying with the minimal packet")
-          return this.attempt(options, options.minimalPrompt, true, malformedRetry)
+          return this.attempt(
+            options,
+            options.minimalPrompt,
+            true,
+            malformedRetry,
+            attempts + 1,
+            [...retryReasons, "context_overflow"],
+          )
         }
         deleteSucceeded = await this.deleteChild(childID)
         disposed = true
@@ -158,6 +177,7 @@ export class CriticRunner {
           detail: errorMessage(failure) || "critic request failed",
           childID,
           minimalRetry,
+          ...metadata,
         }
       }
 
@@ -166,24 +186,38 @@ export class CriticRunner {
         if (!malformedRetry) {
           deleteSucceeded = await this.deleteChild(childID)
           disposed = true
-          return this.attempt(options, prompt, minimalRetry, true)
+          return this.attempt(
+            options,
+            prompt,
+            minimalRetry,
+            true,
+            attempts + 1,
+            [...retryReasons, "missing_text"],
+          )
         }
-        return { kind: "malformed", detail: "critic completion carried no text part", raw: "", childID, minimalRetry }
+        return { kind: "malformed", detail: "critic completion carried no text part", raw: "", childID, minimalRetry, ...metadata }
       }
       const parsed = parseCriticOutput(raw)
-      if (parsed.kind === "ok") return { kind: "ok", raw, childID, minimalRetry }
+      if (parsed.kind === "ok") return { kind: "ok", raw, childID, minimalRetry, ...metadata }
       if (parsed.kind === "concern") {
-        return { kind: "concern", concern: parsed.concern, raw, childID, minimalRetry }
+        return { kind: "concern", concern: parsed.concern, raw, childID, minimalRetry, ...metadata }
       }
       if (!malformedRetry) {
         deleteSucceeded = await this.deleteChild(childID)
         disposed = true
-        return this.attempt(options, prompt, minimalRetry, true)
+        return this.attempt(
+          options,
+          prompt,
+          minimalRetry,
+          true,
+          attempts + 1,
+          [...retryReasons, "malformed_output"],
+        )
       }
-      return { kind: "malformed", detail: parsed.reason, raw, childID, minimalRetry }
+      return { kind: "malformed", detail: parsed.reason, raw, childID, minimalRetry, ...metadata }
     } catch (error) {
       this.deps.log?.("watchdog critic run failed", error)
-      return { kind: "error", detail: error instanceof Error ? error.message : "critic run threw", childID, minimalRetry }
+      return { kind: "error", detail: error instanceof Error ? error.message : "critic run threw", childID, minimalRetry, ...metadata }
     } finally {
       if (!disposed) {
         deleteSucceeded = await this.deleteChild(childID)

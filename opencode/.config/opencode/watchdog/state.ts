@@ -144,6 +144,7 @@ export type SessionState = {
   parentChecked: boolean
   turnEpoch: number
   latestUserKind: "real" | "watchdog" | "foreign"
+  latestUserMessageID?: string
   latestForeignPatternID?: string
   originalTask?: string
   currentTask?: string
@@ -225,18 +226,21 @@ export function beginRealTurn(state: SessionState, taskText: string, messageID?:
   state.latestForeignPatternID = undefined
   state.currentTask = taskText
   state.taskMessageID = messageID
+  state.latestUserMessageID = messageID
   if (!state.originalTask) state.originalTask = taskText
   state.deliveryBudget = newDeliveryBudget()
   state.activeAdvisory = undefined
   state.continuationClaim = undefined
 }
 
-export function applyWatchdogMessage(state: SessionState): void {
+export function applyWatchdogMessage(state: SessionState, messageID?: string): void {
   state.latestUserKind = "watchdog"
+  state.latestUserMessageID = messageID
 }
 
-export function applyForeignContinuation(state: SessionState, patternID: string): void {
+export function applyForeignContinuation(state: SessionState, patternID: string, messageID?: string): void {
   state.latestUserKind = "foreign"
+  state.latestUserMessageID = messageID
   state.latestForeignPatternID = patternID
   if (state.idleAdmission?.timer) clearTimeout(state.idleAdmission.timer)
   state.idleAdmission = undefined

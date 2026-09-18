@@ -111,7 +111,7 @@ describe("CriticRunner", () => {
     })
     const runner = new CriticRunner({ client })
     const result = await runner.run(baseOptions)
-    expect(result.kind).toBe("ok")
+    expect(result).toMatchObject({ kind: "ok", attempts: 2, retryReasons: ["malformed_output"] })
     expect(prompts).toHaveLength(2)
     expect(prompts.map((call) => call.childID)).toEqual(["child-1", "child-2"])
     expect(events).toEqual([

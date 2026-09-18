@@ -18,19 +18,31 @@ function configFor(overrides: Partial<WatchdogConfig> = {}, input: Record<string
   return { ...parsed.config, ...overrides }
 }
 
-function fakeClient(options: { criticText?: string; criticError?: unknown; rootPromptError?: unknown; toastHold?: Promise<void>; messages?: Array<Record<string, any>> } = {}) {
+function fakeClient(options: {
+  criticText?: string
+  criticError?: unknown
+  rootPromptError?: unknown
+  toastHold?: Promise<void>
+  messages?: Array<Record<string, any>> | (() => Array<Record<string, any>>)
+} = {}) {
   const calls = {
     create: [] as Array<Record<string, unknown>>,
     prompts: [] as Array<{ id: string; body: Record<string, any> }>,
     deletes: [] as string[],
     aborts: [] as string[],
     toasts: [] as Array<Record<string, unknown>>,
+    logs: [] as Array<Record<string, any>>,
   }
   let criticRelease: (() => void) | undefined
   const client: WatchdogClient = {
     session: {
       get: async () => ({ data: {} }),
-      messages: async () => ({ data: options.messages ?? [{ info: { role: "user", agent: "build", model: { providerID: "probe", modelID: "main-model" } } }] }),
+      messages: async () => ({
+        data: (typeof options.messages === "function" ? options.messages() : options.messages) ?? [{
+          info: { id: "u1", role: "user", agent: "build", model: { providerID: "probe", modelID: "main-model" } },
+          parts: [{ type: "text", text: "Implement the bounded watchdog task." }],
+        }],
+      }),
       create: async ({ body }) => {
         calls.create.push(body)
         return { data: { id: `child-${calls.create.length}` } }
@@ -71,7 +83,12 @@ function fakeClient(options: { criticText?: string; criticError?: unknown; rootP
         return {}
       },
     },
-    app: { log: async () => ({}) },
+    app: {
+      log: async ({ body }) => {
+        calls.logs.push(body)
+        return {}
+      },
+    },
   }
   return { client, calls, holdCritic: () => { criticRelease = () => {} }, releaseCritic: () => criticRelease?.() }
 }
@@ -112,6 +129,20 @@ describe("watchdog plugin runtime", () => {
     void client
   })
 
+  test("chat.message captures the persisted ID from the output message", async () => {
+    const { runtime } = makeRuntime()
+    runtime.observeSessionCreated({ id: "root" })
+    const hooks = createWatchdogHooks(runtime)
+    await hooks["chat.message"]?.(
+      { sessionID: "root", agent: "build" } as never,
+      {
+        message: { id: "persisted-u1" },
+        parts: [{ type: "text", text: "Implement the bounded watchdog task." }],
+      } as never,
+    )
+    expect(runtime.states.get("root")!.taskMessageID).toBe("persisted-u1")
+  })
+
   test("idle review runs one isolated critic child and deletes it on an ok result", async () => {
     const { runtime, calls } = makeRuntime({}, { foreignContinuationSettleMs: 0 })
     await realTurn(runtime)
@@ -123,6 +154,21 @@ describe("watchdog plugin runtime", () => {
     expect(criticPrompt?.body.tools).toEqual({})
     expect(calls.deletes).toEqual(["child-1"])
     expect(calls.prompts.some((call) => call.id === "root")).toBe(false)
+  })
+
+  test("idle review binds the persisted user ID when chat.message omitted it", async () => {
+    const { runtime, calls } = makeRuntime({}, { foreignContinuationSettleMs: 0 })
+    runtime.observeSessionCreated({ id: "root" })
+    await runtime.handleChatMessage(
+      { sessionID: "root", agent: "build", model: { providerID: "probe", modelID: "main-model" } },
+      { parts: [{ type: "text", text: "Implement the bounded watchdog task." }] },
+    )
+    runtime.recordAssistantText("root", "a1", "Working on it.")
+    runtime.handleIdle("root")
+    await Bun.sleep(20)
+
+    expect(calls.create).toHaveLength(1)
+    expect(runtime.states.get("root")!.taskMessageID).toBe("u1")
   })
 
   test("accepted idle concern submits one marker-tagged follow-up and the resulting idle consumes the claim", async () => {
@@ -347,6 +393,54 @@ describe("watchdog plugin runtime", () => {
     await runtime.cancelInFlight(state, "cleanup")
   })
 
+  test("a cadence concern completing after a locally observed foreign continuation remains eligible", async () => {
+    const concern = JSON.stringify({
+      status: "concern",
+      severity: "warning",
+      category: "plan_drift",
+      message: "The implementation departed from the stated plan for the parser.",
+    })
+    const messages = [{
+      info: { id: "u1", role: "user", agent: "build", model: { providerID: "probe", modelID: "main-model" } },
+      parts: [{ type: "text", text: "Implement the bounded watchdog task." }],
+    }]
+    const fake = fakeClient({ criticText: concern, messages })
+    fake.holdCritic()
+    const runtime = new WatchdogRuntime({
+      client: fake.client,
+      config: configFor({}, { everyTools: 5, foreignContinuationSettleMs: 0, timeoutMs: 5_000 }),
+      patterns: compileForeignPatterns(undefined).patterns,
+      lease: new WatchdogLease({ path: ":memory:" }),
+      explore: new ExploreGate(),
+      log: () => {},
+    })
+    await realTurn(runtime)
+    for (let seq = 1; seq <= 5; seq += 1) {
+      runtime.recordTerminalTool("root", {
+        type: "tool",
+        tool: "bash",
+        callID: `call-${seq}`,
+        state: { status: "completed", input: { command: `echo ${seq}` }, output: `out-${seq}` },
+      })
+    }
+    await Bun.sleep(20)
+    await runtime.handleChatMessage(
+      { sessionID: "root", agent: "build", messageID: "u2" },
+      { parts: [{ type: "text", text: GOAL_ACTIVE }] },
+    )
+    messages.push({
+      info: { id: "u2", role: "user", agent: "build", model: { providerID: "probe", modelID: "main-model" } },
+      parts: [{ type: "text", text: GOAL_ACTIVE }],
+    })
+    fake.releaseCritic()
+    await Bun.sleep(60)
+
+    expect(runtime.states.get("root")!.activeAdvisory).toBeDefined()
+    expect(fake.calls.toasts).toHaveLength(1)
+    expect(fake.calls.prompts.filter((call) => call.id === "root")).toHaveLength(0)
+    await runtime.dispose()
+  })
+
   test("three consecutive provider failures open a bounded circuit breaker", async () => {
     const fake = fakeClient({ criticError: { data: { message: "provider unavailable" } } })
     const runtime = new WatchdogRuntime({
@@ -404,6 +498,107 @@ describe("watchdog plugin runtime", () => {
     const state = runtime.states.get("root")!
     expect(state.pendingRevalidation ?? (state.inFlight?.trigger.kind === "revalidation" ? state.inFlight : undefined)).toBeDefined()
     await runtime.cancelInFlight(state, "cleanup")
+  })
+
+  test("an old process drops an idle concern after another process persists a newer user turn", async () => {
+    const concern = JSON.stringify({
+      status: "concern",
+      severity: "warning",
+      category: "plan_drift",
+      message: "The implementation departed from the stated plan for the parser.",
+    })
+    const messages = [{
+      info: { id: "u1", role: "user", agent: "build", model: { providerID: "probe", modelID: "main-model" } },
+      parts: [{ type: "text", text: "Implement the bounded watchdog task." }],
+    }]
+    const fake = fakeClient({ criticText: concern, messages })
+    fake.holdCritic()
+    const runtime = new WatchdogRuntime({
+      client: fake.client,
+      config: configFor({}, { foreignContinuationSettleMs: 0, timeoutMs: 5_000 }),
+      patterns: compileForeignPatterns(undefined).patterns,
+      lease: new WatchdogLease({ path: ":memory:" }),
+      explore: new ExploreGate(),
+      log: () => {},
+    })
+    await realTurn(runtime)
+    runtime.handleIdle("root")
+    await Bun.sleep(20)
+    expect(runtime.states.get("root")!.inFlight).toBeDefined()
+
+    messages.push({
+      info: { id: "u2", role: "user", agent: "build", model: { providerID: "probe", modelID: "main-model" } },
+      parts: [{ type: "text", text: "A newer process resumed this session." }],
+    })
+    fake.releaseCritic()
+    await Bun.sleep(60)
+
+    expect(fake.calls.prompts.filter((call) => call.id === "root")).toHaveLength(0)
+    expect(fake.calls.toasts).toHaveLength(0)
+    expect(runtime.states.get("root")!.activeAdvisory).toBeUndefined()
+    await runtime.dispose()
+  })
+
+  test("an old process does not start idle review when a newer user turn is already persisted", async () => {
+    const messages = [{
+      info: { id: "u1", role: "user", agent: "build", model: { providerID: "probe", modelID: "main-model" } },
+      parts: [{ type: "text", text: "Implement the bounded watchdog task." }],
+    }]
+    const fake = fakeClient({ messages })
+    const runtime = new WatchdogRuntime({
+      client: fake.client,
+      config: configFor({}, { foreignContinuationSettleMs: 0 }),
+      patterns: compileForeignPatterns(undefined).patterns,
+      lease: new WatchdogLease({ path: ":memory:" }),
+      explore: new ExploreGate(),
+      log: () => {},
+    })
+    await realTurn(runtime)
+    messages.push({
+      info: { id: "u2", role: "user", agent: "build", model: { providerID: "probe", modelID: "main-model" } },
+      parts: [{ type: "text", text: "A newer process resumed this session." }],
+    })
+
+    runtime.handleIdle("root")
+    await Bun.sleep(30)
+
+    expect(fake.calls.create).toHaveLength(0)
+    await runtime.dispose()
+  })
+
+  test("idle delivery rechecks persisted turn identity immediately before the root prompt", async () => {
+    const concern = JSON.stringify({
+      status: "concern",
+      severity: "warning",
+      category: "plan_drift",
+      message: "The implementation departed from the stated plan for the parser.",
+    })
+    const first = [{
+      info: { id: "u1", role: "user", agent: "build", model: { providerID: "probe", modelID: "main-model" } },
+      parts: [{ type: "text", text: "Implement the bounded watchdog task." }],
+    }]
+    const second = [...first, {
+      info: { id: "u2", role: "user", agent: "build", model: { providerID: "probe", modelID: "main-model" } },
+      parts: [{ type: "text", text: "A newer process resumed this session." }],
+    }]
+    let reads = 0
+    const fake = fakeClient({ criticText: concern, messages: () => (++reads === 1 ? first : second) })
+    const runtime = new WatchdogRuntime({
+      client: fake.client,
+      config: configFor({}, { foreignContinuationSettleMs: 0 }),
+      patterns: compileForeignPatterns(undefined).patterns,
+      lease: new WatchdogLease({ path: ":memory:" }),
+      explore: new ExploreGate(),
+      log: () => {},
+    })
+    await realTurn(runtime)
+    runtime.handleIdle("root")
+    await Bun.sleep(60)
+
+    expect(reads).toBeGreaterThanOrEqual(2)
+    expect(fake.calls.prompts.filter((call) => call.id === "root")).toHaveLength(0)
+    expect(fake.calls.toasts).toHaveLength(0)
+    await runtime.dispose()
   })
 
   test("a slow cadence check shows exactly one informational activity toast", async () => {
@@ -644,6 +839,19 @@ describe("watchdog plugin runtime", () => {
     expect(state.consecutiveFailures).toBe(1)
     expect(fake.calls.create).toHaveLength(2)
     expect(fake.calls.prompts.some((call) => call.id === "root")).toBe(false)
+    const telemetry = fake.calls.logs.find((entry) => entry.message === "watchdog check completed")
+    expect(telemetry).toMatchObject({
+      service: "watchdog",
+      level: "info",
+      extra: {
+        sessionID: "root",
+        trigger: "cadence",
+        outcome: "malformed",
+        attempts: 2,
+        retryReasons: ["malformed_output"],
+      },
+    })
+    expect(typeof telemetry?.extra.durationMs).toBe("number")
     await runtime.dispose()
   })
 
@@ -764,7 +972,11 @@ describe("watchdog plugin runtime", () => {
       category: "plan_drift",
       message: "The implementation departed from the stated plan for the parser.",
     })
-    const fake = fakeClient({ criticText: concern })
+    const messages = [{
+      info: { id: "u1", role: "user", agent: "build", model: { providerID: "probe", modelID: "main-model" } },
+      parts: [{ type: "text", text: "Implement the bounded watchdog task." }],
+    }]
+    const fake = fakeClient({ criticText: concern, messages })
     fake.holdCritic()
     const runtime = new WatchdogRuntime({
       client: fake.client,
@@ -781,6 +993,10 @@ describe("watchdog plugin runtime", () => {
       { sessionID: "root", agent: "build", messageID: "u2" },
       { parts: [{ type: "text", text: "New real instruction while the check runs." }] },
     )
+    messages.push({
+      info: { id: "u2", role: "user", agent: "build", model: { providerID: "probe", modelID: "main-model" } },
+      parts: [{ type: "text", text: "New real instruction while the check runs." }],
+    })
     const state = runtime.states.get("root")!
     state.busy = true
     fake.releaseCritic()
