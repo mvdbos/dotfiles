@@ -11,12 +11,12 @@ export const WatchdogPlugin: Plugin = async ({ client }) => {
     console.warn(`[watchdog] ${message}`, detail ?? "")
   }
 
-  for (const warning of [...loaded.warnings, ...classifier.warnings]) log(warning)
-
   if (!loaded.enabled) {
-    log(loaded.disabledReason ?? "watchdog review disabled")
+    if (loaded.disabledReason) log(loaded.disabledReason)
     return {}
   }
+
+  for (const warning of [...loaded.warnings, ...classifier.warnings]) log(warning)
 
   const runtime = new WatchdogRuntime({
     client: client as unknown as WatchdogClient,
