@@ -275,6 +275,9 @@
     "title": {
       "model": "omlx/Qwen3.5-0.8B-8bit"
     },
+    "general": {
+      "description": "General-purpose agent for independent research, substantial code reviews or audits, and focused multi-step work. The primary agent verifies and synthesizes its findings."
+    },
     "explore": {
       "model": "omlx/Qwen3.5-4B-oQ4e-mtp",
       "prompt": "{file:./explore-controls/explore-prompt.txt}",
