@@ -59,6 +59,20 @@ export type SessionStats = {
   // Tool execution and user idle time live outside the log, so they never
   // enter this number.
   durationSecs: number
+  // Wall-clock seconds spent in finalized (completed or errored, including
+  // aborted) tool parts of the counted messages, with overlapping intervals
+  // merged so parallel calls are not double counted.
+  toolDurationSecs: number
+  // durationSecs + toolDurationSecs: every busy second of the session's ds4
+  // turns. Still excludes user idle, queue waits and unmatched requests.
+  totalDurationSecs: number
+}
+
+export type ToolTime = {
+  messageID: string
+  // Epoch milliseconds, straight from ToolPart.state.time.
+  start: number
+  end: number
 }
 
 export type Level = "good" | "warn" | "bad" | "none"
@@ -255,9 +269,41 @@ export function usageMessages(
   )
 }
 
+// Wall-clock tool seconds for the given messages, merging overlapping
+// intervals so parallel calls are not double counted. Spans are epoch
+// milliseconds; callers pass finalized parts only (running parts have no end).
+export function toolDurationSecs(
+  parts: Iterable<ToolTime>,
+  messageIDs: ReadonlySet<string>,
+): number {
+  const spans: Array<{ start: number; end: number }> = []
+  for (const part of parts) {
+    if (!messageIDs.has(part.messageID)) continue
+    if (!Number.isFinite(part.start) || !Number.isFinite(part.end)) continue
+    if (part.end <= part.start) continue
+    spans.push({ start: part.start, end: part.end })
+  }
+  spans.sort((a, b) => a.start - b.start)
+  let totalMs = 0
+  let start: number | undefined
+  let end = 0
+  for (const span of spans) {
+    if (start === undefined || span.start > end) {
+      if (start !== undefined) totalMs += end - start
+      start = span.start
+      end = span.end
+      continue
+    }
+    if (span.end > end) end = span.end
+  }
+  if (start !== undefined) totalMs += end - start
+  return totalMs / 1000
+}
+
 export function sessionStats(
   messages: readonly MessageLike[],
   links: ReadonlyMap<string, RequestRecord>,
+  toolTimes?: Iterable<ToolTime>,
 ): SessionStats {
   const stats: SessionStats = {
     turns: 0,
@@ -269,6 +315,8 @@ export function sessionStats(
     hitRead: 0,
     hitTotal: 0,
     durationSecs: 0,
+    toolDurationSecs: 0,
+    totalDurationSecs: 0,
   }
   for (const message of messages) {
     const tokens = message.tokens
@@ -289,6 +337,10 @@ export function sessionStats(
       stats.decodeSecs += request.decodeSecs
     }
   }
+  stats.toolDurationSecs = toolTimes
+    ? toolDurationSecs(toolTimes, new Set(messages.map((message) => message.id)))
+    : 0
+  stats.totalDurationSecs = stats.durationSecs + stats.toolDurationSecs
   if (stats.prefillSecs > 0) stats.prefillRate = stats.prefillTokens / stats.prefillSecs
   if (stats.decodeSecs > 0) stats.decodeRate = stats.decodeTokens / stats.decodeSecs
   if (stats.hitTotal > 0) stats.hitPercent = (stats.hitRead / stats.hitTotal) * 100

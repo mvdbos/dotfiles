@@ -94,7 +94,7 @@ function fakeMessages(count: number): Message[] {
 
 // Mirrors GET /session/:sessionID/message: newest-first pages of `limit`, the
 // next-page cursor in the X-Next-Cursor header, each page returned ascending.
-function pagingClient(all: Message[]) {
+function pagingClient(all: Message[], partsFor?: (message: Message) => unknown[]) {
   const calls: Array<{ limit?: number; before?: string }> = []
   const encode = (message: Message) =>
     Buffer.from(JSON.stringify({ id: message.id, time: message.time.created })).toString("base64url")
@@ -120,7 +120,7 @@ function pagingClient(all: Message[]) {
             : ordered
           const slice = limit > 0 ? eligible.slice(0, limit) : eligible
           const more = limit > 0 && eligible.length > limit
-          const items = [...slice].reverse().map((info) => ({ info, parts: [] }))
+          const items = [...slice].reverse().map((info) => ({ info, parts: partsFor?.(info) ?? [] }))
           const tail = slice.at(-1)
           const next = more && tail ? encode(tail) : undefined
           return {
@@ -142,9 +142,44 @@ describe("fetchAllMessages", () => {
 
     expect(fake.calls.length).toBeGreaterThan(1)
     expect(fake.calls.every((call) => call.limit !== undefined)).toBe(true)
-    expect(fetched).toHaveLength(150)
-    expect(fetched[0]?.id).toBe("msg_0000")
-    expect(fetched[149]?.id).toBe("msg_0149")
-    expect(usageMessages(fetched, ["ds4"])).toHaveLength(150)
+    expect(fetched.messages).toHaveLength(150)
+    expect(fetched.messages[0]?.id).toBe("msg_0000")
+    expect(fetched.messages[149]?.id).toBe("msg_0149")
+    expect(fetched.parts).toEqual([])
+    expect(usageMessages(fetched.messages, ["ds4"])).toHaveLength(150)
+  })
+
+  test("keeps finalized tool spans and skips unfinished or non-tool parts", async () => {
+    const fake = pagingClient(fakeMessages(2), (message) =>
+      message.id === "msg_0000"
+        ? [
+            {
+              id: "prt_done",
+              messageID: message.id,
+              type: "tool",
+              state: { status: "completed", time: { start: 1000, end: 4000 } },
+            },
+            {
+              id: "prt_err",
+              messageID: message.id,
+              type: "tool",
+              state: { status: "error", time: { start: 4000, end: 9000 } },
+            },
+            {
+              id: "prt_run",
+              messageID: message.id,
+              type: "tool",
+              state: { status: "running", time: { start: 9000 } },
+            },
+            { id: "prt_text", messageID: message.id, type: "text", text: "hi" },
+          ]
+        : [],
+    )
+    const fetched = await fetchAllMessages(fake.client as never, "ses_test")
+
+    expect(fetched.parts).toEqual([
+      { id: "prt_done", messageID: "msg_0000", start: 1000, end: 4000 },
+      { id: "prt_err", messageID: "msg_0000", start: 4000, end: 9000 },
+    ])
   })
 })

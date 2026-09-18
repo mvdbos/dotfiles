@@ -23,7 +23,7 @@ const theme = {
 const api = { theme: { current: theme } } as unknown as TuiPluginApi
 const source = { variant: "custom", label: "DUNK", log: "/tmp/x" } as const
 
-function statsFor(decodeRate: number, durationSecs = 5160): SessionStats {
+function statsFor(decodeRate: number, durationSecs = 5160, toolDurationSecs = 600): SessionStats {
   return {
     turns: 1,
     matched: 1,
@@ -37,6 +37,8 @@ function statsFor(decodeRate: number, durationSecs = 5160): SessionStats {
     hitTotal: 100,
     hitPercent: 80,
     durationSecs,
+    toolDurationSecs,
+    totalDurationSecs: durationSecs + toolDurationSecs,
   }
 }
 
@@ -54,8 +56,8 @@ test("writes stats into the frame and refreshes when they change", async () => {
   expect(first).toContain("500")
   expect(first).toContain("tg")
   expect(first).toContain("80.0%")
-  expect(first).toContain("model work")
-  expect(first).toContain("1h 26m")
+  expect(first).toContain("model 1h 26m")
+  expect(first).toContain("total 1h 36m")
 
   setDecode(42)
   const second = await setup.waitForFrame((frame) => frame.includes("42.0"), { maxPasses: 50 })
@@ -64,12 +66,24 @@ test("writes stats into the frame and refreshes when they change", async () => {
 
 test("hides work time below one minute", async () => {
   const setup = await testRender(
-    () => <Stats api={api} sessionID="ses_test" source={source} stats={() => statsFor(10, 59)} />,
+    () => <Stats api={api} sessionID="ses_test" source={source} stats={() => statsFor(10, 59, 0)} />,
     { width: 60, height: 8 },
   )
   await setup.renderOnce()
   const frame = await setup.waitForFrame((f) => f.includes("pp"), { maxPasses: 50 })
-  expect(frame).not.toContain("work")
+  expect(frame).not.toContain("model")
+  expect(frame).not.toContain("total")
+})
+
+test("shows total alone when model is below a minute but tools are not", async () => {
+  const setup = await testRender(
+    () => <Stats api={api} sessionID="ses_test" source={source} stats={() => statsFor(10, 59, 600)} />,
+    { width: 60, height: 8 },
+  )
+  await setup.renderOnce()
+  const frame = await setup.waitForFrame((f) => f.includes("pp"), { maxPasses: 50 })
+  expect(frame).not.toContain("model")
+  expect(frame).toContain("total 10m")
 })
 
 test("collapses the block when the session is not on ds4", async () => {

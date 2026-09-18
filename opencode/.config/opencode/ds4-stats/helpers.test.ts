@@ -14,9 +14,11 @@ import {
   sessionModelRef,
   sessionStats,
   sourceForVariant,
+  toolDurationSecs,
   usageMessages,
   type MessageLike,
   type RequestRecord,
+  type ToolTime,
 } from "./helpers"
 
 const line = (suffix: string) => `0828 13:21:46 ds4-server: ${suffix}`
@@ -214,6 +216,41 @@ describe("sessionStats", () => {
     expect(stats.decodeRate).toBeUndefined()
     expect(stats.hitPercent).toBeCloseTo((100 / 300) * 100, 5)
     expect(stats.durationSecs).toBe(0)
+    expect(stats.toolDurationSecs).toBe(0)
+    expect(stats.totalDurationSecs).toBe(0)
+  })
+
+  test("adds tool wall time for counted messages to total work", () => {
+    const claims = new Map<string, number>()
+    const links = linkMessages({ messages, requests, claims })
+    const parts: ToolTime[] = [
+      { messageID: "m1", start: 0, end: 61_000 },
+      { messageID: "m2", start: 61_000, end: 123_000 },
+      { messageID: "other", start: 0, end: 999_000 },
+    ]
+    const stats = sessionStats(messages, links, parts)
+    expect(stats.durationSecs).toBeCloseTo(6, 5)
+    expect(stats.toolDurationSecs).toBeCloseTo(123, 5)
+    expect(stats.totalDurationSecs).toBeCloseTo(129, 5)
+  })
+})
+
+describe("toolDurationSecs", () => {
+  const span = (messageID: string, start: number, end: number): ToolTime => ({ messageID, start, end })
+
+  test("sums disjoint spans and merges overlapping ones", () => {
+    const allowed = new Set(["m1"])
+    expect(toolDurationSecs([span("m1", 0, 1000), span("m1", 2000, 5000)], allowed)).toBe(4)
+    expect(toolDurationSecs([span("m1", 0, 3000), span("m1", 2000, 5000)], allowed)).toBe(5)
+    expect(toolDurationSecs([span("m1", 0, 1000), span("m1", 1000, 2000)], allowed)).toBe(2)
+  })
+
+  test("ignores other messages, degenerate spans and non-finite times", () => {
+    const allowed = new Set(["m1"])
+    expect(toolDurationSecs([span("m2", 0, 5000)], allowed)).toBe(0)
+    expect(toolDurationSecs([span("m1", 5, 5), span("m1", 10, 5)], allowed)).toBe(0)
+    expect(toolDurationSecs([span("m1", Number.NaN, 10)], allowed)).toBe(0)
+    expect(toolDurationSecs([], allowed)).toBe(0)
   })
 })
 
