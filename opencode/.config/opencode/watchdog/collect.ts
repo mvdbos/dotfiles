@@ -82,6 +82,7 @@ export function changeFingerprintFromTool(
 ): ChangeFingerprint | undefined {
   const input = recordValue(toolPart?.state?.input) ?? recordValue(observation.input)
   const metadata = recordValue(toolPart?.state?.metadata)
+  const filediff = recordValue(metadata?.filediff)
   let path: string | undefined
   for (const key of PATH_KEYS) {
     const value = input?.[key]
@@ -91,8 +92,8 @@ export function changeFingerprintFromTool(
     }
   }
   if (!path) return undefined
-  const additions = numberFrom(metadata?.additions, metadata?.added, input?.additions)
-  const deletions = numberFrom(metadata?.deletions, metadata?.removed, input?.deletions)
+  const additions = numberFrom(metadata?.additions, metadata?.added, filediff?.additions, input?.additions)
+  const deletions = numberFrom(metadata?.deletions, metadata?.removed, filediff?.deletions, input?.deletions)
   const fingerprint = sha256(
     `${observation.name}\n${path}\n${serializeCompact(input)}\n${observation.result}`,
   )

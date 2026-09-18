@@ -19,6 +19,24 @@ describe("parseCriticOutput", () => {
     expect(parseCriticOutput('{"status":"ok","message":"hi"}')).toMatchObject({ kind: "malformed" })
   })
 
+  test("ignores internal packet echo keys on ok and concern", () => {
+    expect(parseCriticOutput('{"status":"ok","evidenceFingerprint":"abc"}')).toEqual({ kind: "ok" })
+    const echoed = parseCriticOutput(
+      JSON.stringify({
+        status: "concern",
+        severity: "warning",
+        category: "missing_verification",
+        message: "Tests failed after the change and no verification was recorded.",
+        evidenceFingerprint: "82f9c4b5a1d3e7f0",
+        sourceEpoch: 3,
+      }),
+    )
+    expect(echoed).toMatchObject({
+      kind: "concern",
+      concern: { severity: "warning", category: "missing_verification" },
+    })
+  })
+
   test("accepts one schema-valid bounded concern", () => {
     const result = parseCriticOutput(
       JSON.stringify({

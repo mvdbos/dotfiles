@@ -517,6 +517,8 @@ After stale/schema/noise gates accept a current-epoch cadence or revalidation co
 
 Maintain `activeAdvisory` per root with finding, trigger call ID, turn epoch, and delivery state.
 
+A retained advisory is stale only when a newer real-user epoch starts, a newer accepted concern replaces it, or it is cancelled (root deletion, plugin disposal, foreign continuation). Tool completions after the claim boundary do not stale it: `throughToolSeq` is packet provenance, never an install-time or idle-time veto. The advisory still installs on the newest not-yet-observed completed tool result and may still be delivered at idle.
+
 Maintain a one-shot `compactionTransformSkips` guard keyed by session. `experimental.session.compacting` arms the guard immediately before OpenCode invokes the history transform for compaction; the matching `experimental.chat.messages.transform` consumes it and makes no watchdog mutation. Expire abandoned guards defensively. P0 must prove this exact ordering and session correlation under v1.18.31, including concurrent roots. If it cannot, mid-run delivery is disabled entirely.
 
 At `experimental.chat.messages.transform`:

@@ -187,6 +187,7 @@ export function loadWatchdogConfig(path: string = watchdogConfigPath()): Watchdo
 export function buildCriticAgent(config: WatchdogConfig): Record<string, unknown> {
   return {
     model: config.model,
+    temperature: 0,
     prompt: CRITIC_SYSTEM_PROMPT,
     description: "Internal observation-only trajectory critic.",
     hidden: true,

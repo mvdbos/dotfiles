@@ -126,6 +126,7 @@ export type InFlight = {
 
 export type ActiveAdvisory = AcceptedConcern & {
   findingHash?: string
+  throughToolSeq: number
   installedPartID?: string
   installedText?: string
   concernToast?: { status: "pending" | "delivered" | "failed"; attempts: 1 | 2 }

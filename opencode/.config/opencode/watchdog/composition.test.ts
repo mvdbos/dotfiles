@@ -55,6 +55,7 @@ function watchdogRuntime() {
     category: "plan_drift",
     message: "The plan drifted from the stated requirement for the parser.",
     installedAtEpoch: state.turnEpoch,
+    throughToolSeq: state.toolSeq,
   }
   return runtime
 }

@@ -105,10 +105,15 @@ export class CriticRunner {
   }
 
   async run(options: CriticRunOptions): Promise<CriticRunResult> {
-    return this.attempt(options, options.prompt, false)
+    return this.attempt(options, options.prompt, false, false)
   }
 
-  private async attempt(options: CriticRunOptions, prompt: string, minimalRetry: boolean): Promise<CriticRunResult> {
+  private async attempt(
+    options: CriticRunOptions,
+    prompt: string,
+    minimalRetry: boolean,
+    malformedRetry: boolean,
+  ): Promise<CriticRunResult> {
     const childID = await this.createChild(options.rootSessionID)
     if (!childID) {
       return { kind: "error", detail: "critic child session could not be created", minimalRetry }
@@ -144,7 +149,7 @@ export class CriticRunner {
           deleteSucceeded = await this.deleteChild(childID)
           disposed = true
           this.deps.log?.("watchdog critic hit context overflow; retrying with the minimal packet")
-          return this.attempt(options, options.minimalPrompt, true)
+          return this.attempt(options, options.minimalPrompt, true, malformedRetry)
         }
         deleteSucceeded = await this.deleteChild(childID)
         disposed = true
@@ -158,12 +163,22 @@ export class CriticRunner {
 
       const raw = assistantText(attempt.data?.parts)
       if (raw === undefined) {
+        if (!malformedRetry) {
+          deleteSucceeded = await this.deleteChild(childID)
+          disposed = true
+          return this.attempt(options, prompt, minimalRetry, true)
+        }
         return { kind: "malformed", detail: "critic completion carried no text part", raw: "", childID, minimalRetry }
       }
       const parsed = parseCriticOutput(raw)
       if (parsed.kind === "ok") return { kind: "ok", raw, childID, minimalRetry }
       if (parsed.kind === "concern") {
         return { kind: "concern", concern: parsed.concern, raw, childID, minimalRetry }
+      }
+      if (!malformedRetry) {
+        deleteSucceeded = await this.deleteChild(childID)
+        disposed = true
+        return this.attempt(options, prompt, minimalRetry, true)
       }
       return { kind: "malformed", detail: parsed.reason, raw, childID, minimalRetry }
     } catch (error) {

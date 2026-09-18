@@ -96,13 +96,34 @@ describe("CriticRunner", () => {
     }
   })
 
-  test("marks malformed output without retrying", async () => {
-    const { client, events } = fakeClient({ promptResults: [{ text: "not json" }] })
+  test("retries malformed output exactly once and returns the final malformed result", async () => {
+    const { client, events } = fakeClient({ promptResults: [{ text: "not json" }, { text: "still not json" }] })
     const runner = new CriticRunner({ client })
     const result = await runner.run(baseOptions)
     expect(result).toMatchObject({ kind: "malformed" })
-    expect(events.filter((event) => event.startsWith("create:"))).toHaveLength(1)
-    expect(events.at(-1)).toBe("delete:child-1")
+    expect(events.filter((event) => event.startsWith("create:"))).toHaveLength(2)
+    expect(events.at(-1)).toBe("delete:child-2")
+  })
+
+  test("handles a successful retry as a normal critic result", async () => {
+    const { client, prompts, events } = fakeClient({
+      promptResults: [{ text: "not json" }, { text: '{"status":"ok"}' }],
+    })
+    const runner = new CriticRunner({ client })
+    const result = await runner.run(baseOptions)
+    expect(result.kind).toBe("ok")
+    expect(prompts).toHaveLength(2)
+    expect(prompts.map((call) => call.childID)).toEqual(["child-1", "child-2"])
+    expect(events).toEqual([
+      "create:child-1",
+      "tool.ids",
+      "prompt:child-1",
+      "delete:child-1",
+      "create:child-2",
+      "tool.ids",
+      "prompt:child-2",
+      "delete:child-2",
+    ])
   })
 
   test("aborts the server-side runner before deleting on timeout", async () => {

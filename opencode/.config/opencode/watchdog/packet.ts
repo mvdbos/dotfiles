@@ -48,6 +48,17 @@ export type RevalidationCandidate = {
   evidenceFingerprint: string
 }
 
+export type PacketPreviousConcern = {
+  category: ConcernCategory
+  message: string
+}
+
+export type PacketRevalidationCandidate = {
+  severity: "warning" | "critical"
+  category: ConcernCategory
+  message: string
+}
+
 export type WatchdogPacket = {
   version: typeof PACKET_VERSION
   trigger: PacketTrigger
@@ -57,8 +68,8 @@ export type WatchdogPacket = {
   tools: Array<ToolObservation & { sincePreviousCheck: boolean }>
   failures?: Array<{ tool: string; evidence: string }>
   changes?: Array<{ path: string; additions: number; deletions: number; changedSincePreviousCheck: boolean }>
-  previousConcern?: PreviousConcern
-  revalidateConcern?: RevalidationCandidate
+  previousConcern?: PacketPreviousConcern
+  revalidateConcern?: PacketRevalidationCandidate
 }
 
 export type ClaimedEvidence = {
@@ -279,8 +290,23 @@ export function materializePacket(
     })),
     ...(failures.length > 0 ? { failures } : {}),
     ...(changes.length > 0 ? { changes } : {}),
-    ...(evidence.previousConcern ? { previousConcern: evidence.previousConcern } : {}),
-    ...(candidate ? { revalidateConcern: candidate } : {}),
+    ...(evidence.previousConcern
+      ? {
+          previousConcern: {
+            category: evidence.previousConcern.category,
+            message: evidence.previousConcern.message,
+          },
+        }
+      : {}),
+    ...(candidate
+      ? {
+          revalidateConcern: {
+            severity: candidate.severity,
+            category: candidate.category,
+            message: candidate.message,
+          },
+        }
+      : {}),
   }
 }
 

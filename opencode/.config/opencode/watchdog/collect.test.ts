@@ -88,6 +88,21 @@ describe("change fingerprints", () => {
     expect(change!.fingerprint).toHaveLength(64)
   })
 
+  test("reads counts from filediff metadata when top-level counts are absent", () => {
+    const part = toolPart({
+      tool: "edit",
+      state: {
+        status: "completed",
+        input: { filePath: "src/b.ts", oldString: "a", newString: "b" },
+        output: "updated",
+        metadata: { filediff: { file: "src/b.ts", patch: "…", additions: 16, deletions: 15 } },
+      },
+    })
+    const observation = terminalToolObservation(part, 9)!
+    const change = changeFingerprintFromTool(observation, part)
+    expect(change).toMatchObject({ seq: 9, path: "src/b.ts", additions: 16, deletions: 15 })
+  })
+
   test("omits changes without a trustworthy path", () => {
     const part = toolPart({ state: { status: "completed", input: { command: "echo hi" }, output: "hi" } })
     const observation = terminalToolObservation(part, 8)!

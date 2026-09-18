@@ -209,11 +209,12 @@ export class WatchdogRuntime {
     if (this.disposed) return
     const state = this.states.get(sessionID)
     if (!state) return
-    state.toolSeq += 1
-    const observation = terminalToolObservation(part as never, state.toolSeq)
+    const nextToolSeq = state.toolSeq + 1
+    const observation = terminalToolObservation(part as never, nextToolSeq)
     if (!observation) return
     const change = changeFingerprintFromTool(observation, part as never)
     if (!recordTool(state, observation, change)) return
+    state.toolSeq = nextToolSeq
 
     if (cadenceEligibleCount(state, this.deps.config.everyTools) >= this.deps.config.everyTools && !state.pendingTrigger) {
       const claim = claimCadence(state, {
@@ -281,7 +282,7 @@ export class WatchdogRuntime {
     const advisory = state.activeAdvisory
     if (advisory?.findingHash && advisory.installedAtEpoch === state.turnEpoch && advisory.deliveredAtEpoch !== state.turnEpoch) {
       state.pendingIdle = undefined
-      void this.deliverIdleConcern(sessionID, state, advisory, advisory.findingHash)
+      void this.deliverIdleConcern(sessionID, state, advisory, advisory.findingHash, advisory.throughToolSeq)
       return
     }
 
@@ -449,10 +450,20 @@ export class WatchdogRuntime {
     state.inFlight = undefined
     if (lease) this.deps.lease.release(lease)
 
-    const completed = result.kind === "ok" || result.kind === "concern"
+    const completed = result.kind === "ok" || result.kind === "concern" || result.kind === "malformed"
     settleClaim(state, claim, completed)
 
-    if (result.kind === "timeout" || result.kind === "error" || result.kind === "context_overflow" || result.kind === "cancelled") {
+    if (
+      result.kind === "timeout" ||
+      result.kind === "error" ||
+      result.kind === "context_overflow" ||
+      result.kind === "cancelled" ||
+      result.kind === "malformed"
+    ) {
+      this.log(
+        `watchdog critic result ${result.kind}`,
+        result.kind === "malformed" ? `${result.detail}: ${result.raw.slice(0, 200)}` : result.detail,
+      )
       state.consecutiveFailures += 1
       state.lastFailureAt = this.now()
       if (state.consecutiveFailures >= DEFAULT_CIRCUIT_FAILURES) {
@@ -462,11 +473,6 @@ export class WatchdogRuntime {
       return
     }
     state.consecutiveFailures = 0
-
-    if (result.kind === "malformed") {
-      void this.requestAdmission()
-      return
-    }
 
     if (result.kind !== "concern") {
       void this.requestAdmission()
@@ -520,7 +526,7 @@ export class WatchdogRuntime {
     state.previousConcern = { category: concern.category, message: concern.message, evidenceFingerprint: packetFingerprint }
 
     if (state.latestUserKind === "foreign") {
-      this.retainAdvisory(state, concern, hash)
+      this.retainAdvisory(state, concern, hash, claim.throughToolSeq)
       void this.showConcernToast(state, concern, hash)
       void this.requestAdmission()
       return
@@ -531,27 +537,28 @@ export class WatchdogRuntime {
     }
 
     if (claim.kind === "cadence" && this.deps.config.midRunDelivery) {
-      this.retainAdvisory(state, concern, hash)
+      this.retainAdvisory(state, concern, hash, claim.throughToolSeq)
       void this.showConcernToast(state, concern, hash)
       void this.requestAdmission()
       return
     }
 
     if (state.busy && claim.kind !== "idle") {
-      this.retainAdvisory(state, concern, hash)
+      this.retainAdvisory(state, concern, hash, claim.throughToolSeq)
       void this.showConcernToast(state, concern, hash)
       void this.requestAdmission()
       return
     }
 
-    void this.deliverIdleConcern(root, state, concern, hash)
+    void this.deliverIdleConcern(root, state, concern, hash, claim.throughToolSeq)
     void this.requestAdmission()
   }
 
-  private retainAdvisory(state: SessionState, concern: AcceptedConcern, findingHash: string): void {
+  private retainAdvisory(state: SessionState, concern: AcceptedConcern, findingHash: string, throughToolSeq: number): void {
     state.activeAdvisory = {
       ...concern,
       installedAtEpoch: state.turnEpoch,
+      throughToolSeq,
       concernToast: undefined,
       installedPartID: undefined,
       installedText: undefined,
@@ -586,6 +593,7 @@ export class WatchdogRuntime {
     state: SessionState,
     concern: AcceptedConcern,
     findingHash: string,
+    throughToolSeq: number,
   ): Promise<void> {
     if (state.continuationClaim) return
     const epoch = state.turnEpoch
@@ -602,7 +610,7 @@ export class WatchdogRuntime {
       findingHash,
       turnEpoch: epoch,
     })
-    if (!state.activeAdvisory) this.retainAdvisory(state, concern, findingHash)
+    if (!state.activeAdvisory) this.retainAdvisory(state, concern, findingHash, throughToolSeq)
     if (state.activeAdvisory) state.activeAdvisory.deliveredAtEpoch = epoch
     void this.showConcernToast(state, concern, findingHash)
     try {
@@ -653,6 +661,7 @@ export class WatchdogRuntime {
     if (installed) {
       advisory.installedPartID = installed.partID
       advisory.installedText = installed.text
+      advisory.deliveredAtEpoch = state.turnEpoch
     }
   }
 

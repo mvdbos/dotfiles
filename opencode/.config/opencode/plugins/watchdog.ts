@@ -7,8 +7,24 @@ import { ExploreGate, WatchdogLease } from "../watchdog/scheduler"
 export const WatchdogPlugin: Plugin = async ({ client }) => {
   const loaded = loadWatchdogConfig()
   const classifier = loadUserClassifierConfig()
+  const sdk = client as unknown as WatchdogClient
   const log = (message: string, detail?: unknown) => {
-    console.warn(`[watchdog] ${message}`, detail ?? "")
+    const fallback = () => console.warn(`[watchdog] ${message}`, detail ?? "")
+    const appLog = sdk?.app?.log
+    if (!appLog) {
+      fallback()
+      return
+    }
+    void appLog
+      .call(sdk.app, {
+        body: {
+          service: "watchdog",
+          level: "warn",
+          message,
+          extra: detail === undefined ? undefined : { detail: String(detail) },
+        },
+      })
+      .catch(fallback)
   }
 
   if (!loaded.enabled) {
@@ -19,7 +35,7 @@ export const WatchdogPlugin: Plugin = async ({ client }) => {
   for (const warning of [...loaded.warnings, ...classifier.warnings]) log(warning)
 
   const runtime = new WatchdogRuntime({
-    client: client as unknown as WatchdogClient,
+    client: sdk,
     config: loaded.config,
     patterns: classifier.patterns.patterns,
     lease: new WatchdogLease(),

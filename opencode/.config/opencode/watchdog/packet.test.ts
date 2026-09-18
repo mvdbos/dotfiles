@@ -104,8 +104,6 @@ describe("packet bounds", () => {
           severity: "warning",
           category: "plan_drift",
           message: "The plan drifted from the explicit requirement.",
-          sourceEpoch: 4,
-          evidenceFingerprint: "abc",
         },
       }),
     )
@@ -183,7 +181,7 @@ describe("materialization", () => {
     expect(changeB!.changedSincePreviousCheck).toBe(true)
   })
 
-  test("revalidations carry the candidate and ordinary packets omit it", () => {
+  test("revalidations carry the candidate without internal identifiers", () => {
     const candidate = {
       severity: "warning" as const,
       category: "plan_drift" as const,
@@ -199,8 +197,30 @@ describe("materialization", () => {
       lastCheckToolSeq: 0,
       previousChangeHashes: new Map(),
     })
-    expect(withCandidate.revalidateConcern).toEqual(candidate)
+    expect(withCandidate.revalidateConcern).toEqual({
+      severity: "warning",
+      category: "plan_drift",
+      message: "The plan drifted from the explicit requirement.",
+    })
     expect(withoutCandidate.revalidateConcern).toBeUndefined()
+  })
+
+  test("previous concern is projected without its internal fingerprint", () => {
+    const materialized = materializePacket(
+      claimed({
+        previousConcern: {
+          category: "repeated_failure",
+          message: "The same test failed repeatedly with identical errors.",
+          evidenceFingerprint: "abc",
+        },
+      }),
+      "cadence",
+      { lastCheckToolSeq: 0, previousChangeHashes: new Map() },
+    )
+    expect(materialized.previousConcern).toEqual({
+      category: "repeated_failure",
+      message: "The same test failed repeatedly with identical errors.",
+    })
   })
 })
 

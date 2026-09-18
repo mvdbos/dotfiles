@@ -121,6 +121,7 @@ describe("parseWatchdogConfig", () => {
     expect(WATCHDOG_AGENT_NAME).toBe("watchdog-critic")
     expect(agent).toMatchObject({
       model: "omlx/qwen",
+      temperature: 0,
       prompt: CRITIC_SYSTEM_PROMPT,
       hidden: true,
       options: { enable_thinking: false },

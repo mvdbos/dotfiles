@@ -177,7 +177,7 @@ describe("watchdog plugin runtime", () => {
     expect(calls.create).toHaveLength(0)
   })
 
-  test("cadence claims fire once per threshold and mid-run advisory installs at the newest tool boundary", async () => {
+  test("cadence claims fire once per threshold and an installed mid-run advisory is not repeated at idle", async () => {
     const concern = JSON.stringify({
       status: "concern",
       severity: "warning",
@@ -211,6 +211,11 @@ describe("watchdog plugin runtime", () => {
     await runtime.transformMessages({ messages: messages as never })
     expect(String(messages[0]!.parts[0]!.state.output)).toContain("[watchdog advisory:")
     expect(fake.calls.prompts.some((call) => call.id === "root")).toBe(false)
+
+    runtime.recordAssistantText("root", "a2", "The provider request completed.")
+    runtime.handleIdle("root")
+    await Bun.sleep(40)
+    expect(fake.calls.prompts.filter((call) => call.id === "root")).toHaveLength(0)
 
     runtime.handleCompacting("root")
     const compacted = [{ info: { sessionID: "root" }, parts: [{ id: "tool-2", type: "tool", state: { status: "completed", output: "clean" } }] }]
@@ -613,7 +618,7 @@ describe("watchdog plugin runtime", () => {
     expect(original.concernToast?.status).toBe("delivered")
   })
 
-  test("malformed critic output restores cadence ownership without delivering", async () => {
+  test("malformed critic output retries once, consumes the cadence claim, and opens no advisory", async () => {
     const fake = fakeClient({ criticText: "not json at all" })
     const runtime = new WatchdogRuntime({
       client: fake.client,
@@ -634,8 +639,10 @@ describe("watchdog plugin runtime", () => {
     }
     await Bun.sleep(40)
     const state = runtime.states.get("root")!
-    expect(state.lastCheckToolSeq).toBe(0)
-    expect(state.unclaimedSignificantTools).toBe(5)
+    expect(state.lastCheckToolSeq).toBe(5)
+    expect(state.unclaimedSignificantTools).toBe(0)
+    expect(state.consecutiveFailures).toBe(1)
+    expect(fake.calls.create).toHaveLength(2)
     expect(fake.calls.prompts.some((call) => call.id === "root")).toBe(false)
     await runtime.dispose()
   })
@@ -675,6 +682,78 @@ describe("watchdog plugin runtime", () => {
     expect(rootPrompts).toHaveLength(1)
     expect(rootPrompts[0]!.body.parts[0].text.startsWith("[watchdog advisory:")).toBe(true)
     expect(fake.calls.create).toHaveLength(1)
+    await runtime.dispose()
+  })
+
+  test("a newer tool does not stale an uninstalled concern; it installs request-locally and is not repeated at idle", async () => {
+    const concern = JSON.stringify({
+      status: "concern",
+      severity: "warning",
+      category: "repeated_failure",
+      message: "The same failing command was repeated with identical errors.",
+    })
+    const fake = fakeClient({ criticText: concern })
+    const runtime = new WatchdogRuntime({
+      client: fake.client,
+      config: configFor({ midRunDelivery: true }, { everyTools: 5, foreignContinuationSettleMs: 0 }),
+      patterns: compileForeignPatterns(undefined).patterns,
+      lease: new WatchdogLease({ path: ":memory:" }),
+      explore: new ExploreGate(),
+      log: () => {},
+    })
+    await realTurn(runtime)
+    for (let seq = 1; seq <= 5; seq += 1) {
+      runtime.recordTerminalTool("root", {
+        type: "tool",
+        tool: "bash",
+        callID: `call-${seq}`,
+        state: { status: "completed", input: { command: `echo ${seq}` }, output: `out-${seq}` },
+      })
+    }
+    await Bun.sleep(40)
+    const state = runtime.states.get("root")!
+    expect(state.activeAdvisory?.throughToolSeq).toBe(5)
+
+    runtime.recordTerminalTool("root", {
+      type: "tool",
+      tool: "bash",
+      callID: "call-running",
+      state: { status: "running", input: { command: "echo running" } },
+    })
+    runtime.recordTerminalTool("root", {
+      type: "tool",
+      tool: "image_display",
+      callID: "call-excluded",
+      state: { status: "completed", input: { path: "/tmp/image.png" }, output: "shown" },
+    })
+    runtime.recordTerminalTool("root", {
+      type: "tool",
+      tool: "bash",
+      callID: "call-5",
+      state: { status: "completed", input: { command: "echo 5" }, output: "out-5" },
+    })
+    expect(state.toolSeq).toBe(5)
+    expect(state.activeAdvisory?.throughToolSeq).toBe(5)
+
+    runtime.recordTerminalTool("root", {
+      type: "tool",
+      tool: "bash",
+      callID: "call-6",
+      state: { status: "completed", input: { command: "echo 6" }, output: "out-6" },
+    })
+    const messages = [
+      { info: { sessionID: "root" }, parts: [{ id: "tool-6", type: "tool", state: { status: "completed", output: "out-6" } }] },
+    ]
+    await runtime.transformMessages({ messages: messages as never })
+    expect(String(messages[0]!.parts[0]!.state.output)).toContain("[watchdog advisory:")
+    expect(state.activeAdvisory?.installedPartID).toBe("tool-6")
+    expect(state.activeAdvisory?.throughToolSeq).toBe(5)
+    expect(state.activeAdvisory?.deliveredAtEpoch).toBe(state.turnEpoch)
+
+    runtime.recordAssistantText("root", "a2", "The newer tool completed.")
+    runtime.handleIdle("root")
+    await Bun.sleep(40)
+    expect(fake.calls.prompts.filter((call) => call.id === "root")).toHaveLength(0)
     await runtime.dispose()
   })
 

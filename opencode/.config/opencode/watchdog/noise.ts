@@ -76,6 +76,14 @@ function isCategory(value: unknown): value is ConcernCategory {
   return typeof value === "string" && (CONCERN_CATEGORIES as readonly string[]).includes(value)
 }
 
+const OK_KEYS: ReadonlySet<string> = new Set(["status"])
+const CONCERN_KEYS: ReadonlySet<string> = new Set(["status", "severity", "category", "message"])
+const INTERNAL_ECHO_KEYS: ReadonlySet<string> = new Set(["evidenceFingerprint", "sourceEpoch"])
+
+function unexpectedKeys(record: Record<string, unknown>, allowed: ReadonlySet<string>): string[] {
+  return Object.keys(record).filter((key) => !allowed.has(key) && !INTERNAL_ECHO_KEYS.has(key))
+}
+
 export function parseCriticOutput(text: string): CriticParseResult {
   if (Buffer.byteLength(text, "utf8") > MAX_CRITIC_ASSISTANT_BYTES) {
     return { kind: "malformed", reason: "critic output exceeded the assistant byte budget" }
@@ -95,7 +103,7 @@ export function parseCriticOutput(text: string): CriticParseResult {
 
   const record = parsed as Record<string, unknown>
   if (record.status === "ok") {
-    if (Object.keys(record).length !== 1) {
+    if (unexpectedKeys(record, OK_KEYS).length !== 0) {
       return { kind: "malformed", reason: "ok output had extra keys" }
     }
     return { kind: "ok" }
@@ -105,8 +113,7 @@ export function parseCriticOutput(text: string): CriticParseResult {
     return { kind: "malformed", reason: "critic status was neither ok nor concern" }
   }
 
-  const allowed = new Set(["status", "severity", "category", "message"])
-  const extra = Object.keys(record).filter((key) => !allowed.has(key))
+  const extra = unexpectedKeys(record, CONCERN_KEYS)
   if (extra.length > 0) return { kind: "malformed", reason: `concern output had extra keys: ${extra.join(", ")}` }
   if (!isSeverity(record.severity)) return { kind: "malformed", reason: "concern severity was invalid" }
   if (!isCategory(record.category)) return { kind: "malformed", reason: "concern category was invalid" }
