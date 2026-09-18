@@ -1,5 +1,7 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import type { UserMessage } from "@opencode-ai/sdk/v2"
+import { isPluginGeneratedUserMessage } from "../../plugin-generated-user/helpers"
+import { loadUserClassifierConfig } from "../../plugin-generated-user/config"
 import {
   createTodoReconcileHooks,
   readTodosThroughClient,
@@ -7,6 +9,12 @@ import {
 } from "./lifecycle"
 
 export const TodoReconcilePlugin: Plugin = async ({ client }) => {
+  const classifier = loadUserClassifierConfig()
+  for (const warning of classifier.warnings) {
+    console.warn(`[todo-reconcile] ${warning}`)
+  }
+  const patterns = classifier.patterns.patterns
+
   const persistSnapshot = async (input: PersistSnapshotInput) => {
     try {
       const target = input.target
@@ -51,6 +59,7 @@ export const TodoReconcilePlugin: Plugin = async ({ client }) => {
   return createTodoReconcileHooks({
     readTodos: (sessionID) => readTodosThroughClient(client, sessionID),
     persistSnapshot,
+    isEligibleUserMessage: (message) => !isPluginGeneratedUserMessage(message, patterns),
     log: (message, detail) => {
       console.warn(`[todo-reconcile] ${message}`, detail ?? "")
     },

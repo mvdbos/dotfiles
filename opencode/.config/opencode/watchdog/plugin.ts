@@ -1,0 +1,804 @@
+import type { Hooks, PluginInput } from "@opencode-ai/plugin"
+import {
+  classifyUserMessage,
+  userMessageText,
+  type CompiledForeignPatterns,
+} from "../plugin-generated-user/helpers"
+import { buildCriticAgent, parseModelRef, WATCHDOG_AGENT_NAME, type WatchdogConfig } from "./config"
+import { assistantTextFromPart, changeFingerprintFromTool, eventSessionID, terminalToolObservation } from "./collect"
+import { CriticRunner } from "./critic"
+import {
+  buildIdlePromptBody,
+  CompactionSkipGuard,
+  installRunAdvisory,
+  runAdvisoryFor,
+  sessionIDFromMessages,
+  shouldAttemptToast,
+  toastStateAfterAttempt,
+  type RequestMessage,
+} from "./feedback"
+import { concernIdentity, decideDelivery, type AcceptedConcern } from "./noise"
+import { fitUserPrompt, materializePacket, snapshotKey, evidenceFingerprint, type PacketTrigger, type WatchdogPacket } from "./packet"
+import { CADENCE_ACTIVITY_TOAST_MS } from "./prompt"
+import { rotateRoots, selectAdmissibleTrigger, type ExploreGate, type WatchdogLease } from "./scheduler"
+import {
+  applyForeignContinuation,
+  applyWatchdogMessage,
+  beginRealTurn,
+  cadenceEligibleCount,
+  claimCadence,
+  claimIdle,
+  claimRevalidation,
+  clearIdleAdmission,
+  createSessionState,
+  deferClaim,
+  isProtected,
+  recordTool,
+  settleClaim,
+  settleInFlight,
+  type ClaimedCadence,
+  type ClaimedIdle,
+  type ClaimedRevalidation,
+  type SessionState,
+} from "./state"
+
+export type WatchdogClient = {
+  session: {
+    get(options: { path: { id: string } }): Promise<{ data?: unknown; error?: unknown }>
+    messages(options: {
+      path: { id: string }
+      query?: { limit?: number }
+    }): Promise<{ data?: Array<{ info?: Record<string, unknown>; parts?: Array<Record<string, unknown>> }>; error?: unknown }>
+    prompt(options: {
+      path: { id: string }
+      body: Record<string, unknown>
+    }): Promise<{ data?: { info?: unknown; parts?: Array<Record<string, unknown>> }; error?: unknown }>
+    abort(options: { path: { id: string } }): Promise<unknown>
+    delete(options: { path: { id: string } }): Promise<unknown>
+    create(options: { body: { parentID: string; title?: string } }): Promise<{ data?: { id?: string }; error?: unknown }>
+  }
+  tool: { ids(): Promise<{ data?: string[]; error?: unknown }> }
+  tui: { showToast(options: { body: Record<string, unknown> }): Promise<unknown> }
+  app: { log(options: { body: Record<string, unknown> }): Promise<unknown> }
+}
+
+export type WatchdogRuntimeDeps = {
+  client: WatchdogClient
+  config: WatchdogConfig
+  patterns: CompiledForeignPatterns["patterns"]
+  lease: WatchdogLease
+  explore: ExploreGate
+  log?: (message: string, detail?: unknown) => void
+  now?: () => number
+  setTimer?: (callback: () => void, milliseconds: number) => ReturnType<typeof setTimeout>
+  clearTimer?: (timer: ReturnType<typeof setTimeout>) => void
+}
+
+type Trigger = ClaimedCadence | ClaimedIdle | ClaimedRevalidation
+
+export const DEFAULT_CIRCUIT_FAILURES = 3
+export const CIRCUIT_OPEN_MS = 60_000
+
+export class WatchdogRuntime {
+  readonly states = new Map<string, SessionState>()
+  readonly knownRoots = new Set<string>()
+  readonly childSessions = new Set<string>()
+  readonly tombstones = new Set<string>()
+  readonly compactionSkips = new CompactionSkipGuard()
+  readonly activeCriticSessions = new Set<string>()
+  readonly advisorySeen = new Map<string, Set<string>>()
+  private readonly deps: WatchdogRuntimeDeps
+  private readonly runner: CriticRunner
+  private rotation = 0
+  private disposed = false
+
+  constructor(deps: WatchdogRuntimeDeps) {
+    this.deps = deps
+    this.runner = new CriticRunner({
+      client: deps.client as never,
+      onChildCreated: (id) => {
+        this.activeCriticSessions.add(id)
+        this.childSessions.add(id)
+      },
+      onChildDisposed: (id, deleted) => {
+        this.activeCriticSessions.delete(id)
+        this.childSessions.delete(id)
+        if (!deleted) this.tombstones.add(id)
+      },
+      log: this.log.bind(this),
+    })
+  }
+
+  private log(message: string, detail?: unknown): void {
+    if (this.deps.log) this.deps.log(message, detail)
+    else void this.deps.client.app.log({ body: { service: "watchdog", level: "info", message, extra: detail === undefined ? undefined : { detail: String(detail) } } }).catch(() => {})
+  }
+
+  private now(): number {
+    return this.deps.now ? this.deps.now() : Date.now()
+  }
+
+  private setTimer(callback: () => void, milliseconds: number): ReturnType<typeof setTimeout> {
+    return this.deps.setTimer ? this.deps.setTimer(callback, milliseconds) : setTimeout(callback, milliseconds)
+  }
+
+  private clearTimer(timer: ReturnType<typeof setTimeout>): void {
+    if (this.deps.clearTimer) this.deps.clearTimer(timer)
+    else clearTimeout(timer)
+  }
+
+  stateFor(sessionID: string): SessionState {
+    const existing = this.states.get(sessionID)
+    if (existing) return existing
+    const state = createSessionState()
+    this.states.set(sessionID, state)
+    this.enforceRootLimit()
+    return state
+  }
+
+  get config(): WatchdogConfig {
+    return this.deps.config
+  }
+
+  private enforceRootLimit(): void {
+    const limit = 100
+    if (this.states.size <= limit) return
+    for (const [sessionID, state] of this.states) {
+      if (isProtected(state)) continue
+      this.states.delete(sessionID)
+      this.knownRoots.delete(sessionID)
+      if (this.states.size <= limit) return
+    }
+  }
+
+  async markRootIfUnparented(sessionID: string): Promise<boolean> {
+    if (this.knownRoots.has(sessionID)) return true
+    if (this.childSessions.has(sessionID)) return false
+    try {
+      const response = await this.deps.client.session.get({ path: { id: sessionID } })
+      const info = response.data as { parentID?: unknown } | undefined
+      if (typeof info?.parentID === "string") {
+        this.childSessions.add(sessionID)
+        return false
+      }
+      this.knownRoots.add(sessionID)
+      this.stateFor(sessionID)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async handleChatMessage(input: {
+    sessionID: string
+    agent?: string
+    model?: { providerID: string; modelID: string }
+    variant?: string
+    messageID?: string
+  }, output: { parts: Array<Record<string, unknown>> }): Promise<void> {
+    if (this.disposed) return
+    if (input.agent === WATCHDOG_AGENT_NAME) return
+    if (input.agent === "explore") {
+      this.deps.explore.markAdmitted(input.sessionID)
+      return
+    }
+    if (this.childSessions.has(input.sessionID)) return
+    if (!(await this.markRootIfUnparented(input.sessionID))) return
+
+    const state = this.stateFor(input.sessionID)
+    const classification = classifyUserMessage({ parts: output.parts as never }, this.deps.patterns)
+
+    if (classification.kind === "watchdog") {
+      applyWatchdogMessage(state)
+      return
+    }
+    if (classification.kind === "foreign") {
+      applyForeignContinuation(state, classification.patternID ?? "foreign")
+      if (state.inFlight?.trigger.kind === "idle") this.cancelInFlight(state, "foreign")
+      this.deps.explore.markEnded(input.sessionID)
+      return
+    }
+
+    const text = userMessageText({ parts: output.parts as never })
+    beginRealTurn(state, text, input.messageID)
+    state.continuationClaim = undefined
+    clearIdleAdmission(state)
+  }
+
+  recordTerminalTool(sessionID: string, part: Record<string, unknown>): void {
+    if (this.disposed) return
+    const state = this.states.get(sessionID)
+    if (!state) return
+    state.toolSeq += 1
+    const observation = terminalToolObservation(part as never, state.toolSeq)
+    if (!observation) return
+    const change = changeFingerprintFromTool(observation, part as never)
+    if (!recordTool(state, observation, change)) return
+
+    if (cadenceEligibleCount(state, this.deps.config.everyTools) >= this.deps.config.everyTools && !state.pendingTrigger) {
+      const claim = claimCadence(state, {
+        everyTools: this.deps.config.everyTools,
+        snapshotKey: this.currentSnapshotKey(state),
+        maxRecentTools: this.deps.config.maxRecentTools,
+      })
+      if (claim) {
+        state.pendingTrigger = claim
+        void this.requestAdmission()
+      }
+    }
+  }
+
+  recordAssistantText(sessionID: string, messageID: string, text: string): void {
+    const state = this.states.get(sessionID)
+    if (!state) return
+    state.latestAssistantText = text
+    state.latestAssistantMessageID = messageID
+  }
+
+  private currentSnapshotKey(state: SessionState): string {
+    return snapshotKey(state.latestAssistantMessageID, state.taskMessageID, state.toolSeq)
+  }
+
+  handleIdle(sessionID: string): void {
+    if (this.disposed) return
+    const state = this.states.get(sessionID)
+    if (!state || this.childSessions.has(sessionID)) return
+    if (state.continuationClaim) {
+      state.continuationClaim = undefined
+      return
+    }
+    if (!this.deps.config.onIdle) return
+    if (state.latestUserKind === "foreign") return
+    if (state.continuationClaim) return
+    if (state.circuitOpenUntil && this.now() < state.circuitOpenUntil) return
+
+    const generation = (state.idleAdmission?.generation ?? 0) + 1
+    clearIdleAdmission(state)
+    const epoch = state.turnEpoch
+    const timer = this.setTimer(() => {
+      void this.fireIdle(sessionID, generation)
+    }, this.deps.config.foreignContinuationSettleMs)
+    state.idleAdmission = { generation, epoch, timer }
+  }
+
+  private async fireIdle(sessionID: string, generation: number): Promise<void> {
+    const state = this.states.get(sessionID)
+    if (!state || this.disposed) return
+    const admission = state.idleAdmission
+    if (!admission || admission.generation !== generation) return
+    state.idleAdmission = undefined
+    if (state.turnEpoch !== admission.epoch) return
+    if (state.latestUserKind !== "real") return
+    if (!(await this.markRootIfUnparented(sessionID))) return
+    if (this.childSessions.has(sessionID)) return
+
+    const idleKey = snapshotKey(state.latestAssistantMessageID, this.currentSnapshotKey(state))
+    if (state.lastIdleCheckKey === idleKey) return
+    state.lastIdleCheckKey = idleKey
+    const claim = claimIdle(state, {
+      idleKey,
+      snapshotKey: this.currentSnapshotKey(state),
+      maxRecentTools: this.deps.config.maxRecentTools,
+    })
+    state.pendingIdle = claim
+    void this.requestAdmission()
+  }
+
+  async requestAdmission(): Promise<void> {
+    try {
+      await this.admit()
+    } catch (error) {
+      this.log("watchdog admission failed", error)
+    }
+  }
+
+  private async admit(): Promise<void> {
+    if (this.disposed) return
+    if (this.deps.explore.isActive()) return
+    const root = this.pickRoot()
+    if (!root) return
+    const state = this.states.get(root)!
+    if (state.inFlight) return
+    if (state.circuitOpenUntil && this.now() < state.circuitOpenUntil) return
+
+    const selection = selectAdmissibleTrigger<Trigger>({
+      idle: state.pendingIdle,
+      revalidation: state.pendingRevalidation,
+      cadence: state.pendingTrigger,
+    })
+    if (!selection) return
+
+    if (selection.kind === "idle" && state.latestUserKind !== "real") return
+
+    const lease = await this.deps.lease.tryAcquire()
+    if (!lease) return
+
+    const claim = selection.trigger
+    const trigger = claim.kind as PacketTrigger
+    const packet = materializePacket(
+      claim.evidence,
+      trigger,
+      { lastCheckToolSeq: state.lastCheckToolSeq, previousChangeHashes: state.previousChangeHashes },
+      claim.kind === "revalidation" ? claim.candidate : undefined,
+    )
+    const fitted = fitUserPrompt(packet)
+    if ("error" in fitted) {
+      this.log("watchdog packet could not be bounded", fitted.error)
+      this.deps.lease.release(lease)
+      this.clearPending(state, claim)
+      return
+    }
+
+    const abort = new AbortController()
+    const checkID = `check-${this.now()}-${Math.floor(Math.random() * 1e6)}`
+    state.inFlight = {
+      checkID,
+      epoch: state.turnEpoch,
+      trigger: claim,
+      settlement: "active",
+      abort,
+      lease,
+      slowToastShown: false,
+    }
+    if (claim.kind === "cadence") {
+      state.inFlight.slowToastTimer = this.setTimer(() => {
+        void this.showActivityToast(state, checkID)
+      }, CADENCE_ACTIVITY_TOAST_MS)
+    }
+
+    const model = parseModelRef(this.deps.config.model)
+    const result = await this.runner.run({
+      rootSessionID: root,
+      agent: WATCHDOG_AGENT_NAME,
+      model,
+      prompt: fitted.prompt,
+      ...(claim.kind === "cadence" || claim.kind === "idle"
+        ? {
+            minimalPrompt: (() => {
+              const minimal = fitUserPrompt(packet, { maxBytes: Math.min(6_000, 16_384) })
+              return "error" in minimal ? fitted.prompt : minimal.prompt
+            })(),
+          }
+        : {}),
+      timeoutMs: this.deps.config.timeoutMs,
+      signal: abort.signal,
+    })
+
+    this.finishAttempt(root, state, checkID, claim, result, packet)
+  }
+
+  private pickRoot(): string | undefined {
+    const roots: string[] = []
+    for (const [sessionID, state] of this.states) {
+      if (this.childSessions.has(sessionID)) continue
+      if (state.pendingIdle || state.pendingRevalidation || state.pendingTrigger) {
+        if (state.inFlight) continue
+        roots.push(sessionID)
+      }
+    }
+    if (roots.length === 0) return undefined
+    roots.sort()
+    const rotated = rotateRoots(roots, this.rotation)
+    if (rotated) this.rotation = rotated.nextCursor
+    return rotated?.root
+  }
+
+  private async showActivityToast(state: SessionState, checkID: string): Promise<void> {
+    if (!state.inFlight || state.inFlight.checkID !== checkID) return
+    if (state.inFlight.trigger.kind !== "cadence") return
+    if (state.turnEpoch !== state.inFlight.epoch) return
+    if (this.deps.explore.isActive()) return
+    state.inFlight.slowToastShown = true
+    try {
+      await this.deps.client.tui.showToast({
+        body: {
+          title: "Watchdog",
+          message: "Watchdog is reviewing recent progress in the background.",
+          variant: "info",
+          duration: 3000,
+        },
+      })
+    } catch (error) {
+      this.log("watchdog activity toast failed", error)
+    }
+  }
+
+  private clearPending(state: SessionState, claim: Trigger): void {
+    if (state.pendingIdle === claim) state.pendingIdle = undefined
+    if (state.pendingTrigger === claim) state.pendingTrigger = undefined
+    if (state.pendingRevalidation === claim) state.pendingRevalidation = undefined
+  }
+
+  private finishAttempt(
+    root: string,
+    state: SessionState,
+    checkID: string,
+    claim: Trigger,
+    result: Awaited<ReturnType<CriticRunner["run"]>>,
+    packet: WatchdogPacket,
+  ): void {
+    const won = settleInFlight(state, { checkID, outcome: "completed" })
+    if (state.inFlight?.slowToastTimer) this.clearTimer(state.inFlight.slowToastTimer)
+    const lease = state.inFlight?.lease
+    state.inFlight = undefined
+    this.clearPending(state, claim)
+    if (lease) this.deps.lease.release(lease)
+
+    if (won === "lost") {
+      void this.requestAdmission()
+      return
+    }
+
+    const completed = result.kind === "ok" || result.kind === "concern" || result.kind === "malformed"
+    settleClaim(state, claim, completed)
+
+    if (result.kind === "timeout" || result.kind === "error" || result.kind === "context_overflow" || result.kind === "cancelled") {
+      state.consecutiveFailures += 1
+      state.lastFailureAt = this.now()
+      if (state.consecutiveFailures >= DEFAULT_CIRCUIT_FAILURES) {
+        state.circuitOpenUntil = this.now() + CIRCUIT_OPEN_MS
+      }
+      void this.requestAdmission()
+      return
+    }
+    state.consecutiveFailures = 0
+
+    if (result.kind !== "concern") {
+      if (completed && claim.kind !== "revalidation" && state.latestUserKind === "real") this.maybeRequestIdleFollowUp(state)
+      void this.requestAdmission()
+      return
+    }
+
+    const concern = result.concern
+    const hash = concernIdentity(concern.category, concern.message)
+    const packetFingerprint = evidenceFingerprint(packet)
+
+    if (claim.epoch !== state.turnEpoch) {
+      if (claim.kind !== "revalidation" && !state.pendingRevalidation) {
+        const candidate = {
+          severity: concern.severity,
+          category: concern.category,
+          message: concern.message,
+          sourceEpoch: claim.epoch,
+          evidenceFingerprint: packetFingerprint,
+        }
+        const revalidation = claimRevalidation(state, {
+          candidate,
+          snapshotKey: this.currentSnapshotKey(state),
+          maxRecentTools: this.deps.config.maxRecentTools,
+        })
+        if (revalidation.revalidationKey !== state.lastRevalidationKey) {
+          state.lastRevalidationKey = revalidation.revalidationKey
+          state.pendingRevalidation = revalidation
+        }
+      }
+      void this.requestAdmission()
+      return
+    }
+
+    const decision = decideDelivery({
+      budget: state.deliveryBudget,
+      severity: concern.severity,
+      concernHash: hash,
+      deliveredHashes: new Set(state.deliveredConcernHashes.values()),
+      evidenceChanged: state.lastConcernEvidenceFingerprint !== packetFingerprint,
+      toolsSinceLastConcern: Math.max(0, state.toolSeq - state.lastConcernToolSeq),
+    })
+    if (!decision.deliver) {
+      void this.requestAdmission()
+      return
+    }
+
+    state.deliveryBudget = decision.nextBudget
+    state.deliveredConcernHashes.add(hash)
+    state.lastConcernToolSeq = state.toolSeq
+    state.lastConcernEvidenceFingerprint = packetFingerprint
+
+    if (state.latestUserKind === "foreign") {
+      this.retainAdvisory(state, concern, hash)
+      void this.requestAdmission()
+      return
+    }
+    if (state.latestUserKind !== "real") {
+      void this.requestAdmission()
+      return
+    }
+
+    if (claim.kind === "cadence" && this.deps.config.midRunDelivery) {
+      this.retainAdvisory(state, concern, hash)
+      void this.showConcernToast(state, concern, hash)
+      void this.requestAdmission()
+      return
+    }
+
+    void this.deliverIdleConcern(root, state, concern, hash)
+    void this.requestAdmission()
+  }
+
+  private maybeRequestIdleFollowUp(state: SessionState): void {
+    if (state.pendingIdle || state.pendingRevalidation || state.pendingTrigger) return
+  }
+
+  private retainAdvisory(state: SessionState, concern: AcceptedConcern, findingHash: string): void {
+    state.activeAdvisory = {
+      ...concern,
+      installedAtEpoch: state.turnEpoch,
+      concernToast: undefined,
+      installedPartID: undefined,
+      installedText: undefined,
+    }
+    state.activeAdvisory.findingHash = findingHash
+  }
+
+  private async showConcernToast(state: SessionState, concern: AcceptedConcern, findingHash: string): Promise<void> {
+    const advisory = state.activeAdvisory
+    if (!advisory) return
+    if (!shouldAttemptToast(advisory.concernToast)) return
+    advisory.concernToast = { status: "pending", attempts: (advisory.concernToast?.attempts ?? 0) + 1 > 1 ? 2 : 1 }
+    try {
+      await this.deps.client.tui.showToast({
+        body: {
+          title: "Watchdog",
+          message: concern.message,
+          variant: concern.severity === "critical" ? "error" : "warning",
+          duration: 6000,
+        },
+      })
+      advisory.concernToast = toastStateAfterAttempt(advisory.concernToast, true)
+    } catch (error) {
+      advisory.concernToast = toastStateAfterAttempt(advisory.concernToast, false)
+      this.log("watchdog concern toast failed", error)
+    }
+    void findingHash
+  }
+
+  private async deliverIdleConcern(
+    root: string,
+    state: SessionState,
+    concern: AcceptedConcern,
+    findingHash: string,
+  ): Promise<void> {
+    if (state.continuationClaim) return
+    const epoch = state.turnEpoch
+    state.continuationClaim = { epoch, findingHash }
+    const latest = await this.latestRealUser(root)
+    if (!latest || state.turnEpoch !== epoch || state.latestUserKind !== "real") {
+      state.continuationClaim = undefined
+      return
+    }
+    const body = buildIdlePromptBody({
+      message: concern.message,
+      ...(typeof latest.agent === "string" ? { agent: latest.agent } : {}),
+      ...(latest.model ? { model: latest.model as { providerID: string; modelID: string } } : {}),
+      findingHash,
+      turnEpoch: epoch,
+    })
+    if (!state.activeAdvisory) this.retainAdvisory(state, concern, findingHash)
+    void this.showConcernToast(state, concern, findingHash)
+    try {
+      await this.deps.client.session.prompt({ path: { id: root }, body: { ...body } })
+    } catch (error) {
+      this.log("watchdog idle follow-up failed", error)
+      state.continuationClaim = undefined
+    }
+  }
+
+  private async latestRealUser(
+    sessionID: string,
+  ): Promise<{ agent?: unknown; model?: unknown } | undefined> {
+    try {
+      const response = await this.deps.client.session.messages({ path: { id: sessionID }, query: { limit: 30 } })
+      const messages = response.data ?? []
+      const user = messages.filter((message) => message.info?.role === "user").at(-1)
+      if (!user) return undefined
+      return {
+        agent: user.info?.agent,
+        model: user.info?.model,
+      }
+    } catch {
+      return undefined
+    }
+  }
+
+  async transformMessages(output: { messages: RequestMessage[] }): Promise<void> {
+    const sessionID = sessionIDFromMessages(output.messages)
+    if (!sessionID || !this.knownRoots.has(sessionID)) return
+    if (this.compactionSkips.consume(sessionID)) return
+    const state = this.states.get(sessionID)
+    const advisory = state?.activeAdvisory
+    if (!state || !advisory) return
+    if (advisory.installedAtEpoch !== state.turnEpoch) return
+    if (!this.deps.config.midRunDelivery) return
+    let seen = this.advisorySeen.get(sessionID)
+    if (!seen) {
+      seen = new Set<string>()
+      this.advisorySeen.set(sessionID, seen)
+    }
+    const installState = {
+      ...(advisory.installedPartID ? { installedPartID: advisory.installedPartID } : {}),
+      ...(advisory.installedText ? { installedText: advisory.installedText } : {}),
+      seenParts: seen,
+    }
+    const installed = installRunAdvisory(output.messages, runAdvisoryFor(advisory.message), installState)
+    if (installed) {
+      advisory.installedPartID = installed.partID
+      advisory.installedText = installed.text
+    }
+  }
+
+  handleCompacting(sessionID: string): void {
+    this.compactionSkips.arm(sessionID)
+  }
+
+  observeSessionCreated(info: { id?: unknown; parentID?: unknown; agent?: unknown }): void {
+    if (typeof info.id !== "string") return
+    if (typeof info.parentID === "string") {
+      this.childSessions.add(info.id)
+      return
+    }
+    this.knownRoots.add(info.id)
+    this.stateFor(info.id)
+  }
+
+  observeSessionDeleted(sessionID: string): void {
+    this.childSessions.delete(sessionID)
+    this.deps.explore.markEnded(sessionID)
+    this.compactionSkips.clear(sessionID)
+    this.advisorySeen.delete(sessionID)
+    const state = this.states.get(sessionID)
+    if (state?.inFlight) this.cancelInFlight(state, "deleted")
+    this.states.delete(sessionID)
+    this.knownRoots.delete(sessionID)
+  }
+
+  cancelInFlight(state: SessionState, reason: string): void {
+    const inFlight = state.inFlight
+    if (!inFlight) return
+    if (settleInFlight(state, { checkID: inFlight.checkID, outcome: "cancelling" }) !== "won") return
+    if (inFlight.slowToastTimer) this.clearTimer(inFlight.slowToastTimer)
+    inFlight.abort.abort()
+    if (inFlight.lease) this.deps.lease.release(inFlight.lease)
+    this.clearPending(state, inFlight.trigger)
+    deferClaim(state, inFlight.trigger)
+    state.inFlight = undefined
+    if (cadenceEligibleCount(state, this.deps.config.everyTools) >= this.deps.config.everyTools) {
+      const claim = claimCadence(state, {
+        everyTools: this.deps.config.everyTools,
+        snapshotKey: this.currentSnapshotKey(state),
+        maxRecentTools: this.deps.config.maxRecentTools,
+      })
+      if (claim) state.pendingTrigger = claim
+    }
+    this.log(`watchdog check cancelled (${reason})`)
+  }
+
+  async preemptForExplore(): Promise<void> {
+    if (!this.deps.explore.isActive()) return
+    for (const state of this.states.values()) {
+      if (state.inFlight) this.cancelInFlight(state, "explore")
+    }
+  }
+
+  get exploreGate(): ExploreGate {
+    return this.deps.explore
+  }
+
+  async dispose(): Promise<void> {
+    this.disposed = true
+    for (const state of this.states.values()) {
+      clearIdleAdmission(state)
+      if (state.inFlight) {
+        if (state.inFlight.slowToastTimer) this.clearTimer(state.inFlight.slowToastTimer)
+        state.inFlight.abort.abort()
+        if (state.inFlight.lease) this.deps.lease.release(state.inFlight.lease)
+        state.inFlight = undefined
+      }
+    }
+    this.compactionSkips.clearAll()
+    this.states.clear()
+    this.knownRoots.clear()
+    this.childSessions.clear()
+  }
+}
+
+export function watchdogAgentConfig(config: WatchdogConfig): Record<string, unknown> {
+  return buildCriticAgent(config)
+}
+
+export function createWatchdogHooks(runtime: WatchdogRuntime): Hooks {
+  return {
+    config: async (input) => {
+      input.agent = { ...(input.agent ?? {}), [WATCHDOG_AGENT_NAME]: buildCriticAgent(runtime.config) }
+    },
+    "chat.params": async (input, output) => {
+      if (input.agent !== WATCHDOG_AGENT_NAME) return
+      if (!runtime.activeCriticSessions.has(input.sessionID)) return
+      output.maxOutputTokens = 256
+    },
+    "chat.message": async (input, output) => {
+      await runtime.handleChatMessage(input, { parts: output.parts as unknown as Array<Record<string, unknown>> })
+    },
+    "tool.execute.before": async (input, output) => {
+      if (input.tool !== "task") return
+      const args = output.args as { subagent_type?: unknown } | undefined
+      if (args?.subagent_type !== "explore") return
+      runtime.exploreGate.markAdmitted(`pending:${input.callID}`)
+      await runtime.preemptForExplore()
+    },
+    "tool.execute.after": async (input) => {
+      if (runtime.activeCriticSessions.has(input.sessionID)) return
+      if (input.tool !== "task") return
+      const args = input.args as { subagent_type?: unknown; background?: unknown } | undefined
+      if (args?.subagent_type === "explore" && args.background !== true) {
+        runtime.exploreGate.markEnded(`pending:${input.callID}`)
+      }
+    },
+    "experimental.session.compacting": async (input) => {
+      runtime.handleCompacting(input.sessionID)
+    },
+    "experimental.chat.messages.transform": async (_input, output) => {
+      await runtime.transformMessages({ messages: output.messages as unknown as RequestMessage[] })
+    },
+    event: async ({ event }) => {
+      const sessionID = eventSessionID(event as never)
+      if (event.type === "session.created") {
+        runtime.observeSessionCreated((event.properties as { info?: Record<string, unknown> }).info ?? {})
+        return
+      }
+      if (event.type === "session.deleted") {
+        const info = (event.properties as { info?: { id?: unknown } }).info
+        if (typeof info?.id === "string") runtime.observeSessionDeleted(info.id)
+        return
+      }
+      if (event.type === "session.idle") {
+        if (sessionID) {
+          runtime.exploreGate.markEnded(sessionID)
+          runtime.handleIdle(sessionID)
+        }
+        return
+      }
+      if (event.type === "session.status") {
+        const status = (event.properties as { status?: { type?: unknown } }).status
+        if (status?.type === "idle" && sessionID) runtime.handleIdle(sessionID)
+        return
+      }
+      if (event.type === "todo.updated") {
+        if (!sessionID) return
+        const state = runtime.states.get(sessionID)
+        if (!state) return
+        const todos = (event.properties as { todos?: unknown }).todos
+        state.todos = Array.isArray(todos)
+          ? todos
+              .filter(
+                (todo): todo is { content: string; status: string; priority: string } =>
+                  typeof todo === "object" &&
+                  todo !== null &&
+                  typeof (todo as Record<string, unknown>).content === "string" &&
+                  typeof (todo as Record<string, unknown>).status === "string" &&
+                  typeof (todo as Record<string, unknown>).priority === "string",
+              )
+              .map((todo) => ({ content: todo.content, status: todo.status, priority: todo.priority }))
+          : []
+        return
+      }
+      if (event.type === "message.part.updated") {
+        const part = (event.properties as { part?: Record<string, unknown> }).part
+        if (!part) return
+        const partSessionID = typeof part.sessionID === "string" ? part.sessionID : sessionID
+        if (!partSessionID) return
+        if (part.type === "tool") {
+          runtime.recordTerminalTool(partSessionID, part)
+          return
+        }
+        if (part.type === "text") {
+          const text = assistantTextFromPart(part)
+          const messageID = typeof part.messageID === "string" ? part.messageID : undefined
+          if (text && messageID) runtime.recordAssistantText(partSessionID, messageID, text)
+        }
+      }
+    },
+    dispose: async () => {
+      await runtime.dispose()
+    },
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "enabled": false,
+  "model": "omlx/Qwen3.5-4B-oQ4e-mtp",
+  "everyTools": 10,
+  "onIdle": true,
+  "maxRecentTools": 12,
+  "timeoutMs": 10000,
+  "foreignContinuationSettleMs": 500,
+  "foreignContinuationPatterns": {
+    "mode": "extend",
+    "patterns": []
+  },
+  "debug": false
+}

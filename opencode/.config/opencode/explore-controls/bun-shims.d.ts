@@ -34,7 +34,7 @@ declare module "bun:test" {
   export function afterEach(callback: () => void | Promise<void>): void
   export function beforeAll(callback: () => void | Promise<void>, timeout?: number): void
   export function describe(name: string, callback: () => void): void
-  export function expect(value: unknown): any
+  export function expect(value: unknown, message?: string): any
   export function test(name: string, callback: () => void | Promise<void>, timeout?: number): void
   export namespace test {
     function skip(name: string, callback: () => void | Promise<void>, timeout?: number): void

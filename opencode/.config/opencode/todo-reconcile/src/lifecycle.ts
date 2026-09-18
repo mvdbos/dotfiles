@@ -57,6 +57,8 @@ export type LifecycleDeps = {
   readTodos(sessionID: string): Promise<ReadTodosResult>
   /** Persisting is supplied by the plugin through `session.prompt(noReply)`. */
   persistSnapshot?(input: PersistSnapshotInput): Promise<PersistSnapshotResult>
+  /** Shared classifier input: plugin-generated user turns are not projection targets. */
+  isEligibleUserMessage?(message: MessageWithParts): boolean
   log?(message: string, detail?: unknown): void
 }
 
@@ -151,11 +153,15 @@ function hasNewerUnsuccessfulCompaction(messages: readonly MessageWithParts[], b
   return !summary || !!summary.info.error || !summary.info.finish
 }
 
-/** Select the chronologically newest user message, not the retained-tail slot. */
-export function lastUserMessage(messages: readonly MessageWithParts[]): MessageWithParts | undefined {
+/** Select the chronologically newest eligible user message, not the retained-tail slot. */
+export function lastUserMessage(
+  messages: readonly MessageWithParts[],
+  isEligible: (message: MessageWithParts) => boolean = () => true,
+): MessageWithParts | undefined {
   let best: MessageWithParts | undefined
   for (const message of messages) {
     if (message.info.role !== "user") continue
+    if (!isEligible(message)) continue
     if (!best || isAfter(message.info, best.info)) best = message
   }
   return best
@@ -478,7 +484,7 @@ export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHook
   const transform = async (_input: {}, output: TransformOutput): Promise<void> => {
     try {
     const messages = output.messages as MessageWithParts[]
-      const target = lastUserMessage(messages)
+      const target = lastUserMessage(messages, deps.isEligibleUserMessage)
 
       // A verified summarizer payload has no completed compaction pair. Strip
       // persisted plugin parts independently of restoration eligibility.
