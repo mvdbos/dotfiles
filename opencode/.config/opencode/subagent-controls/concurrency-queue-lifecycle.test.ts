@@ -3,12 +3,19 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import {
-  ExploreAdmissionCancelledError,
-  ExploreAdmissionQueue,
-  ExploreAdmissionTimeoutError,
-  EXPLORE_ADMISSION_TIMEOUT_MS,
-  type ExploreQueueOptions,
+  SubagentAdmissionCancelledError as ExploreAdmissionCancelledError,
+  SubagentAdmissionQueue,
+  SubagentAdmissionTimeoutError as ExploreAdmissionTimeoutError,
+  type SubagentQueueOptions,
 } from "./concurrency-queue"
+
+type ExploreQueueOptions = Omit<SubagentQueueOptions, "resource" | "timeoutMs"> & { timeoutMs?: number }
+
+class ExploreAdmissionQueue extends SubagentAdmissionQueue {
+  constructor(options: ExploreQueueOptions = {}) {
+    super({ resource: "explore", timeoutMs: 100, ...options })
+  }
+}
 
 const queues: ExploreAdmissionQueue[] = []
 const directories: string[] = []
@@ -46,10 +53,6 @@ async function waitUntil(predicate: () => boolean) {
 }
 
 describe("ExploreAdmissionQueue", () => {
-  test("keeps the production timeout at 60 seconds", () => {
-    expect(EXPLORE_ADMISSION_TIMEOUT_MS).toBe(60_000)
-  })
-
   test("admits one request and keeps the owner until release", async () => {
     const queue = makeQueue()
     const lease = await queue.acquire()

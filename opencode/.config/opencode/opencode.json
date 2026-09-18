@@ -253,7 +253,8 @@
         "skill": "allow",
         "task": {
           "*": "deny",
-          "explore": "allow"
+          "explore": "allow",
+          "general": "allow"
         }
       }
     },
@@ -266,7 +267,8 @@
         "skill": "allow",
         "task": {
           "*": "deny",
-          "explore": "allow"
+          "explore": "allow",
+          "general": "allow"
         }
       }
     },

@@ -2,22 +2,22 @@
 
 import { afterEach, describe, expect, test } from "bun:test"
 import { ExploreContextBudgetPlugin } from "../plugins/explore-context-budget"
-import { ExploreConcurrencyPlugin } from "../plugins/explore-concurrency"
+import { SubagentConcurrencyPlugin } from "../plugins/subagent-concurrency"
 import { RtkOpenCodePlugin } from "../plugins/rtk"
 
-type HookSet = Awaited<ReturnType<typeof ExploreConcurrencyPlugin>>
+type HookSet = Awaited<ReturnType<typeof SubagentConcurrencyPlugin>>
 type ContextHooks = Awaited<ReturnType<typeof ExploreContextBudgetPlugin>>
 
-const originalPath = process.env.OPENCODE_EXPLORE_QUEUE_PATH
+const originalPath = process.env.OPENCODE_SUBAGENT_QUEUE_PATH
 
 afterEach(() => {
-  if (originalPath === undefined) delete process.env.OPENCODE_EXPLORE_QUEUE_PATH
-  else process.env.OPENCODE_EXPLORE_QUEUE_PATH = originalPath
+  if (originalPath === undefined) delete process.env.OPENCODE_SUBAGENT_QUEUE_PATH
+  else process.env.OPENCODE_SUBAGENT_QUEUE_PATH = originalPath
 })
 
 async function load(order: "concurrency-first" | "context-first") {
-  process.env.OPENCODE_EXPLORE_QUEUE_PATH = `/tmp/opencode-explore-combined-${crypto.randomUUID()}.sqlite`
-  const concurrency = await ExploreConcurrencyPlugin({ client: {} } as never)
+  process.env.OPENCODE_SUBAGENT_QUEUE_PATH = `/tmp/opencode-subagent-combined-${crypto.randomUUID()}.sqlite`
+  const concurrency = await SubagentConcurrencyPlugin({ client: {} } as never)
   const context = await ExploreContextBudgetPlugin({} as never)
   return order === "concurrency-first" ? [concurrency, context] : [context, concurrency]
 }
@@ -63,7 +63,7 @@ describe("combined explore plugins", () => {
       }, { system: firstSystem })
       expect(firstSystem.join("\n")).toContain("EXPLORATION CONTEXT BUDGET REACHED")
 
-      const secondTask = ExploreConcurrencyPlugin({ client: {} } as never)
+      const secondTask = SubagentConcurrencyPlugin({ client: {} } as never)
       let secondStarted = false
       const waiting = secondTask.then(async (plugin) => {
         await plugin["tool.execute.before"]?.(
@@ -102,7 +102,7 @@ describe("combined explore plugins", () => {
     const shell = (() => ({ quiet: () => Promise.reject(new Error("rtk not installed in test")) })) as never
     const rtk = await RtkOpenCodePlugin({ $: shell } as never)
     expect(rtk["tool.execute.before"]).toBeUndefined()
-    await ExploreConcurrencyPlugin({ client: {} } as never)
+    await SubagentConcurrencyPlugin({ client: {} } as never)
     await ExploreContextBudgetPlugin({} as never)
   })
 })

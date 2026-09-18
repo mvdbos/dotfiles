@@ -1,24 +1,25 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import {
-  ExploreAdmissionCancelledError,
-  ExploreAdmissionQueue,
-  ExploreAdmissionTimeoutError,
-  type ExploreLease,
-} from "../explore-controls/concurrency-queue"
+  SubagentAdmissionCancelledError,
+  SubagentAdmissionQueue,
+  SubagentAdmissionTimeoutError,
+  type SubagentLease,
+} from "../subagent-controls/concurrency-queue"
+import { admissionPolicy, controlledSubagent } from "../subagent-controls/policy"
 
 const TASK_TOOL = "task"
-const EXPLORE_AGENT = "explore"
 
 type RecordValue = Record<string, unknown>
 
 type PendingAdmission = {
   key: string
+  agent: string
   parentSessionID: string
   controller: AbortController
 }
 
 type Admission = PendingAdmission & {
-  lease: ExploreLease
+  lease: SubagentLease
   childSessionID?: string
   background: boolean
 }
@@ -39,8 +40,9 @@ function eventProperties(input: unknown) {
   return record(record(input)?.properties)
 }
 
-function isExploreArgs(value: unknown) {
-  return record(value)?.subagent_type === EXPLORE_AGENT
+function controlledAgentFromArgs(value: unknown) {
+  const agent = record(value)?.subagent_type
+  return typeof agent === "string" && controlledSubagent(agent) ? agent : undefined
 }
 
 function sessionIDFromEvent(properties: RecordValue | undefined) {
@@ -80,18 +82,29 @@ function taskIDFromArgs(value: unknown) {
   return typeof taskID === "string" && taskID ? taskID : undefined
 }
 
-export const ExploreConcurrencyPlugin: Plugin = async ({ client }) => {
-  const queue = new ExploreAdmissionQueue()
+export const SubagentConcurrencyPlugin: Plugin = async ({ client }) => {
+  const queues = new Map<string, SubagentAdmissionQueue>()
   const pending = new Map<string, PendingAdmission>()
   const admitted = new Map<string, Admission>()
   const children = new Map<string, Admission>()
   const direct = new Map<string, Admission>()
 
+  const queueFor = (agent: string) => {
+    const existing = queues.get(agent)
+    if (existing) return existing
+    const policy = admissionPolicy(agent)
+    if (!policy) throw new Error(`No admission policy configured for ${agent}`)
+    const queue = new SubagentAdmissionQueue({ resource: agent, ...policy })
+    queues.set(agent, queue)
+    return queue
+  }
+
   const release = (admission: Admission) => {
     pending.delete(admission.key)
     admitted.delete(admission.key)
-    if (admission.childSessionID && children.get(admission.childSessionID) === admission)
+    if (admission.childSessionID && children.get(admission.childSessionID) === admission) {
       children.delete(admission.childSessionID)
+    }
     if (direct.get(admission.parentSessionID) === admission) direct.delete(admission.parentSessionID)
     admission.lease.release()
   }
@@ -109,20 +122,21 @@ export const ExploreConcurrencyPlugin: Plugin = async ({ client }) => {
     return true
   }
 
-  const findParentAdmission = (parentSessionID: string) => {
-    for (const item of [...admitted.values(), ...pending.values()]) {
-      if (item.parentSessionID === parentSessionID) return item
-    }
-    return undefined
+  const findParentAdmission = (parentSessionID: string, agent?: string) => {
+    const matches = [...admitted.values(), ...pending.values()].filter(
+      (item) => item.parentSessionID === parentSessionID && (!agent || item.agent === agent),
+    )
+    return matches.length === 1 ? matches[0] : undefined
   }
 
-  const linkExistingChild = async (sessionID: string) => {
+  const linkExistingChild = async (sessionID: string, agent: string) => {
     try {
       const response = await client.session.get({ path: { id: sessionID } })
       const info = record((response as { data?: unknown }).data)
       const parentID = typeof info?.parentID === "string" ? info.parentID : undefined
-      if (!parentID) return false
-      const admission = findParentAdmission(parentID)
+      const childAgent = typeof info?.agent === "string" ? info.agent : agent
+      if (!parentID || childAgent !== agent) return false
+      const admission = findParentAdmission(parentID, agent)
       if (!admission || !isAdmission(admission)) return false
       linkChild(admission, sessionID)
       return true
@@ -131,19 +145,19 @@ export const ExploreConcurrencyPlugin: Plugin = async ({ client }) => {
     }
   }
 
-  const acquire = async (sessionID: string, callID: string) => {
+  const acquire = async (sessionID: string, callID: string, agent: string) => {
     const key = admissionKey(sessionID, callID)
     const existing = admitted.get(key) ?? pending.get(key)
     if (existing) return isAdmission(existing) ? existing : undefined
 
     const controller = new AbortController()
-    const item: PendingAdmission = { key, parentSessionID: sessionID, controller }
+    const item: PendingAdmission = { key, agent, parentSessionID: sessionID, controller }
     pending.set(key, item)
     try {
-      const lease = await queue.acquire(controller.signal)
+      const lease = await queueFor(agent).acquire(controller.signal)
       if (controller.signal.aborted) {
         lease.release()
-        throw new ExploreAdmissionCancelledError()
+        throw new SubagentAdmissionCancelledError(agent)
       }
       const admission: Admission = { ...item, lease, background: false }
       pending.delete(key)
@@ -151,15 +165,20 @@ export const ExploreConcurrencyPlugin: Plugin = async ({ client }) => {
       return admission
     } catch (error) {
       pending.delete(key)
-      if (error instanceof ExploreAdmissionTimeoutError || error instanceof ExploreAdmissionCancelledError) throw error
+      if (error instanceof SubagentAdmissionTimeoutError || error instanceof SubagentAdmissionCancelledError) throw error
       throw error
     }
   }
 
   return {
-    "tool.execute.before": async (input: { tool: string; sessionID: string; callID: string }, output: { args: unknown }) => {
-      if (input.tool !== TASK_TOOL || !isExploreArgs(output.args)) return
-      const admission = await acquire(input.sessionID, input.callID)
+    "tool.execute.before": async (
+      input: { tool: string; sessionID: string; callID: string },
+      output: { args: unknown },
+    ) => {
+      if (input.tool !== TASK_TOOL) return
+      const agent = controlledAgentFromArgs(output.args)
+      if (!agent) return
+      const admission = await acquire(input.sessionID, input.callID, agent)
       if (admission) admission.background = record(output.args)?.background === true
       const taskID = taskIDFromArgs(output.args)
       if (admission && taskID) linkChild(admission, taskID)
@@ -183,10 +202,10 @@ export const ExploreConcurrencyPlugin: Plugin = async ({ client }) => {
       output: { message: { agent?: string } },
     ) => {
       const agent = input.agent ?? output.message.agent
-      if (agent !== EXPLORE_AGENT) return
-      if (children.has(input.sessionID) || (await linkExistingChild(input.sessionID))) return
+      if (!agent || !controlledSubagent(agent)) return
+      if (children.has(input.sessionID) || (await linkExistingChild(input.sessionID, agent))) return
 
-      const admission = await acquire(input.sessionID, `direct:${input.sessionID}`)
+      const admission = await acquire(input.sessionID, `direct:${input.sessionID}`, agent)
       if (!admission) return
       direct.set(input.sessionID, admission)
     },
@@ -196,8 +215,8 @@ export const ExploreConcurrencyPlugin: Plugin = async ({ client }) => {
       if (event.type === "session.created") {
         const child = childInfo(properties)
         if (!child || !child.parentID) return
-        if (child.agent && child.agent !== EXPLORE_AGENT) return
-        const admission = findParentAdmission(child.parentID)
+        if (child.agent && !controlledSubagent(child.agent)) return
+        const admission = findParentAdmission(child.parentID, child.agent)
         if (admission && isAdmission(admission)) linkChild(admission, child.id)
         return
       }
@@ -253,7 +272,7 @@ export const ExploreConcurrencyPlugin: Plugin = async ({ client }) => {
       for (const item of pending.values()) item.controller.abort()
       await Promise.resolve()
       for (const admission of admitted.values()) release(admission)
-      queue.close()
+      for (const queue of queues.values()) queue.close()
     },
   }
 }

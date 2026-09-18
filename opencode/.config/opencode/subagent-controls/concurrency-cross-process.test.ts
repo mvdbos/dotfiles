@@ -1,4 +1,4 @@
-/// <reference path="./bun-shims.d.ts" />
+/// <reference path="../explore-controls/bun-shims.d.ts" />
 
 import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
@@ -26,8 +26,8 @@ function queuePath(prefix: string) {
   return join(directory, "queue.sqlite")
 }
 
-function spawnWorker(path: string, timeoutMs: number, holdMs: number) {
-  const worker = Bun.spawn(["bun", "run", `${import.meta.dir}/concurrency-worker.ts`, path, String(timeoutMs), String(holdMs)], {
+function spawnWorker(path: string, timeoutMs: number, holdMs: number, resource = "explore") {
+  const worker = Bun.spawn(["bun", "run", `${import.meta.dir}/concurrency-worker.ts`, path, resource, String(timeoutMs), String(holdMs)], {
     stdout: "pipe",
     stderr: "pipe",
   })
@@ -49,7 +49,7 @@ async function firstLine(worker: (typeof workers)[number]) {
   throw new Error(`worker exited without a status: ${output}`)
 }
 
-describe("ExploreAdmissionQueue cross-process behavior", () => {
+describe("SubagentAdmissionQueue cross-process behavior", () => {
   test("admits one worker and makes a second worker wait", async () => {
     const path = queuePath("opencode-explore-cross-process-")
     const owner = spawnWorker(path, 500, 180)

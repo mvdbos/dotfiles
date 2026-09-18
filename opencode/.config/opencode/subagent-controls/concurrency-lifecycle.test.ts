@@ -1,27 +1,27 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import {
-  ExploreAdmissionCancelledError,
-  ExploreAdmissionQueue,
-  ExploreAdmissionTimeoutError,
+  SubagentAdmissionCancelledError,
+  SubagentAdmissionQueue,
+  SubagentAdmissionTimeoutError,
 } from "./concurrency-queue"
-import { ExploreConcurrencyPlugin } from "../plugins/explore-concurrency"
+import { SubagentConcurrencyPlugin } from "../plugins/subagent-concurrency"
 
-const originalPath = process.env.OPENCODE_EXPLORE_QUEUE_PATH
+const originalPath = process.env.OPENCODE_SUBAGENT_QUEUE_PATH
 let currentPath: string | undefined
 
 afterEach(() => {
-  if (originalPath === undefined) delete process.env.OPENCODE_EXPLORE_QUEUE_PATH
-  else process.env.OPENCODE_EXPLORE_QUEUE_PATH = originalPath
+  if (originalPath === undefined) delete process.env.OPENCODE_SUBAGENT_QUEUE_PATH
+  else process.env.OPENCODE_SUBAGENT_QUEUE_PATH = originalPath
   currentPath = undefined
 })
 
 async function hooks() {
-  currentPath ??= `/tmp/opencode-explore-plugin-${crypto.randomUUID()}.sqlite`
-  process.env.OPENCODE_EXPLORE_QUEUE_PATH = currentPath
-  return ExploreConcurrencyPlugin({ client: {} } as never)
+  currentPath ??= `/tmp/opencode-subagent-plugin-${crypto.randomUUID()}.sqlite`
+  process.env.OPENCODE_SUBAGENT_QUEUE_PATH = currentPath
+  return SubagentConcurrencyPlugin({ client: {} } as never)
 }
 
-async function beforeTask(plugin: Awaited<ReturnType<typeof ExploreConcurrencyPlugin>>, sessionID: string, callID: string, args = {}) {
+async function beforeTask(plugin: Awaited<ReturnType<typeof SubagentConcurrencyPlugin>>, sessionID: string, callID: string, args = {}) {
   await plugin["tool.execute.before"]?.(
     { tool: "task", sessionID, callID },
     { args: { subagent_type: "explore", ...args } },
@@ -29,7 +29,7 @@ async function beforeTask(plugin: Awaited<ReturnType<typeof ExploreConcurrencyPl
 }
 
 async function afterTask(
-  plugin: Awaited<ReturnType<typeof ExploreConcurrencyPlugin>>,
+  plugin: Awaited<ReturnType<typeof SubagentConcurrencyPlugin>>,
   sessionID: string,
   callID: string,
   metadata: Record<string, unknown>,
@@ -40,13 +40,14 @@ async function afterTask(
   )
 }
 
-function childIdle(plugin: Awaited<ReturnType<typeof ExploreConcurrencyPlugin>>, sessionID: string) {
+function childIdle(plugin: Awaited<ReturnType<typeof SubagentConcurrencyPlugin>>, sessionID: string) {
   return plugin.event?.({ event: { type: "session.idle", properties: { sessionID } } } as never)
 }
 
 async function slotAvailable() {
-  const observer = new ExploreAdmissionQueue({
+  const observer = new SubagentAdmissionQueue({
     path: currentPath,
+    resource: "explore",
     timeoutMs: 30,
     pollMs: 2,
     process: { pid: process.pid + 1, start: "observer" },
@@ -57,18 +58,18 @@ async function slotAvailable() {
     lease.release()
     return true
   } catch (error) {
-    if (error instanceof ExploreAdmissionTimeoutError) return false
+    if (error instanceof SubagentAdmissionTimeoutError) return false
     throw error
   } finally {
     observer.close()
   }
 }
 
-async function dispose(plugin: Awaited<ReturnType<typeof ExploreConcurrencyPlugin>>) {
+async function dispose(plugin: Awaited<ReturnType<typeof SubagentConcurrencyPlugin>>) {
   await (plugin as typeof plugin & { dispose?: () => Promise<void> }).dispose?.()
 }
 
-describe("ExploreConcurrencyPlugin", () => {
+describe("SubagentConcurrencyPlugin lifecycle", () => {
   test("guards only explore Task calls and works without the context plugin", async () => {
     const plugin = await hooks()
     let ordinaryCompleted = false
@@ -175,7 +176,7 @@ describe("ExploreConcurrencyPlugin", () => {
     await Bun.sleep(10)
     await second.event?.({ event: { type: "session.deleted", properties: { info: { id: "parent-b" } } } } as never)
 
-    await expect(waiting).rejects.toBeInstanceOf(ExploreAdmissionCancelledError)
+    await expect(waiting).rejects.toBeInstanceOf(SubagentAdmissionCancelledError)
     await afterTask(first, "parent-a", "call-a", { sessionId: "child-a" })
   })
 
