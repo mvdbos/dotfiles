@@ -116,18 +116,28 @@ The clean upstream addition would be `session.steer({ sessionID, parts, source, 
 
 No researched OpenCode plugin already combines bounded recent trajectory, conservative single-concern output, every-N significant tools, prefix-cache-safe feedback, and root-only idle review.
 
+### Installed goal-plugin coexistence
+
+`@prevalentware/opencode-goal-plugin@0.1.49` is co-resident through `opencode.json` (server) and `tui.json` (TUI). On OpenCode 1.18.31 a fresh server exposes `/goal`, `/pause_goal`, `/resume_goal`, and nine goal tools; reported [issue #54](https://github.com/prevalentWare/opencode-goal-plugin/issues/54) does not reproduce in this installation.
+
+With defaults, an active goal auto-continues on `session.status: idle` or `session.idle`, defers while parent-linked task children are active, waits at least 3 seconds between continuations, stops after 25 auto turns, and treats a task as blocking for at most 900 seconds. Plan-mode agents are suppressed. No-progress accounting applies only to reserved continuation attempts, so ordinary human turns do not trigger that stop valve.
+
+The compatibility hazard is provenance. Installed source `dist/server.js` lines 1541-1548 sends a continuation with `client.session.promptAsync({ body: { agent?, parts: [{ type: "text", text: prompt }] } })`: no metadata, synthetic flag, or marker. Active continuation text starts `Continue working toward the active session goal.`; limit text starts `The active session goal has reached a safety limit.`. Both are ordinary root user messages. Its idle event handler is detached and performs asynchronous reads before submission, so plugin load order or a fixed delay cannot prove which idle-driven prompt wins.
+
+The goal plugin's `TaskTracker` also treats every `session.created` carrying `parentID` as blocking, without agent filtering. A parent-linked `watchdog-critic` therefore defers goal continuation until child idle/deletion in the normal case; missed lifecycle reconciliation can hold until the configured 900-second maximum. Root assistant usage after a watchdog advisory counts against the active goal's token budget; critic-child usage does not, because accounting is session-scoped.
+
 ## 3. Architecture
 
 ### Components
 
 1. **Plugin adapter:** registers hooks, configures the hidden critic agent, isolates exceptions, and owns lifecycle cleanup.
-2. **Session registry:** caches root/child classification and stores bounded per-root state.
+2. **Session registry:** caches root/child and real/watchdog/foreign-user classification and stores bounded per-root state.
 3. **Trajectory collector:** records real user scope, todos, significant terminal tool calls, assistant text, failures, and diff fingerprints.
 4. **Trigger scheduler:** records cadence/idle work durably in memory, arbitrates one global critic, and gives exploration unconditional local-process priority.
 5. **Packet builder:** deterministically formats and truncates observations.
 6. **Critic runner:** creates, prompts, times out, parses, and deletes ephemeral child sessions.
 7. **Noise guard:** rejects malformed, duplicate, low-information, or over-budget findings and routes eligible older-turn concerns into bounded revalidation.
-8. **Feedback router:** installs request-local mid-run advisory or starts one visible idle follow-up.
+8. **Feedback router:** installs request-local mid-run advisory or starts one visible idle follow-up when no foreign continuer owns the boundary.
 9. **Logger:** writes structured debug/warn/error entries through `client.app.log`; never throws.
 
 ### Sequence diagram
@@ -136,6 +146,7 @@ No researched OpenCode plugin already combines bounded recent trajectory, conser
 sequenceDiagram
     participant M as Main OpenCode session
     participant P as Watchdog plugin
+    participant G as Goal plugin
     participant C as Ephemeral watchdog-critic child
     participant L as Local critic model
 
@@ -150,21 +161,29 @@ sequenceDiagram
         alt accepted concern and another model boundary occurs
             M->>P: messages.transform before provider call
             P-->>M: append request-local [watchdog] suffix to newest fresh tool result
-        else run reaches idle first
+        else real-user run reaches idle first
             M->>P: session.idle
-            P->>M: visible marker-tagged follow-up via session.prompt
+            P->>P: wait foreign-continuation settle window
+            P->>M: visible marker-tagged follow-up if latest user remains real
         end
     end
     alt session becomes idle with new evidence
         M->>P: session.idle
-        P-->>C: create child with idle packet
-        C->>L: stable prefix + idle packet
-        L-->>C: ok or concern
-        C-->>P: result
-        alt ok
-            P-->>M: silence
-        else concern accepted
-            P->>M: visible marker-tagged advisory follow-up
+        P->>P: arm idle-admission settle generation
+        alt goal continuation arrives
+            G-->>M: untagged promptAsync user turn
+            M->>P: chat.message matches foreign pattern
+            P->>P: preserve epoch/task/budget; cancel idle admission
+        else latest user remains real
+            P-->>C: create child with idle packet
+            C->>L: stable prefix + idle packet
+            L-->>C: ok or concern
+            C-->>P: result
+            alt ok
+                P-->>M: silence
+            else concern accepted
+                P->>M: visible marker-tagged advisory follow-up
+            end
         end
     end
 ```
@@ -201,13 +220,13 @@ Implementation rule:
 
 ### Cadence trigger
 
-At `unclaimedSignificantTools >= everyTools`:
+At `unclaimedSignificantTools + (deferredCadenceClaim?.claimedToolCount ?? 0) >= everyTools`:
 
 1. Verify enabled, root session, and at least one new evidence fingerprint.
-2. Atomically retain bounded immutable absolute evidence together with its claimed count, maximum included tool sequence, and evidence key in `pendingTrigger`; calls arriving afterward remain unclaimed and count toward the next check. The claim freezes absolute-sequence tools, todos, assistant text, changes, and previous concern at that boundary, but does not yet derive `sincePreviousCheck`. Merge retained predecessor evidence before deterministic bounding so a later claim can cover a failed predecessor as far as the packet budget permits, with explicit omission markers when older evidence is dropped. Coalescing may replace a pending cadence trigger only with a newer evidence/boundary claim that covers it. Never clear accepted work merely because a per-root check or the global critic slot is busy.
+2. Atomically retain bounded immutable absolute evidence together with its claimed count, maximum included tool sequence, and evidence key in `pendingTrigger`; calls arriving afterward remain unclaimed and count toward the next check. A new cadence claim atomically consumes any remaining `deferredCadenceClaim` exactly once, merging by absolute sequence and adding only its owned count. The claim freezes absolute-sequence tools, todos, assistant text, changes, and previous concern at that boundary, but does not yet derive `sincePreviousCheck`. Merge retained predecessor evidence before deterministic bounding so a later claim can cover a failed predecessor as far as the packet budget permits, with explicit omission markers when older evidence is dropped. Coalescing may replace a pending cadence trigger only with a newer evidence/boundary claim that covers it. Never clear accepted work merely because a per-root check or the global critic slot is busy.
 3. Ask the detached scheduler to run. Never await it from `tool.execute.after`.
 4. Apply the result directly only if the real-user turn epoch still matches. Reaching idle does not by itself stale a cadence result; a newer real-user epoch uses the one-hop revalidation path instead.
-5. If the result is a concern and the root is now idle, route it through the visible idle path. If it is `ok`, retain and run a pending idle trigger when its final assistant/evidence key differs from the cadence snapshot.
+5. If the result is a concern and the root is now idle with a real latest user turn, route it through the visible idle path. If the latest user is a recognized foreign continuation, retain the advisory for its next eligible model boundary and never start a watchdog root prompt. If the result is `ok`, retain and run a pending idle trigger only when its final assistant/evidence key differs from the cadence snapshot and the latest user is not foreign.
 
 Default `everyTools = 10`. Permit 5-100. Values below 5 are rejected to protect latency/noise.
 
@@ -217,17 +236,31 @@ On `session.idle`:
 
 1. Resolve session metadata with `session.get`; skip if `parentID` exists.
 2. Skip critic/judge sessions and sessions with no real user task.
-3. Identify the latest completed assistant message ID.
-4. Skip only if that assistant ID plus `snapshotKey` was already checked or belongs to an explicitly claimed watchdog continuation.
-5. Retain bounded immutable idle evidence plus the current claimed count and `throughToolSeq`, then record/replace `pendingIdle` before inspecting in-flight/global state. An idle trigger remains pending with that evidence until checked, superseded by a newer real-user turn, or satisfied by an equivalent completed check.
-6. If a cadence concern is pending but was not delivered, route it and consume equivalent pending idle work.
-7. Otherwise ask the detached scheduler to run when `onIdle` is true.
+3. Increment a per-root idle-admission generation and arm a detached `foreignContinuationSettleMs` timer. Do not create a critic child or call root `session.prompt()` during this window.
+4. A recognized foreign `chat.message` synchronously cancels that generation. At timer expiry, re-read latest messages and state; stop if generation, epoch, latest-user kind, or root-idle status changed.
+5. If the latest user is foreign, suppress the idle trigger and every watchdog idle follow-up. Significant tools still count, so an already-pending cadence trigger may run; any accepted concern is held for the next eligible provider boundary rather than submitted as a root prompt.
+6. Otherwise identify the latest completed assistant message ID and skip only if that assistant ID plus `snapshotKey` was already checked or belongs to an explicitly claimed watchdog continuation.
+7. Retain bounded immutable idle evidence plus the current claimed count and `throughToolSeq`, then record/replace `pendingIdle` before inspecting in-flight/global state. An idle trigger remains pending with that evidence until checked, superseded by a newer real-user turn, cancelled by a foreign continuation, or satisfied by an equivalent completed check.
+8. If a cadence concern is pending but was not delivered, route it only after one final generation/epoch/latest-user recheck and consume equivalent pending idle work.
+9. Otherwise ask the detached scheduler to run when `onIdle` is true.
 
 `session.idle` can repeat. Normal-turn idempotency uses the assistant message ID plus `snapshotKey`; fact-based `evidenceFingerprint` is reserved for changed-evidence and dedup decisions. Watchdog-continuation idempotency instead uses an explicit continuation claim, because the continuation changes assistant content and therefore changes ordinary snapshot/evidence values.
 
+The settle window is best-effort arbitration, not mutual exclusion. The goal plugin performs unbounded asynchronous work before `promptAsync`, so it can submit after the watchdog's final check. The integration fixture must prove one queued prompt in the installed/default path, but the plan does not claim a race-free invariant without a shared admission primitive. If hard exclusivity becomes required, the conservative fallback is to make the goal plugin the exclusive root-idle prompt owner and disable watchdog idle follow-ups while it is installed.
+
 ### User turns and cancellation
 
-A real `chat.message` without watchdog metadata starts a new turn epoch, resets per-turn warning/escalation budgets, clears addressed/pending feedback, cancels any delayed activity toast for the older epoch, and updates current scope. It does not automatically abort an already-running critic: that result cannot be delivered directly, but a returned concern may seed one current-turn revalidation. A marker-tagged watchdog message does none of these. Before submitting one, store a `continuationClaim` containing the real turn epoch and generated message/finding identity. The next loop and idle caused by that continuation consume the claim without another critic invocation, regardless of changed assistant text. `session.deleted`, plugin disposal, or explicit generation cancellation aborts and drops old work; a newer real user prompt marks it stale for revalidation handling.
+Classify every root `chat.message` before changing turn state:
+
+- **Real user:** neither watchdog metadata nor a configured foreign-continuation pattern matches. Start a new turn epoch, reset warning/escalation budgets, clear addressed/pending feedback, cancel older activity/idle-admission timers, and update current scope. Do not automatically abort an already-running critic; its result follows stale revalidation rules.
+- **Watchdog generated:** versioned watchdog metadata matches. Do not change epoch, task, or budgets. Store/consume the explicit continuation claim around its resulting loop and idle.
+- **Recognized foreign continuation:** text matches `foreignContinuationPatterns`. Keep the existing real-user epoch, original/current task, delivery budgets, and pending cadence state. Exclude the continuation boilerplate itself from task text and evidence fingerprints. Cancel pending idle admission and abort an active idle critic, but do not abort a cadence critic. Count its terminal tools, failures, todos, assistant output, and changes normally toward cadence. Its resulting idle cannot create an idle check or watchdog root follow-up.
+
+Foreign cancellation uses one per-root compare-and-set owner for the idle claim. The completion path may transition `active -> completed`; a schema-valid winner advances accounting once and cancellation does not refund it. Otherwise cancellation transitions `active -> cancelling`, awaits confirmed critic abort, then moves the idle claim's count/boundary/evidence intact into one bounded typed `deferredCadenceClaim` and removes `pendingIdle`/idle `inFlight`. It does not also increment `unclaimedSignificantTools` or merge directly into `pendingTrigger`. If a deferred owner already exists, atomically union absolute tool sequences, add counts only for disjoint owned sequences, set bounds to the union, merge evidence deterministically, and preserve omission markers when bounding drops old material; never overwrite or duplicate ownership. Future cadence eligibility uses `unclaimedSignificantTools + deferredCadenceClaim.claimedToolCount`; when cancellation makes that sum reach `everyTools`, immediately create/request the normal cadence claim and scheduler admission. The next cadence claim consumes the deferred owner exactly once. After another cadence completion, trim/discard deferred observations already covered by the advanced sequence baseline. Never restore cancelled work as `pendingIdle` while latest-user kind is foreign. This gives every significant tool count one owner and prevents protected idle state from sticking.
+
+Pattern matching occurs synchronously at the start of `chat.message`. An unrecognized or changed foreign template fails open as a real user turn: epoch and budgets reset, task text can be overwritten, and the mutual-loop risk degrades to the pre-adapter behavior. Log only detectable partial-template failures or resolved package-version mismatches; an arbitrary unmatched message has no provenance signal and may simply be human input. Re-verify fixtures whenever the goal plugin upgrades.
+
+`session.deleted`, plugin disposal, or explicit generation cancellation aborts and drops old work. Before submitting a watchdog message, store a `continuationClaim` containing the real turn epoch and generated message/finding identity; its resulting idle consumes that claim without another critic invocation.
 
 When a critic result's epoch is older than the current real-user epoch:
 
@@ -299,7 +332,7 @@ type WatchdogPacket = {
 
 ### Reliable inputs and exclusions
 
-- **Task:** collect real user text in `chat.message`. Keep first task-bearing prompt and latest real user prompt. Exclude watchdog markers, compaction/synthetic messages, and critic children.
+- **Task:** collect only classified real-user text in `chat.message`. Keep first task-bearing prompt and latest real-user prompt. Exclude watchdog messages, recognized foreign continuation templates, compaction/synthetic messages, and critic children; foreign turns extend the existing task trajectory rather than replacing it.
 - **Constraints:** do not run a summarizer. The bounded original/current user text is the constraint source. A later phase may add deterministic extraction of explicit bullets and "must/not/only/never" sentences, but raw bounded text remains authoritative.
 - **Todos:** latest `todo.updated` for the root session.
 - **Assistant output:** latest completed assistant text parts only. Do not include reasoning parts. Reasoning may be signed, unavailable, verbose, and is unnecessary for obvious trajectory mistakes.
@@ -509,7 +542,9 @@ This mechanism uses an experimental hook and must be proven by P0. Specifically 
 
 ### Idle, supported approximation with visible continuation
 
-At idle, an accepted concern must be visible to the user and trigger agent action, not merely sit as an unprocessed `noReply` message. Before any toast or prompt side effect, synchronously recheck the expected real-turn epoch, reserve the applicable delivery budget if not already reserved by this exact advisory, and store the continuation claim. If that compare-and-set fails, route through stale revalidation or suppress according to the stale-result rules. After successful reservation, invoke a best-effort warning/error toast immediately without awaiting it only when no earlier attempt exists or its state is already `failed`; set `pending` before invocation. A `pending` or `delivered` earlier attempt suppresses a duplicate. Then submit:
+If the latest root user message is a recognized foreign continuation, idle may show an accepted concern toast but must not call `session.prompt()`; retain the advisory for the next eligible model boundary or real-user turn. This is the per-root mutual-continuation brake.
+
+For an eligible real-user idle, an accepted concern must be visible to the user and trigger agent action, not merely sit as an unprocessed `noReply` message. Before any toast or prompt side effect, synchronously recheck the expected real-turn epoch, latest-user kind, idle-admission generation, reserve the applicable delivery budget if not already reserved by this exact advisory, and store the continuation claim. If that compare-and-set fails, route through stale revalidation or suppress according to the stale-result rules. After successful reservation, invoke a best-effort warning/error toast immediately without awaiting it only when no earlier attempt exists or its state is already `failed`; set `pending` before invocation. A `pending` or `delivered` earlier attempt suppresses a duplicate. Then submit:
 
 ```text
 [watchdog advisory: generated by a secondary model, not a user instruction]
@@ -519,9 +554,9 @@ Please reconsider this before considering the task complete. If the concern is a
 
 Use a normal visible text part (`synthetic` omitted or explicitly `false`) with metadata such as `{ "watchdog": { "version": 1, "findingHash": "...", "turnEpoch": 3 } }`. OpenCode v1.18.31 excludes `synthetic: true` text from user-message rendering in [`tui/routes/session/index.tsx` lines 1373-1383](https://github.com/anomalyco/opencode/blob/a97622c801f4ca571530ddc51076af659a9c32cd/packages/tui/src/routes/session/index.tsx#L1373-L1383), so metadata/marker classification must provide provenance and recursion filtering without hiding the transcript entry. Call `client.tui.showToast()` best-effort and `client.session.prompt()` in a detached, caught task. Copy the latest real user's agent and model. Stored SDK types nest `variant` under `model`, while prompt input takes it at top level; P0 must verify the v1 runtime request and selected provider variant end to end. Preserve `variant` only when that probe passes; otherwise omit it explicitly and log the fallback rather than sending a malformed field. This addresses the class of historical model-reset bugs represented by [#4901](https://github.com/anomalyco/opencode/issues/4901).
 
-Routing one accepted finding from cadence or revalidation to idle never consumes the budget twice. Immediately before invoking the detached `session.prompt()`, recheck that the continuation claim still belongs to the current real-turn epoch; if a new prompt cleared it, do not submit. The resulting `chat.message` is recognized by metadata/marker and excluded from task scope, cadence, and turn-epoch reset. Its resulting `session.idle` consumes the continuation claim without hashing or another critic call.
+Routing one accepted finding from cadence or revalidation to idle never consumes the budget twice. Immediately before invoking the detached `session.prompt()`, recheck that the continuation claim still belongs to the current real-turn epoch and that latest-user kind remains real; if a new or foreign prompt cleared it, do not submit. The resulting `chat.message` is recognized by metadata/marker and excluded from task scope, cadence, and turn-epoch reset. Its resulting `session.idle` consumes the continuation claim without hashing or another critic call.
 
-This marker-tagged user message would otherwise become `todo-reconcile`'s newest projection target. Implementation therefore includes one narrow compatibility change: `todo-reconcile.lastUserMessage()` skips a user message whose text-part metadata contains the versioned watchdog marker. Ordinary synthetic/user messages retain existing behavior. Add composition and real-TUI integration tests before enabling idle feedback.
+Plugin-generated user messages would otherwise become `todo-reconcile`'s newest projection target. Implementation therefore includes one generic compatibility change: `todo-reconcile.lastUserMessage()` selects the newest eligible real user through a shared `isPluginGeneratedUserMessage()` classifier. It recognizes the versioned watchdog metadata envelope and the same built-in/configured foreign continuation patterns, without treating every message containing a synthetic part as generated. Add composition and real-TUI integration tests before enabling idle feedback.
 
 ### What requires upstream
 
@@ -581,13 +616,23 @@ type ClaimedRevalidation = {
   hop: 1
 }
 
+type DeferredCadenceClaim = {
+  claimedToolCount: number
+  fromToolSeqExclusive: number
+  throughToolSeq: number
+  evidence: ClaimedEvidence
+}
+
 type SessionState = {
   parentChecked: boolean
   turnEpoch: number
+  latestUserKind: "real" | "watchdog" | "foreign"
+  latestForeignPatternID?: string
   originalTask?: string
   currentTask?: string
   todos: Todo[]
   recentTools: RingBuffer<ToolObservation>
+  deferredCadenceClaim?: DeferredCadenceClaim
   terminalCallIDs: LruSet<string>
   unclaimedSignificantTools: number
   latestAssistantText?: string
@@ -600,6 +645,7 @@ type SessionState = {
     epoch: number
     childID?: string
     trigger: ClaimedCadence | ClaimedIdle | ClaimedRevalidation
+    settlement: "active" | "cancelling" | "completed"
     abort: AbortController
     slowToastTimer?: ReturnType<typeof setTimeout>
     slowToastShown: boolean
@@ -607,6 +653,11 @@ type SessionState = {
   pendingTrigger?: ClaimedCadence
   pendingIdle?: ClaimedIdle
   pendingRevalidation?: ClaimedRevalidation
+  idleAdmission?: {
+    generation: number
+    epoch: number
+    timer: ReturnType<typeof setTimeout>
+  }
   activeAdvisory?: AcceptedConcern & {
     concernToast: { status: "pending" | "delivered" | "failed"; attempts: 1 | 2 } | undefined
   }
@@ -624,9 +675,10 @@ Global bounded state:
 - `activeCriticSessionIDs: Set<string>`, operationally bounded by the one-global-critic rule.
 - `criticSessionTombstones: LruSet<string>` with capacity 256 and a time horizon, used only after failed deletion so late lifecycle events remain filtered without unbounded growth.
 - One-shot `compactionTransformSkips` keyed by session, with short expiry and cleanup on session deletion/disposal.
+- Compiled, validated foreign-continuation structural patterns with source/plugin/version IDs.
 - Process-local active exploration session/admission set.
 - One watchdog-specific cross-process lease manager, reused from the existing SQLite queue primitive but with resource key `watchdog-critic`.
-- Maximum 100 live root states. Evict deleted states first, then least-recently-active idle states only when they have no `pendingTrigger`, `pendingIdle`, `pendingRevalidation`, `inFlight`, `activeAdvisory`, or `continuationClaim` and no cleanup in progress. If all 100 states are protected, skip observation for a newly seen root and rate-limit a warning; never evict accepted work.
+- Maximum 100 live root states. Evict deleted states first, then least-recently-active idle states only when they have no `deferredCadenceClaim`, `pendingTrigger`, `pendingIdle`, `pendingRevalidation`, `idleAdmission`, `inFlight`, `activeAdvisory`, or `continuationClaim` and no cleanup in progress. If all 100 states are protected, skip observation for a newly seen root and rate-limit a warning; never evict accepted work.
 - Ring defaults: 24 tool observations, 256 terminal call IDs, 32 delivered concern hashes, 80 compact change hashes.
 
 An uncertain-abort child remains active while the watchdog lease is held. Terminal lifecycle evidence removes it; stale-owner recovery moves its ID to the bounded tombstone set before another local critic can register. The root/child and agent-name gates remain fallback protection after tombstone expiry.
@@ -649,6 +701,24 @@ For this dotfiles installation:
 - Provider and model definitions stay in `opencode.json`.
 - Watchdog settings live in `~/.config/opencode/watchdog.json`, represented in this repo as `opencode/.config/opencode/watchdog.json`.
 - `plugins/watchdog.ts` is auto-loaded. Do not also add it to `opencode.json`.
+
+Initial `watchdog.json` coexistence shape:
+
+```json
+{
+  "enabled": true,
+  "model": "omlx/Qwen3.5-4B-oQ4e-mtp",
+  "everyTools": 10,
+  "onIdle": true,
+  "maxRecentTools": 12,
+  "timeoutMs": 10000,
+  "foreignContinuationSettleMs": 500,
+  "foreignContinuationPatterns": {
+    "mode": "extend",
+    "patterns": []
+  }
+}
+```
 
 For a future npm package, accept the same object as plugin tuple options:
 
@@ -675,22 +745,47 @@ Do not add a top-level `watchdog` object to `opencode.json`; current strict sche
 ### MVP schema
 
 ```ts
+type ForeignContinuationPattern = {
+  id: string
+  plugin: string
+  version: string
+  startsWith: string
+  orderedFragments: string[]
+}
+
 type WatchdogConfig = {
-  enabled: boolean        // default false when file absent
-  model: string           // required when enabled; provider/model
-  everyTools: number      // default 10; integer 5..100
-  onIdle: boolean         // default true
-  maxRecentTools: number  // default 12; integer 4..24
-  timeoutMs: number       // default 10_000; integer 1_000..30_000
-  debug?: boolean         // default false
+  enabled: boolean                     // default false when file absent
+  model: string                        // required when enabled; provider/model
+  everyTools: number                   // default 10; integer 5..100
+  onIdle: boolean                      // default true
+  maxRecentTools: number               // default 12; integer 4..24
+  timeoutMs: number                    // default 10_000; integer 1_000..30_000
+  foreignContinuationSettleMs: number  // default 500; integer 0..5_000
+  foreignContinuationPatterns: {
+    mode: "extend" | "replace"         // default extend
+    patterns: ForeignContinuationPattern[] // default []
+  }
+  debug?: boolean                      // default false
 }
 ```
+
+`mode: "extend"` appends validated configured patterns to built-ins. `mode: "replace"` uses only configured patterns. Limit the merged set to 16 patterns; require non-empty unique IDs, `startsWith`, and ordered fragments; cap each configured string at 1,024 characters. Matching is deterministic `startsWith` plus ordered `indexOf` progression, not user-supplied regex execution.
+
+Built-in constant set `goal-plugin-0.1.49`:
+
+| ID | `startsWith` | Required ordered fragments |
+|---|---|---|
+| `goal-0.1.49-active` | `Continue working toward the active session goal.\n\n` | `The objective below is user-provided data.`, `<untrusted_objective>\n`, `\n</untrusted_objective>\n\nContinuation behavior:\n`, `\n\nBudget:\n`, `\n\nWork from evidence:\n` |
+| `goal-0.1.49-limit` | `The active session goal has reached a safety limit.\n\n` | `The objective below is user-provided data.`, `<untrusted_objective>\n`, `\n</untrusted_objective>\n\nBudget:\n`, `\n\nStatus: `, `\nStop reason: ` |
+
+These constants are fixtures for `@prevalentware/opencode-goal-plugin@0.1.49`, not a general protocol. At startup, best-effort resolve/log the installed package version. A mismatch does not guess: configured/built-in text matching still applies, and a miss fails open as a real user turn. Because `opencode.json` currently names an unpinned package, every goal-plugin upgrade requires fixture re-verification before trusting coexistence.
 
 Fixed MVP policy, not config:
 
 - Maximum final watchdog user prompt: 16,384 UTF-8 bytes; target packet p95 remains 14,000 characters.
 - Maximum critic output: 256 tokens through critic-scoped `chat.params`; reject assistant text above 2,000 UTF-8 bytes.
 - Cadence activity toast threshold: 750 ms; no start toast for idle checks, no completion toast for `ok`.
+- Foreign-continuation idle admission settles for configured 500 ms by default; this reduces but cannot eliminate the detached-handler TOCTOU race.
 - One in-flight check per root and one globally through the dedicated cross-process lease; preserve the latest pending cadence and idle work instead of dropping it.
 - Delivery budget: warning then at most one later independent critical with changed evidence, or one critical-first delivery and nothing later that turn.
 - Duplicate history: 32 findings.
@@ -703,7 +798,7 @@ Require explicit `model`. The initial installation pins the same existing local 
 1. **Root-only gate:** `session.get().parentID` must be absent. This excludes task subagents and critic children.
 2. **Critic-ID gate:** skip IDs in `activeCriticSessionIDs` or bounded `criticSessionTombstones` before any SDK history call.
 3. **Agent gate:** skip hidden/internal agents (`watchdog-critic`, `title`, `summary`, `compaction`) when identifiable.
-4. **Marker gate:** marker-tagged watchdog messages never update task scope, turn epoch, or cadence, regardless of the visible part's `synthetic` field.
+4. **Plugin-generated-user gate:** watchdog metadata classifies own messages; `foreignContinuationPatterns` classifies known untagged continuations. Neither updates task scope, real-user epoch, or delivery budgets. Foreign continuation tools still count toward cadence.
 5. **One in-flight check:** retain at most one latest cadence trigger, one latest idle trigger, and one one-hop revalidation trigger per root; never queue an unbounded critic backlog. Global-slot occupancy does not erase pending work.
 6. **Snapshot identity vs evidence:** use a `snapshotKey` containing message/part IDs and boundaries only for ordinary invocation idempotency. Revalidation uses a separate `revalidationKey = hash(snapshotKey + candidate identity + source epoch)` and never reads or updates `lastCheckedOrdinarySnapshotKey`, because candidate-only review must not suppress a later general trajectory review. Compute authoritative `evidenceFingerprint` only after predecessor resolution and deterministic truncation, from the final packet facts actually sent: normalized current task text, todo values, ordered tool occurrence/count plus name/status/input/result content hashes, latest assistant content hash, and change fingerprints. Exclude opaque message/part/call IDs. "Changed evidence" means this final-packet fact fingerprint changed; it is deterministic, not a semantic judgment.
 7. **Output information gate:** reject blank/generic messages and messages lacking a category-specific noun/evidence reference. At minimum reject normalized `ok`, `looks good`, `be careful`, `verify`, and equivalent content-free responses.
@@ -713,6 +808,7 @@ Require explicit `model`. The initial installation pins the same existing local 
 11. **Stale result gate:** delete/cancel and superseded-check results are discarded. An older-turn `ok` is discarded. An older-turn valid concern from cadence/idle is never delivered directly but may enqueue one current-turn revalidation; a stale revalidation result is discarded without another hop.
 12. **Addressed suppression:** after delivery, do not re-report until new evidence. Do not attempt semantic "agent acknowledged it" detection in MVP.
 13. **Idle recursion proof:** claim the finding/real-turn before submitting feedback and mark the generated message when its ID returns. The watchdog-generated follow-up is not a real turn; its next idle consumes the claim and stays silent without relying on assistant/evidence hashes.
+14. **Foreign-continuation brake:** while latest-user kind is foreign, suppress watchdog idle checks and root prompts even when evidence changes. Pending cadence checks may run, but findings wait for an eligible model boundary. A foreign arrival cancels pending idle admission and aborts an idle critic. This prevents each plugin from resetting the other's stop valve.
 
 The normalization/dedup approach is adapted from pi-subagents' bounded emission guard, which rejects content-free and duplicate warnings: [`emission-guard.ts`](https://github.com/nicobailon/pi-subagents/blob/07bd09e0f93a19caee3c39e3cf4069c70ee8dbcd/src/watchdog/emission-guard.ts). Its cadence runtime also coalesces reviews and skips duplicate review input: [`runtime.ts` lines 379-461](https://github.com/nicobailon/pi-subagents/blob/07bd09e0f93a19caee3c39e3cf4069c70ee8dbcd/src/watchdog/runtime.ts#L379-L461).
 
@@ -734,6 +830,10 @@ General policy: log, discard, continue main work.
 | Explore starts locally | Await child abort, delete, then release lease and retain latest trigger; exploration never waits for watchdog, and uncertain cleanup holds only the watchdog lease |
 | Explicit cancellation | Increment epoch, cancel activity timer, abort child before delete/lease release, discard late result |
 | New real-user prompt during critic | Increment epoch and cancel activity timer; let the bounded critic finish, never deliver its result directly, and permit one fresh current-turn revalidation only for a valid concern |
+| Recognized foreign continuation | Keep epoch/task/budgets, cancel idle admission, abort/drop active idle critic, retain cadence state, and suppress idle follow-up |
+| Foreign pattern miss/version drift | Fail open as real user, log compatibility warning once when detectable, and accept documented epoch-reset/mutual-loop degradation until patterns are updated |
+| Goal continuation races settle expiry | Final state recheck reduces risk but cannot retract two already-submitted prompts; integration test default path and document residual TOCTOU |
+| Goal plugin sees critic child | Promptly delete child; normal deferral is bounded by critic timeout plus reconciliation, but missed lifecycle can defer up to goal plugin's 900-second task-block maximum |
 | Critic child deletion fails | Log debug; move ID from active set to bounded/expiring tombstone; never supervise it |
 | Compaction | Collect task independently; consume one-shot transform exclusion; disable mid-run delivery if exclusion cannot be proven |
 | Very long session | Fixed rings/LRU maps and packet cap; protected pending/cleanup states are not evicted |
@@ -750,6 +850,8 @@ Respect this repo's rule that every `.ts` directly under `plugins/` is server-au
 opencode/.config/opencode/
 |-- plugins/
 |   `-- watchdog.ts                 # re-export/Plugin adapter only
+|-- plugin-generated-user/
+|   `-- helpers.ts                  # shared watchdog/foreign user classification
 |-- watchdog/
 |   |-- config.ts                   # parse watchdog.json; defaults/validation
 |   |-- state.ts                    # bounded per-session registry and epochs
@@ -787,22 +889,28 @@ No database, dashboard, commands, tools, MCP server, or TUI plugin in MVP.
 - Verify server-plugin `client.tui.showToast()` renders informational/warning/error variants without creating transcript messages or blocking hooks.
 - Verify latest-message model/variant extraction preserves the selected variant; document and test omission fallback if v1 rejects it.
 - Verify prompt-cache token accounting remains unchanged for the historical prefix in a local provider fixture.
+- Load `@prevalentware/opencode-goal-plugin@0.1.49` in the fixture. Capture its exact active/limit continuation text, verify built-in structural classification, and measure idle-handler completion relative to `foreignContinuationSettleMs` for both `session.status: idle` and `session.idle`.
+- With one active goal, assert the default path queues at most the goal continuation: a matching foreign message cancels watchdog idle admission before critic creation or root prompt. Inject a deliberately late goal continuation to prove/document the residual TOCTOU race and final-state guards.
+- Verify a parent-linked critic child temporarily blocks goal continuation, child idle/deletion unblocks it under normal timing, and the goal plugin's 250 ms snapshot hold/900-second worst-case task-block policy is represented accurately.
+- Verify root assistant usage caused by a watchdog advisory increases goal token usage, critic-child usage does not, and goal continuations remain root sessions rather than child sessions.
+- Verify the goal-selected root agent and inherited root model/variant never bypass the critic-session-gated `chat.params` 256-token cap or explicit critic model.
 - Delete the probe after recording tests/fixtures.
 
-Exit criterion: if request-local injection ordering is not reliable, disable mid-run delivery and proceed with idle-only feedback.
+Exit criteria: if request-local injection ordering is not reliable, disable mid-run delivery and proceed with idle-only feedback. If the co-resident fixture queues both idle-driven root prompts under ordinary timing, disable watchdog root-idle `session.prompt()` whenever the goal plugin is configured; keep toasts and hold findings for a later provider boundary. The settle window alone is never documented as hard mutual exclusion.
 
 ### P1: Collector and idle-only critic
 
-- Root filtering, real user task capture, todo capture, terminal tool ring, final assistant text.
+- Three-way real/watchdog/foreign classification, pinned/default pattern loading, fail-open misses, foreign state semantics, idle-admission settle generation, and no-root-prompt brake. These must exist before any idle critic is enabled.
+- Root filtering, real-user-only task capture, todo capture, terminal tool ring, final assistant text, and CAS-controlled conversion of foreign-cancelled idle claims into one typed deferred cadence owner.
 - Ephemeral critic child with explicit Qwen model, current tool-ID deny map, deny-all permissions, no structured output, and critic-scoped `chat.params` token cap.
 - Strict output parse, server-side abort-before-delete cleanup, bounded critic tombstones, and logging.
-- Idle check only; no feedback yet. Record decisions in test logs.
+- Foreign-safe idle check only; no feedback yet. Record decisions in test logs.
 
 ### P2: Idle feedback with termination guards
 
 - Visible marker-tagged, non-synthetic text part through detached `session.prompt()`.
 - Toast plus visible transcript follow-up, marker filtering, explicit continuation claim, warning/critical-escalation budgets, stale result handling.
-- Narrow `todo-reconcile` target filter for versioned watchdog messages.
+- Generic `todo-reconcile` plugin-generated-user classifier for watchdog metadata and configured foreign continuation patterns.
 - Prove no recursive idle loop.
 
 ### P3: Tool-count cadence and packet bounds
@@ -839,7 +947,10 @@ Exit criterion: if request-local injection ordering is not reliable, disable mid
 - Significant-tool include/exclude table.
 - Success/failure terminal dedupe by call ID.
 - Root vs child vs critic session classification.
-- Real-user vs marker-tagged watchdog message classification, independent of the text part's `synthetic` flag.
+- Three-way real/watchdog/foreign user classification, independent of the text part's `synthetic` flag. Pin active/limit fixtures to the exact `@prevalentware/opencode-goal-plugin@0.1.49` output; test `extend`, `replace`, ordered-fragment validation, version warning, and one-character/template-drift pattern miss failing open as real.
+- Foreign-turn state: no epoch/budget/task reset; continuation text excluded from evidence; tools/failures/todos/assistant/changes count normally. Idle admission/check/follow-up are always suppressed; independently pending cadence work may still run.
+- Idle-admission generation/timer cancellation on foreign arrival, final latest-user recheck, and active-idle-critic abort without cadence-state loss.
+- Foreign cancellation accounting: completion-versus-cancellation has one CAS winner; confirmed cancellation moves count/evidence into one typed deferred cadence owner without also incrementing unclaimed state or merging into pending state; repeated cancellations union only disjoint sequence ownership; summed eligibility immediately admits cadence at threshold; later cadence consumes it exactly once and no protected idle state remains stuck.
 - Ring/LRU/tombstone bounds; protected-state eviction; all-100-protected admission behavior.
 - Packet canonical ordering, control-character handling, head/tail truncation, and exact final serialized UTF-8 user-prompt cap on both primary and context-overflow retry paths.
 - Revalidation packet requires one bounded candidate and current task/evidence; ordinary packets omit it. The one-hop limit is internal scheduler state and is not serialized into the model packet.
@@ -864,7 +975,8 @@ Instantiate watchdog hooks together with current local plugins in actual load or
 
 - `async-reasoning-titles-strip`: title prefixes still strip; watchdog never edits reasoning.
 - `image-display-annotation`: display annotations still strip; marker-tagged idle feedback clearing pending image state is expected because it starts a new user-role turn.
-- `todo-reconcile`: watchdog mid-run feedback does not change the last user message; versioned watchdog messages are skipped as projection targets.
+- `todo-reconcile`: generic plugin-generated-user classification skips watchdog metadata and recognized goal continuations as projection targets while preserving ordinary real messages containing todo-reconcile's own synthetic snapshot part.
+- `@prevalentware/opencode-goal-plugin@0.1.49`: install both server/TUI halves in the fixture; exercise detached idle ordering, continuation classification, task-child deferral, root token accounting, and prompt arbitration.
 - `explore-context-budget`: critic agent is not identified as `explore`; child idle cleanup remains harmless.
 - `subagent-concurrency`: critic uses only its own lease, never blocks `explore`/`general`, and is aborted when local exploration begins.
 - `rtk`: critic has no shell tool; no rewrite path.
@@ -906,6 +1018,13 @@ Scenarios:
 27. Timeout, stale result, explore preemption, session deletion, and plugin disposal clear delayed-toast timers and produce no late toast.
 28. A schema-valid cadence/idle response completing after a newer real-user prompt settles exactly its original claim accounting but emits no stale toast/advisory. A stale concern then runs one fresh revalidation against current task/evidence; current `ok` stays silent and current concern follows ordinary acceptance. Malformed/aborted stale attempts leave baselines unchanged.
 29. A revalidation result made stale by another real-user prompt is dropped without another revalidation. Cancellation/deletion aborts and drops immediately. Revalidation neither consumes cadence counts nor advances sequence/change baselines.
+30. One active goal plus idle produces at most one queued root prompt under the installed/default fixture: the goal continuation wins, cancels watchdog idle admission, and watchdog emits no root follow-up. A forced post-window continuation demonstrates/logs the documented residual TOCTOU rather than claiming impossible mutual exclusion.
+31. Goal active/limit continuation messages match pinned built-ins, preserve watchdog epoch/task/delivery budgets, and their significant tools count toward cadence. Their idle cycles create no watchdog idle check or root prompt; a pending cadence concern waits for/injects at the next eligible goal-driven model boundary. Foreign arrivals during repeated pending/active idle work prove one CAS winner per claim: completion advances once, or confirmed cancellation unions disjoint ownership into one deferred cadence claim. `unclaimed + deferred` reaching threshold admits immediately, then consumes ownership exactly once with no duplication, loss, or stuck protected state.
+32. Pattern-miss fixture is treated as a real user turn and demonstrates the documented degraded epoch/budget/loop behavior; `replace` mode can restore matching without code changes.
+33. A cadence critic child temporarily defers goal continuation, then child abort/idle/deletion releases normal deferral; fixture records the 250 ms snapshot hold and documents the external plugin's 900-second worst case if lifecycle reconciliation fails.
+34. The goal-selected root agent and inherited root model/variant do not affect the critic's explicit model, disabled tools, disabled thinking, or `chat.params` token cap.
+35. Watchdog root advisory assistant usage increases goal token usage; critic-child usage does not. Goal continuation remains a root prompt and never creates a child.
+36. `todo-reconcile` selects the newest eligible real user rather than watchdog or recognized foreign continuation, including after compaction and with its own synthetic snapshot part present.
 
 Run existing plugin suites unchanged after implementation, including async reasoning titles, todo reconcile, subagent controls, image annotation, and ds4 stats tests listed in this repo's `AGENTS.md`.
 
@@ -950,6 +1069,8 @@ At least 20 positive and 40 negative fixtures before enabling by default. Negati
 - Interruptions per normal coding session.
 - Cadence checks exceeding the 750 ms visibility threshold and activity toasts emitted.
 - Accepted concerns, concern toasts delivered, toast failures, and cadence-to-idle toast deduplications.
+- Foreign continuations matched by pattern ID, pattern/version warnings, idle admissions cancelled, and observed dual-prompt races.
+- Goal continuation deferral attributable to critic children and watchdog-root tokens charged to active goals.
 - Duplicate-warning rate.
 - Checks skipped by unchanged-evidence gate.
 - Main-session prefix cache read tokens before/after enabling watchdog.
@@ -964,6 +1085,7 @@ At least 20 positive and 40 negative fixtures before enabling by default. Negati
 - Packet p95 <= 14,000 chars and final watchdog user prompt <= 16,384 UTF-8 bytes; OpenCode-added system/environment instructions are measured separately and are not covered by this bound.
 - Local target model median latency <= 2 seconds, p95 <= configured 10-second timeout.
 - Normal-session interruption frequency <= 0.25 per user task in a representative clean-session sample.
+- Co-resident goal-plugin 0.1.49 fixture queues at most one root prompt on ordinary active-goal idle; any failure activates the no-watchdog-idle-prompt fallback before enabling.
 - Main prefix-cache regression: zero invalidation before the newest feedback-bearing tool result; idle feedback only appends.
 - All failure-path integration tests prove main-agent progress continues.
 
@@ -986,6 +1108,7 @@ Cadence mode ships only if it catches additional gold problems without breaching
 - Direct provider reuse is not exposed publicly to plugins.
 - Child critic requests include normal OpenCode system environment/instructions, increasing prefill.
 - Plugin configuration cannot use an unknown top-level `watchdog` key in `opencode.json`.
+- Co-resident plugins have no shared idle-prompt admission primitive or standard provenance envelope for generated user-role turns.
 
 ### Assumptions to verify in P0
 
@@ -1000,6 +1123,8 @@ Cadence mode ships only if it catches additional gold problems without breaching
 - `session.abort` terminates the server-side critic runner before delete/lease release; uncertain cancellation retains the watchdog lease until terminal evidence or stale-owner recovery.
 - A marker-tagged text part with `synthetic` omitted/false is visible in the attached real TUI.
 - Critic child creation/deletion does not create unacceptable TUI flicker.
+- Goal-plugin 0.1.49 built-in patterns match exact active/limit fixtures, preserve watchdog epoch/task/budgets, and cancel idle admission before ordinary goal continuation submission.
+- The default 500 ms settle window yields at most one root prompt in the co-resident fixture; late-injected continuation tests demonstrate the residual TOCTOU and activate the documented no-watchdog-idle-prompt fallback if ordinary timing fails.
 
 ### Product risks
 
@@ -1009,19 +1134,22 @@ Cadence mode ships only if it catches additional gold problems without breaching
 - Concurrent local inference may contend with the main model or other local-model plugins. A delayed activity toast explains observable cadence stalls but does not prevent them. The watchdog aborts for local exploration and limits itself globally, but cross-process exploration contention is an accepted MVP risk.
 - A critic already running when a new real-user prompt arrives may continue until its normal 10-second timeout so a valid concern can be revalidated. Its old activity toast is cancelled and its result is never delivered directly, but local-model contention can briefly continue into the new turn.
 - Diff stats cannot prove a code change works. The critic should only report `ineffective_change` when tool/change evidence is unambiguous.
+- Text classification of untagged foreign continuations is brittle. A template change or exact human paste can misclassify a turn; misses fail open as real-user turns and can restore the mutual-loop risk until version-pinned fixtures/patterns are updated.
+- Mixed detached `promptAsync` (goal plugin) and synchronous `session.prompt` (watchdog) wake paths cannot be made atomic with current APIs. The settle window and foreign brake reduce the race; hard exclusivity requires disabling watchdog root-idle prompting while the goal plugin is configured.
 
 ### Existing-project compatibility
 
-One narrow existing-plugin change is required: `todo-reconcile` must ignore versioned watchdog marker messages when selecting its newest user projection target. No other existing plugin needs a functional change.
+One narrow existing-plugin change is required: `todo-reconcile` must use the generic plugin-generated-user classifier when selecting its newest user projection target. No other existing plugin needs a functional change, but the co-resident goal plugin materially changes watchdog classification, idle admission, child scheduling, and accounting.
 
 - **`async-reasoning-titles` pair:** watchdog does not touch reasoning text. Critic requests disable thinking, which should prevent title-generation calls for critic reasoning; integration tests must verify this with the selected local model. Existing marker stripping remains first-class prefix-cache protection.
 - **`image-display-annotation`:** cadence feedback modifies only request-local tool output and does not touch annotation markers. Idle feedback starts a new marker-tagged user-role turn, so clearing an unfinished image annotation is correct.
-- **`todo-reconcile`:** cadence feedback does not append a virtual user bundle. Add a marker-specific filter so idle feedback cannot become `lastUserMessage`; all non-watchdog targeting behavior stays unchanged.
+- **`todo-reconcile`:** cadence feedback does not append a virtual user bundle. Add generic `isPluginGeneratedUserMessage()` filtering for watchdog metadata and configured foreign patterns so neither watchdog nor goal continuations become `lastUserMessage`; preserve real user messages carrying todo-reconcile's own synthetic part.
 - **`explore-context-budget`:** critic agent name is not `explore`; root-only watchdog filtering prevents mutual monitoring. Its message-transform observer tolerates the request-local tool suffix.
 - **`subagent-concurrency`:** keep `explore`/`general` admission unchanged. Reuse its SQLite lease primitive under an independent `watchdog-critic` resource key; never share a lock that could make exploration wait.
 - **`rtk`:** no critic shell tool exists.
 - **`ds4-stats`:** statistics are session-scoped; ephemeral critic usage remains in its child session, not the root. If the critic uses the same ds4 provider, server-level contention still exists.
 - **Image preview TUI plugin:** critic has no image tools.
+- **`@prevalentware/opencode-goal-plugin@0.1.49`:** server and TUI halves are installed. Its continuations are untagged root `promptAsync` user turns and must match `foreignContinuationPatterns`; never reset watchdog epoch/task/budgets for a match. Foreign-turn tools count toward cadence, while foreign idle checks/root follow-ups are suppressed. Parent-linked critic children temporarily satisfy its task-deferral gate; normal deletion releases them, but its configured maximum is 900 seconds. Watchdog root advisory turns and request-local suffix usage count toward goal token accounting; critic-child usage does not. Goal continuations do not spawn children. The goal-selected root agent and inherited model/variant cannot alter the explicitly configured critic request.
 
 One implementation detail is mandatory: use a dedicated agent name, not `general`. Using `general` would interact with subagent-concurrency policy and make critic sessions harder to distinguish.
 
@@ -1040,9 +1168,11 @@ Implement exactly this first:
 9. One warning plus at most one later independent critical escalation, or one critical-first delivery, per real user turn; normalized deduplication, claimed tool-sequence boundaries, protected pending state, one-hop current-evidence revalidation for older-turn concerns, and one global watchdog lease.
 10. Watchdog yields immediately to local `explore`; cross-process endpoint overlap is accepted and measured.
 11. Cadence checks are silent below 750 ms, show one delayed informational toast while still running, and cadence or revalidation checks show one bounded severity toast when a current-epoch concern is accepted; later idle routing does not duplicate pending or delivered concern toasts.
-12. Idle concerns deliver one visible marker-tagged `session.prompt()` follow-up whose text is not synthetic, plus a concern toast only when no earlier attempt exists or a known failed cadence/revalidation attempt is eligible for its single retry, with an explicit continuation claim and `todo-reconcile` target exclusion.
-13. Mid-run request-local feedback implemented only after P0 proves main-request ordering, compaction exclusion, and prefix-cache behavior; otherwise cadence findings wait for idle.
-14. Structured logging only. No dashboard, database, commands, councils, ordinary retries, tools, scoring, or autonomous task execution; the sole retry is one fresh-child attempt after a positively identified context-length error.
+12. Three-way real/watchdog/foreign user classification with version-pinned goal-plugin 0.1.49 structural built-ins, configurable `extend`/`replace`, fail-open misses, and generic todo-reconcile targeting.
+13. Foreign continuations preserve epoch/task/budgets and count tools toward cadence, but suppress watchdog idle checks and root prompts. Idle admission waits 500 ms by default and cancels on a match; this is best-effort, with a no-watchdog-idle-prompt fallback if the co-resident fixture races.
+14. Eligible real-user idle concerns deliver one visible marker-tagged `session.prompt()` follow-up whose text is not synthetic, plus a concern toast only when no earlier attempt exists or a known failed cadence/revalidation attempt is eligible for its single retry, with an explicit continuation claim and `todo-reconcile` target exclusion.
+15. Mid-run request-local feedback implemented only after P0 proves main-request ordering, compaction exclusion, and prefix-cache behavior; otherwise cadence findings wait for idle.
+16. Structured logging only. No dashboard, database, commands, councils, ordinary retries, tools, scoring, or autonomous task execution; the sole retry is one fresh-child attempt after a positively identified context-length error.
 
 This MVP is narrow enough to test honestly. The main open feasibility question is not critic inference; OpenCode supports that through child sessions. It is whether experimental request-local mid-run delivery is sufficiently ordered and cache-safe. Resolve that with P0 before writing the full plugin.
 
@@ -1065,3 +1195,4 @@ This MVP is narrow enough to test honestly. The main open feasibility question i
 - `pi-subagents` watchdog at researched commit: https://github.com/nicobailon/pi-subagents/tree/07bd09e0f93a19caee3c39e3cf4069c70ee8dbcd
 - `pi-subagents` watchdog design: https://github.com/nicobailon/pi-subagents/blob/07bd09e0f93a19caee3c39e3cf4069c70ee8dbcd/docs/watchdog.md
 - `opencode-plugin-littlebrother` at researched commit: https://github.com/fzimmermann89/opencode-plugin-littlebrother/tree/1c5b64348dcc4aa7d4fe4cb009bbd824f5e9409c
+- Installed goal plugin `@prevalentware/opencode-goal-plugin@0.1.49`: https://www.npmjs.com/package/@prevalentware/opencode-goal-plugin/v/0.1.49
