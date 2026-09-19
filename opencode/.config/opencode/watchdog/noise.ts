@@ -76,12 +76,43 @@ function isCategory(value: unknown): value is ConcernCategory {
   return typeof value === "string" && (CONCERN_CATEGORIES as readonly string[]).includes(value)
 }
 
-const OK_KEYS: ReadonlySet<string> = new Set(["status"])
-const CONCERN_KEYS: ReadonlySet<string> = new Set(["status", "severity", "category", "message"])
-const INTERNAL_ECHO_KEYS: ReadonlySet<string> = new Set(["evidenceFingerprint", "sourceEpoch"])
+function matchingBrace(text: string, start: number): number {
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (let index = start; index < text.length; index += 1) {
+    const character = text[index]!
+    if (inString) {
+      if (escaped) escaped = false
+      else if (character === "\\") escaped = true
+      else if (character === '"') inString = false
+      continue
+    }
+    if (character === '"') inString = true
+    else if (character === "{") depth += 1
+    else if (character === "}") {
+      depth -= 1
+      if (depth === 0) return index
+    }
+  }
+  return -1
+}
 
-function unexpectedKeys(record: Record<string, unknown>, allowed: ReadonlySet<string>): string[] {
-  return Object.keys(record).filter((key) => !allowed.has(key) && !INTERNAL_ECHO_KEYS.has(key))
+function extractJsonObject(text: string): unknown | undefined {
+  let start = text.indexOf("{")
+  while (start !== -1) {
+    const end = matchingBrace(text, start)
+    if (end !== -1) {
+      try {
+        return JSON.parse(text.slice(start, end + 1))
+      } catch {
+        start = text.indexOf("{", start + 1)
+        continue
+      }
+    }
+    start = text.indexOf("{", start + 1)
+  }
+  return undefined
 }
 
 export function parseCriticOutput(text: string): CriticParseResult {
@@ -91,30 +122,19 @@ export function parseCriticOutput(text: string): CriticParseResult {
   const trimmed = text.trim()
   if (!trimmed) return { kind: "malformed", reason: "empty critic output" }
 
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(trimmed)
-  } catch {
-    return { kind: "malformed", reason: "critic output was not JSON" }
-  }
+  const parsed = extractJsonObject(trimmed)
+  if (parsed === undefined) return { kind: "malformed", reason: "critic output contained no JSON object" }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     return { kind: "malformed", reason: "critic output was not a JSON object" }
   }
 
   const record = parsed as Record<string, unknown>
-  if (record.status === "ok") {
-    if (unexpectedKeys(record, OK_KEYS).length !== 0) {
-      return { kind: "malformed", reason: "ok output had extra keys" }
-    }
-    return { kind: "ok" }
-  }
+  if (record.status === "ok") return { kind: "ok" }
 
   if (record.status !== "concern") {
     return { kind: "malformed", reason: "critic status was neither ok nor concern" }
   }
 
-  const extra = unexpectedKeys(record, CONCERN_KEYS)
-  if (extra.length > 0) return { kind: "malformed", reason: `concern output had extra keys: ${extra.join(", ")}` }
   if (!isSeverity(record.severity)) return { kind: "malformed", reason: "concern severity was invalid" }
   if (!isCategory(record.category)) return { kind: "malformed", reason: "concern category was invalid" }
   if (typeof record.message !== "string") return { kind: "malformed", reason: "concern message was not a string" }

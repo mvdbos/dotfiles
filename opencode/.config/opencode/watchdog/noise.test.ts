@@ -15,26 +15,45 @@ describe("parseCriticOutput", () => {
     expect(parseCriticOutput('{"status":"ok"}')).toEqual({ kind: "ok" })
   })
 
-  test("rejects ok with extra keys", () => {
-    expect(parseCriticOutput('{"status":"ok","message":"hi"}')).toMatchObject({ kind: "malformed" })
-  })
-
-  test("ignores internal packet echo keys on ok and concern", () => {
-    expect(parseCriticOutput('{"status":"ok","evidenceFingerprint":"abc"}')).toEqual({ kind: "ok" })
+  test("tolerates extra keys on ok and concern output", () => {
+    expect(parseCriticOutput('{"status":"ok","message":"hi"}')).toEqual({ kind: "ok" })
+    expect(parseCriticOutput('{"status":"ok","evidenceFingerprint":"abc","nextStep":"none"}')).toEqual({ kind: "ok" })
     const echoed = parseCriticOutput(
       JSON.stringify({
         status: "concern",
         severity: "warning",
         category: "missing_verification",
         message: "Tests failed after the change and no verification was recorded.",
-        evidenceFingerprint: "82f9c4b5a1d3e7f0",
-        sourceEpoch: 3,
+        confidence: 0.9,
+        nextStep: "Run the failing test again.",
       }),
     )
     expect(echoed).toMatchObject({
       kind: "concern",
       concern: { severity: "warning", category: "missing_verification" },
     })
+  })
+
+  test("extracts the JSON object from fences, prose, and trailing text", () => {
+    const concern = JSON.stringify({
+      status: "concern",
+      severity: "warning",
+      category: "repeated_failure",
+      message: "The same failing test command was re-run three times with identical errors.",
+    })
+    expect(parseCriticOutput(`\`\`\`json\n${concern}\n\`\`\``)).toMatchObject({ kind: "concern" })
+    expect(parseCriticOutput(`Here is my verdict:\n${concern}\nDone.`)).toMatchObject({ kind: "concern" })
+    expect(parseCriticOutput('Verdict: {"status":"ok"} — nothing to report.')).toEqual({ kind: "ok" })
+  })
+
+  test("keeps braces inside strings from breaking extraction", () => {
+    const concern = JSON.stringify({
+      status: "concern",
+      severity: "warning",
+      category: "contradicted_evidence",
+      message: 'The template "{not json}" was emitted while the tool output shows an error.',
+    })
+    expect(parseCriticOutput(concern)).toMatchObject({ kind: "concern" })
   })
 
   test("accepts one schema-valid bounded concern", () => {
@@ -56,9 +75,9 @@ describe("parseCriticOutput", () => {
     })
   })
 
-  test("rejects extra keys, bad enums, short and oversized messages", () => {
+  test("tolerates benign extra keys but rejects bad enums, short and oversized messages", () => {
     const base = { status: "concern", severity: "warning", category: "plan_drift", message: "A concrete enough message." }
-    expect(parseCriticOutput(JSON.stringify({ ...base, confidence: 0.9 }))).toMatchObject({ kind: "malformed" })
+    expect(parseCriticOutput(JSON.stringify({ ...base, confidence: 0.9 }))).toMatchObject({ kind: "concern" })
     expect(parseCriticOutput(JSON.stringify({ ...base, severity: "fatal" }))).toMatchObject({ kind: "malformed" })
     expect(parseCriticOutput(JSON.stringify({ ...base, category: "style" }))).toMatchObject({ kind: "malformed" })
     expect(parseCriticOutput(JSON.stringify({ ...base, message: "too short" }))).toMatchObject({ kind: "malformed" })

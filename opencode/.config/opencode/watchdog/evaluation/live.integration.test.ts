@@ -117,18 +117,12 @@ describe("live watchdog evaluation (opt-in)", () => {
             prompt: fitted.prompt,
             timeoutMs: 30_000,
           })
-          if (result.kind === "concern") {
-            const raw = JSON.stringify({
-              status: "concern",
-              severity: result.concern.severity,
-              category: result.concern.category,
-              message: result.concern.message,
-            })
-            raws.push({ id: fixture.id, label: fixture.label, raw })
-            return raw
-          }
-          raws.push({ id: fixture.id, label: fixture.label, raw: "raw" in result ? (result.raw ?? "").slice(0, 200) : result.kind })
-          return '{"status":"ok"}'
+          const raw =
+            result.kind === "ok" || result.kind === "concern" || result.kind === "malformed"
+              ? result.raw
+              : '{"status":"ok"}'
+          raws.push({ id: fixture.id, label: fixture.label, raw: (raw ?? "").slice(0, 400) })
+          return raw
         },
         "cadence",
       )

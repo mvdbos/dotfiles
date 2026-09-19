@@ -855,6 +855,48 @@ describe("watchdog plugin runtime", () => {
     await runtime.dispose()
   })
 
+  test("cadence work arriving during a check is claimed after it completes, not during", async () => {
+    const fake = fakeClient()
+    fake.holdCritic()
+    const runtime = new WatchdogRuntime({
+      client: fake.client,
+      config: configFor({}, { everyTools: 5, foreignContinuationSettleMs: 0, timeoutMs: 5_000 }),
+      patterns: compileForeignPatterns(undefined).patterns,
+      lease: new WatchdogLease({ path: ":memory:" }),
+      explore: new ExploreGate(),
+      log: () => {},
+    })
+    await realTurn(runtime)
+    for (let seq = 1; seq <= 5; seq += 1) {
+      runtime.recordTerminalTool("root", {
+        type: "tool",
+        tool: "bash",
+        callID: `call-${seq}`,
+        state: { status: "completed", input: { command: `echo ${seq}` }, output: `out-${seq}` },
+      })
+    }
+    await Bun.sleep(30)
+    const state = runtime.states.get("root")!
+    expect(state.inFlight?.trigger.kind).toBe("cadence")
+
+    for (let seq = 6; seq <= 12; seq += 1) {
+      runtime.recordTerminalTool("root", {
+        type: "tool",
+        tool: "bash",
+        callID: `call-${seq}`,
+        state: { status: "completed", input: { command: `echo ${seq}` }, output: `out-${seq}` },
+      })
+    }
+    expect(state.pendingTrigger).toBeUndefined()
+    expect(state.unclaimedSignificantTools).toBe(7)
+
+    fake.releaseCritic()
+    await Bun.sleep(60)
+    expect(fake.calls.create.length).toBeGreaterThanOrEqual(2)
+    expect(state.lastCheckToolSeq).toBe(5)
+    await runtime.dispose()
+  })
+
   test("an accepted cadence concern with no later provider boundary is delivered through idle", async () => {
     const concern = JSON.stringify({
       status: "concern",

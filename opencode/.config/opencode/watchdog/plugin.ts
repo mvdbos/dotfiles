@@ -229,7 +229,11 @@ export class WatchdogRuntime {
     if (!recordTool(state, observation, change)) return
     state.toolSeq = nextToolSeq
 
-    if (cadenceEligibleCount(state, this.deps.config.everyTools) >= this.deps.config.everyTools && !state.pendingTrigger) {
+    if (
+      cadenceEligibleCount(state, this.deps.config.everyTools) >= this.deps.config.everyTools &&
+      !state.pendingTrigger &&
+      !state.inFlight
+    ) {
       const claim = claimCadence(state, {
         everyTools: this.deps.config.everyTools,
         snapshotKey: this.currentSnapshotKey(state),
@@ -519,7 +523,9 @@ export class WatchdogRuntime {
     if (lease) this.deps.lease.release(lease)
 
     const completed = result.kind === "ok" || result.kind === "concern" || result.kind === "malformed"
+    const newToolsDuringFlight = state.unclaimedSignificantTools
     settleClaim(state, claim, completed)
+    if (newToolsDuringFlight > 0) this.reclaimCadenceIfEligible(state)
 
     if (
       result.kind === "timeout" ||

@@ -32,6 +32,16 @@ describe("frozen evaluation corpus", () => {
     }
   })
 
+  test("includes production-scale packets above 8 KiB", () => {
+    let largest = 0
+    for (const fixture of EVALUATION_CORPUS) {
+      const fitted = fitUserPrompt(fixture.packet)
+      if ("error" in fitted) continue
+      largest = Math.max(largest, Buffer.byteLength(fitted.prompt, "utf8"))
+    }
+    expect(largest).toBeGreaterThan(8_000)
+  })
+
   test("fixture ids are unique", () => {
     expect(new Set(EVALUATION_CORPUS.map((fixture) => fixture.id)).size).toBe(EVALUATION_CORPUS.length)
   })
