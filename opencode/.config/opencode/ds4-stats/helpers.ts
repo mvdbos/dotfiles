@@ -61,7 +61,8 @@ export type SessionStats = {
   durationSecs: number
   // Wall-clock seconds spent in finalized (completed or errored, including
   // aborted) tool parts of the counted messages, with overlapping intervals
-  // merged so parallel calls are not double counted.
+  // merged so parallel calls are not double counted. Human-wait tools
+  // (question) are skipped: their span is user deliberation, not agent work.
   toolDurationSecs: number
   // durationSecs + toolDurationSecs: every busy second of the session's ds4
   // turns. Still excludes user idle, queue waits and unmatched requests.
@@ -70,10 +71,18 @@ export type SessionStats = {
 
 export type ToolTime = {
   messageID: string
+  // ToolPart.tool, so human-wait tools can be recognized.
+  tool: string
   // Epoch milliseconds, straight from ToolPart.state.time.
   start: number
   end: number
 }
+
+// Tools whose span measures user deliberation instead of agent work: the
+// question tool stays running until the user answers, so its wall time is
+// human idle and must not enter the busy totals. Same policy as watchdog's
+// DEFAULT_EXCLUDED_TOOLS.
+export const HUMAN_WAIT_TOOLS: ReadonlySet<string> = new Set(["question"])
 
 export type Level = "good" | "warn" | "bad" | "none"
 
@@ -272,13 +281,16 @@ export function usageMessages(
 // Wall-clock tool seconds for the given messages, merging overlapping
 // intervals so parallel calls are not double counted. Spans are epoch
 // milliseconds; callers pass finalized parts only (running parts have no end).
+// Human-wait tools are excluded by default; pass an empty set to keep them.
 export function toolDurationSecs(
   parts: Iterable<ToolTime>,
   messageIDs: ReadonlySet<string>,
+  excluded: ReadonlySet<string> = HUMAN_WAIT_TOOLS,
 ): number {
   const spans: Array<{ start: number; end: number }> = []
   for (const part of parts) {
     if (!messageIDs.has(part.messageID)) continue
+    if (excluded.has(part.tool)) continue
     if (!Number.isFinite(part.start) || !Number.isFinite(part.end)) continue
     if (part.end <= part.start) continue
     spans.push({ start: part.start, end: part.end })

@@ -224,9 +224,9 @@ describe("sessionStats", () => {
     const claims = new Map<string, number>()
     const links = linkMessages({ messages, requests, claims })
     const parts: ToolTime[] = [
-      { messageID: "m1", start: 0, end: 61_000 },
-      { messageID: "m2", start: 61_000, end: 123_000 },
-      { messageID: "other", start: 0, end: 999_000 },
+      { messageID: "m1", tool: "bash", start: 0, end: 61_000 },
+      { messageID: "m2", tool: "bash", start: 61_000, end: 123_000 },
+      { messageID: "other", tool: "bash", start: 0, end: 999_000 },
     ]
     const stats = sessionStats(messages, links, parts)
     expect(stats.durationSecs).toBeCloseTo(6, 5)
@@ -236,7 +236,12 @@ describe("sessionStats", () => {
 })
 
 describe("toolDurationSecs", () => {
-  const span = (messageID: string, start: number, end: number): ToolTime => ({ messageID, start, end })
+  const span = (messageID: string, start: number, end: number, tool = "bash"): ToolTime => ({
+    messageID,
+    tool,
+    start,
+    end,
+  })
 
   test("sums disjoint spans and merges overlapping ones", () => {
     const allowed = new Set(["m1"])
@@ -251,6 +256,15 @@ describe("toolDurationSecs", () => {
     expect(toolDurationSecs([span("m1", 5, 5), span("m1", 10, 5)], allowed)).toBe(0)
     expect(toolDurationSecs([span("m1", Number.NaN, 10)], allowed)).toBe(0)
     expect(toolDurationSecs([], allowed)).toBe(0)
+  })
+
+  test("skips human-wait tools unless explicitly kept", () => {
+    const allowed = new Set(["m1"])
+    expect(toolDurationSecs([span("m1", 0, 60_000, "question")], allowed)).toBe(0)
+    expect(
+      toolDurationSecs([span("m1", 0, 60_000, "question"), span("m1", 0, 5_000, "bash")], allowed),
+    ).toBe(5)
+    expect(toolDurationSecs([span("m1", 0, 60_000, "question")], allowed, new Set())).toBe(60)
   })
 })
 

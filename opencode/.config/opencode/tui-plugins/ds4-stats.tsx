@@ -117,14 +117,15 @@ export type FetchedHistory = {
 
 // A tool span usable for stats: finalized (completed or errored, including
 // aborted) with a usable pair of epoch-millisecond timestamps. Running and
-// pending parts have no end yet and are skipped.
+// pending parts have no end yet and are skipped. Human-wait tools (question)
+// are still recorded; toolDurationSecs drops them at aggregation.
 export function toolSpan(part: Part): (ToolTime & { id: string }) | undefined {
   if (part.type !== "tool") return undefined
   const state = part.state
   if (state.status !== "completed" && state.status !== "error") return undefined
   const { start, end } = state.time
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return undefined
-  return { id: part.id, messageID: part.messageID, start, end }
+  return { id: part.id, messageID: part.messageID, tool: part.tool, start, end }
 }
 
 export async function fetchAllMessages(
@@ -303,7 +304,7 @@ const plugin: TuiPlugin = async (api, options) => {
     }
     const existing = parts.get(span.id)
     if (existing && existing.end >= span.end) return false
-    parts.set(span.id, { messageID: span.messageID, start: span.start, end: span.end })
+    parts.set(span.id, { messageID: span.messageID, tool: span.tool, start: span.start, end: span.end })
     return true
   }
 

@@ -157,18 +157,28 @@ describe("fetchAllMessages", () => {
               id: "prt_done",
               messageID: message.id,
               type: "tool",
+              tool: "bash",
               state: { status: "completed", time: { start: 1000, end: 4000 } },
             },
             {
               id: "prt_err",
               messageID: message.id,
               type: "tool",
+              tool: "read",
               state: { status: "error", time: { start: 4000, end: 9000 } },
+            },
+            {
+              id: "prt_ask",
+              messageID: message.id,
+              type: "tool",
+              tool: "question",
+              state: { status: "completed", time: { start: 9000, end: 90_000 } },
             },
             {
               id: "prt_run",
               messageID: message.id,
               type: "tool",
+              tool: "bash",
               state: { status: "running", time: { start: 9000 } },
             },
             { id: "prt_text", messageID: message.id, type: "text", text: "hi" },
@@ -178,8 +188,9 @@ describe("fetchAllMessages", () => {
     const fetched = await fetchAllMessages(fake.client as never, "ses_test")
 
     expect(fetched.parts).toEqual([
-      { id: "prt_done", messageID: "msg_0000", start: 1000, end: 4000 },
-      { id: "prt_err", messageID: "msg_0000", start: 4000, end: 9000 },
+      { id: "prt_done", messageID: "msg_0000", tool: "bash", start: 1000, end: 4000 },
+      { id: "prt_err", messageID: "msg_0000", tool: "read", start: 4000, end: 9000 },
+      { id: "prt_ask", messageID: "msg_0000", tool: "question", start: 9000, end: 90_000 },
     ])
   })
 })
