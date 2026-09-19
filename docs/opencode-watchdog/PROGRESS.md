@@ -39,10 +39,11 @@ Plan of record: `docs/research/opencode-watchdog-plugin-plan.md`.
 
 ## Design notes for the remaining plugin wiring
 
-- `watchdog/scheduler.ts`: `WatchdogLease` wrapping `SubagentAdmissionQueue` (`resource: "watchdog-critic"`, `timeoutMs: 1` for a non-blocking tryAcquire), per-root `SessionState` registry (max 100, protected states never evicted), admission order idle > revalidation > cadence, fairness rotation, 750 ms activity toast tied to checkID, explore preemption (abort server-side, delete, then release; uncertain abort keeps lease).
+- `watchdog/scheduler.ts`: `WatchdogLease` wrapping `SubagentAdmissionQueue` (`resource: "watchdog-critic"`, `timeoutMs: 1` for a non-blocking tryAcquire), per-root `SessionState` registry (max 100, protected states never evicted), admission order idle > revalidation > cadence, fairness rotation, debug-gated 750 ms activity toast tied to checkID, explore preemption (abort server-side, delete, then release; uncertain abort keeps lease).
 - `watchdog/feedback.ts`: `experimental.session.compacting` arms one-shot per-session skip; `experimental.chat.messages.transform` applies/repeats the advisory byte-identically at the installed tool part; idle `session.prompt` with non-synthetic marker text + `watchdogMetadata`; toast state machine `pending/delivered/failed` with one retry after known failure.
 - `watchdog/plugin.ts`: hook composition (config agent injection, chat.params 256 cap gated on registered critic child, chat.message classification, event tree, tool.execute.before/after, transforms, dispose), circuit breaker, stale revalidation hop=1.
 - `plugins/watchdog.ts`: re-export only. `watchdog.json`: disabled by default until ticket 13; `midRunDelivery` follows `probe-outcomes.ts`.
+- `watchdog.json` `debug: true` turns on diagnostics: the cadence activity toast, per-check telemetry, and routine lifecycle logs (cancellations, context-overflow retry). Failure logs (admission failed, unbounded packet, child create/run/delete failures, concern-toast failure, idle-follow-up failure) always emit; default `false` keeps checks fully silent. Vocabulary in `docs/opencode-watchdog/CONTEXT.md`.
 
 ## Next steps
 

@@ -606,7 +606,7 @@ describe("watchdog plugin runtime", () => {
     fake.holdCritic()
     const runtime = new WatchdogRuntime({
       client: fake.client,
-      config: configFor({}, { everyTools: 5, foreignContinuationSettleMs: 0, timeoutMs: 5_000 }),
+      config: configFor({}, { everyTools: 5, foreignContinuationSettleMs: 0, timeoutMs: 5_000, debug: true }),
       patterns: compileForeignPatterns(undefined).patterns,
       lease: new WatchdogLease({ path: ":memory:" }),
       explore: new ExploreGate(),
@@ -752,12 +752,40 @@ describe("watchdog plugin runtime", () => {
     expect(fake.calls.toasts.filter((toast) => String(toast.message).includes("reviewing recent progress"))).toHaveLength(0)
   })
 
+  test("debug false keeps a slow cadence check silent: no activity toast and no completion telemetry", async () => {
+    const fake = fakeClient()
+    fake.holdCritic()
+    const runtime = new WatchdogRuntime({
+      client: fake.client,
+      config: configFor({}, { everyTools: 5, foreignContinuationSettleMs: 0, timeoutMs: 5_000 }),
+      patterns: compileForeignPatterns(undefined).patterns,
+      lease: new WatchdogLease({ path: ":memory:" }),
+      explore: new ExploreGate(),
+      log: () => {},
+    })
+    await realTurn(runtime)
+    for (let seq = 1; seq <= 5; seq += 1) {
+      runtime.recordTerminalTool("root", {
+        type: "tool",
+        tool: "bash",
+        callID: `call-${seq}`,
+        state: { status: "completed", input: { command: `echo ${seq}` }, output: `out-${seq}` },
+      })
+    }
+    await Bun.sleep(900)
+    expect(fake.calls.toasts.filter((toast) => String(toast.message).includes("reviewing recent progress"))).toHaveLength(0)
+    fake.releaseCritic()
+    await Bun.sleep(40)
+    expect(fake.calls.logs.filter((entry) => entry.message === "watchdog check completed")).toHaveLength(0)
+    await runtime.dispose()
+  })
+
   test("cancellation and disposal clear the delayed activity timer", async () => {
     const cancelled = fakeClient()
     cancelled.holdCritic()
     const runtime = new WatchdogRuntime({
       client: cancelled.client,
-      config: configFor({}, { everyTools: 5, foreignContinuationSettleMs: 0, timeoutMs: 5_000 }),
+      config: configFor({}, { everyTools: 5, foreignContinuationSettleMs: 0, timeoutMs: 5_000, debug: true }),
       patterns: compileForeignPatterns(undefined).patterns,
       lease: new WatchdogLease({ path: ":memory:" }),
       explore: new ExploreGate(),
@@ -817,7 +845,7 @@ describe("watchdog plugin runtime", () => {
     const fake = fakeClient({ criticText: "not json at all" })
     const runtime = new WatchdogRuntime({
       client: fake.client,
-      config: configFor({}, { everyTools: 5, foreignContinuationSettleMs: 0 }),
+      config: configFor({}, { everyTools: 5, foreignContinuationSettleMs: 0, debug: true }),
       patterns: compileForeignPatterns(undefined).patterns,
       lease: new WatchdogLease({ path: ":memory:" }),
       explore: new ExploreGate(),

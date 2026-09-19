@@ -138,7 +138,7 @@ The goal plugin's `TaskTracker` also treats every `session.created` carrying `pa
 6. **Critic runner:** creates, prompts, times out, parses, and deletes ephemeral child sessions.
 7. **Noise guard:** rejects malformed, duplicate, low-information, or over-budget findings and routes eligible older-turn concerns into bounded revalidation.
 8. **Feedback router:** installs request-local mid-run advisory or starts one visible idle follow-up when no foreign continuer owns the boundary.
-9. **Logger:** writes structured debug/warn/error entries through `client.app.log`; every logical check records trigger, outcome, latency, attempt count, and retry reasons; logging never throws.
+9. **Logger:** writes structured debug/warn/error entries through `client.app.log`; failure paths always log, while per-check telemetry and routine lifecycle notes require `debug: true`; every enabled logical check records trigger, outcome, latency, attempt count, and retry reasons; logging never throws.
 
 ### Sequence diagram
 
@@ -507,7 +507,7 @@ Fresh children prevent critic conversation growth and give reliable root/child f
 
 ### Cadence activity visibility
 
-Cadence checks remain detached and never gate the main loop. Immediately before prompting the critic, arm a 750 ms timer tied to the check ID. If the same cadence check is still active when it fires, its root turn is still current, and exploration has not preempted it, call `client.tui.showToast()` best-effort with an informational message such as `Watchdog is reviewing recent progress in the background.` Use a short duration; this is transient status, not transcript content.
+Cadence checks remain detached and never gate the main loop. With `debug: true`, immediately before prompting the critic, arm a 750 ms timer tied to the check ID. If the same cadence check is still active when it fires, its root turn is still current, and exploration has not preempted it, call `client.tui.showToast()` best-effort with an informational message such as `Watchdog is reviewing recent progress in the background.` Use a short duration; this is transient status, not transcript content. With `debug: false` (default) the timer is never armed and cadence checks are fully silent; concern toasts and idle follow-ups are unaffected by `debug`.
 
 Cancel the timer on every completion, abort, preemption, stale-result, deletion, and disposal path. Checks completing before the threshold show nothing. An `ok` result shows no completion toast. Headless/non-TUI failure is ignored after debug logging and never affects scheduling.
 
@@ -767,7 +767,7 @@ type WatchdogConfig = {
     mode: "extend" | "replace"         // default extend
     patterns: ForeignContinuationPattern[] // default []
   }
-  debug?: boolean                      // default false
+  debug?: boolean                      // default false; gates the cadence activity toast, per-check telemetry, and routine lifecycle logs
 }
 ```
 
@@ -786,7 +786,7 @@ Fixed MVP policy, not config:
 
 - Maximum final watchdog user prompt: 16,384 UTF-8 bytes; target packet p95 remains 14,000 characters.
 - Maximum critic output: 256 tokens through critic-scoped `chat.params`; reject assistant text above 2,000 UTF-8 bytes.
-- Cadence activity toast threshold: 750 ms; no start toast for idle checks, no completion toast for `ok`.
+- Cadence activity toast threshold: 750 ms when `debug: true`; no start toast for idle checks, no completion toast for `ok`.
 - Foreign-continuation idle admission settles for configured 500 ms by default; this reduces but cannot eliminate the detached-handler TOCTOU race.
 - One in-flight check per root and one globally through the dedicated cross-process lease; preserve the latest pending cadence and idle work instead of dropping it.
 - Delivery budget: warning then at most one later independent critical with changed evidence, or one critical-first delivery and nothing later that turn.
@@ -1015,7 +1015,7 @@ Scenarios:
 22. Context-overflow retry handles quote/control/multibyte expansion and still satisfies the exact final byte cap.
 23. Context-overflow retry aborts/deletes the first child, keeps the lease, and sends only the minimal snapshot in a fresh child with no retained first-attempt history.
 24. Overlapping claims materialize after predecessor disposition: predecessor success excludes its sequence range from later tool/failure newness and advances change fingerprints; predecessor failure keeps those absolute observations eligible from merged retained evidence, subject only to explicit deterministic truncation. Idle completion advances exactly its own `throughToolSeq` and change baseline while leaving later observations unclaimed.
-25. A cadence check completing before 750 ms shows no status toast; a slower check shows exactly one informational toast while the main session continues; idle checks show no activity toast.
+25. With `debug: true`, a cadence check completing before 750 ms shows no status toast and a slower check shows exactly one informational toast while the main session continues; with `debug: false` (default) no activity toast is shown; idle checks show no activity toast.
 26. An accepted cadence or revalidation concern shows one bounded warning/error toast only after an atomic current-epoch/budget reservation and `pending` state transition. If it later routes at idle while the first toast is pending or delivered, the transcript advisory appears but no second toast starts. A known failed earlier toast may be attempted once at idle; delayed callbacks cannot mutate a replacement advisory.
 27. Timeout, stale result, explore preemption, session deletion, and plugin disposal clear delayed-toast timers and produce no late toast.
 28. A schema-valid cadence/idle response completing after a newer real-user prompt settles exactly its original claim accounting but emits no stale toast/advisory. A stale concern then runs one fresh revalidation against current task/evidence; current `ok` stays silent and current concern follows ordinary acceptance. Malformed/aborted stale attempts leave baselines unchanged.
@@ -1069,7 +1069,7 @@ At least 20 positive and 40 negative fixtures before enabling by default. Negati
 - Output tokens per invocation.
 - Critic failures/malformed-output rate.
 - Interruptions per normal coding session.
-- Cadence checks exceeding the 750 ms visibility threshold and activity toasts emitted.
+- Cadence checks exceeding the 750 ms visibility threshold and activity toasts emitted (debug only).
 - Accepted concerns, concern toasts delivered, toast failures, and cadence-to-idle toast deduplications.
 - Foreign continuations matched by pattern ID, pattern/version warnings, idle admissions cancelled, and observed dual-prompt races.
 - Goal continuation deferral attributable to critic children and watchdog-root tokens charged to active goals.

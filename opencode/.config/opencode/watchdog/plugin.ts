@@ -113,6 +113,7 @@ export class WatchdogRuntime {
         if (!deleted) this.tombstones.add(id)
       },
       log: this.log.bind(this),
+      debugLog: this.debugLog.bind(this),
     })
   }
 
@@ -122,9 +123,15 @@ export class WatchdogRuntime {
   }
 
   private telemetry(message: string, extra: Record<string, unknown>): void {
+    if (!this.deps.config.debug) return
     void this.deps.client.app.log({
       body: { service: "watchdog", level: "info", message, extra },
     }).catch(() => {})
+  }
+
+  private debugLog(message: string, detail?: unknown): void {
+    if (!this.deps.config.debug) return
+    this.log(message, detail)
   }
 
   private now(): number {
@@ -384,7 +391,7 @@ export class WatchdogRuntime {
       lease,
       slowToastShown: false,
     }
-    if (claim.kind === "cadence") {
+    if (claim.kind === "cadence" && this.deps.config.debug) {
       state.inFlight.slowToastTimer = this.setTimer(() => {
         void this.showActivityToast(state, checkID)
       }, CADENCE_ACTIVITY_TOAST_MS)
@@ -452,6 +459,7 @@ export class WatchdogRuntime {
   }
 
   private async showActivityToast(state: SessionState, checkID: string): Promise<void> {
+    if (!this.deps.config.debug) return
     if (!state.inFlight || state.inFlight.checkID !== checkID) return
     if (state.inFlight.trigger.kind !== "cadence") return
     if (state.turnEpoch !== state.inFlight.epoch) return
@@ -807,7 +815,7 @@ export class WatchdogRuntime {
 
     if (state.inFlight?.checkID !== inFlight.checkID) return
     if (!settled) {
-      this.log(`watchdog check cancellation unconfirmed (${reason}); lease retained`)
+      this.debugLog(`watchdog check cancellation unconfirmed (${reason}); lease retained`)
       return
     }
 
@@ -817,7 +825,7 @@ export class WatchdogRuntime {
     state.inFlight = undefined
     if (inFlight.lease) this.deps.lease.release(inFlight.lease)
     this.reclaimCadenceIfEligible(state)
-    this.log(`watchdog check cancelled (${reason})`)
+    this.debugLog(`watchdog check cancelled (${reason})`)
   }
 
   async preemptForExplore(): Promise<void> {

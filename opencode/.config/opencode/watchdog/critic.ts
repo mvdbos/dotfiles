@@ -62,6 +62,7 @@ export type CriticRunnerDeps = {
   onChildCreated?(sessionID: string): void
   onChildDisposed?(sessionID: string, deleted: boolean): void
   log?(message: string, detail?: unknown): void
+  debugLog?(message: string, detail?: unknown): void
 }
 
 type PromptAttempt = {
@@ -160,7 +161,8 @@ export class CriticRunner {
           await this.abortChild(childID)
           deleteSucceeded = await this.deleteChild(childID)
           disposed = true
-          this.deps.log?.("watchdog critic hit context overflow; retrying with the minimal packet")
+          const routineLog = this.deps.debugLog ?? this.deps.log
+          routineLog?.("watchdog critic hit context overflow; retrying with the minimal packet")
           return this.attempt(
             options,
             options.minimalPrompt,
