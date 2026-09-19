@@ -8,7 +8,8 @@
   },
   "keybinds": {
     "model_cycle_favorite": "ctrl+m",
-    "app_exit": "ctrl+d,<leader>q"
+    "app_exit": "ctrl+d,<leader>q",
+    "prompt_skills": "ctrl+s"
   },
   "plugin": [
     [
