@@ -124,7 +124,13 @@ describe("parseWatchdogConfig", () => {
       temperature: 0,
       prompt: CRITIC_SYSTEM_PROMPT,
       hidden: true,
-      options: { enable_thinking: false },
+      options: {
+        enable_thinking: false,
+        response_format: {
+          type: "json_schema",
+          json_schema: { name: "watchdog_verdict", strict: true },
+        },
+      },
       permission: { "*": "deny" },
     })
     expect(agent.steps).toBeUndefined()

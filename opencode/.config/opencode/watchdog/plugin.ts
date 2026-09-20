@@ -17,9 +17,9 @@ import {
   toastStateAfterAttempt,
   type RequestMessage,
 } from "./feedback"
-import { concernIdentity, decideDelivery, type AcceptedConcern } from "./noise"
+import { concernIdentity, decideDelivery, newDeliveryBudget, type AcceptedConcern } from "./noise"
 import { fitUserPrompt, materializePacket, snapshotKey, evidenceFingerprint, type PacketTrigger, type WatchdogPacket } from "./packet"
-import { CADENCE_ACTIVITY_TOAST_MS } from "./prompt"
+import { CADENCE_ACTIVITY_TOAST_MS, CRITIC_SYSTEM_PROMPT, isCompletionCategory } from "./prompt"
 import { rotateRoots, selectAdmissibleTrigger, type ExploreGate, type WatchdogLease } from "./scheduler"
 import {
   applyForeignContinuation,
@@ -321,6 +321,36 @@ export class WatchdogRuntime {
     const advisory = state.activeAdvisory
     if (advisory?.findingHash && advisory.installedAtEpoch === state.turnEpoch && advisory.deliveredAtEpoch !== state.turnEpoch) {
       state.pendingIdle = undefined
+      if (advisory.claimKind === "cadence") {
+        const candidate = {
+          severity: advisory.severity,
+          category: advisory.category,
+          message: advisory.message,
+          sourceEpoch: advisory.installedAtEpoch,
+          evidenceFingerprint: state.lastConcernEvidenceFingerprint ?? "",
+        }
+        const revalidation = claimRevalidation(state, {
+          candidate,
+          snapshotKey: this.currentSnapshotKey(state),
+          maxRecentTools: this.deps.config.maxRecentTools,
+        })
+        state.activeAdvisory = undefined
+        state.deliveryBudget = newDeliveryBudget()
+        state.deliveredConcernHashes.delete(advisory.findingHash)
+        state.lastConcernToolSeq = 0
+        state.lastConcernEvidenceFingerprint = undefined
+        if (revalidation.revalidationKey !== state.lastRevalidationKey) {
+          state.lastRevalidationKey = revalidation.revalidationKey
+          state.pendingRevalidation = revalidation
+        }
+        this.telemetry("watchdog advisory deferred to revalidation", {
+          sessionID,
+          reason: "cadence_claim_on_idle",
+          category: advisory.category,
+        })
+        void this.requestAdmission()
+        return
+      }
       void this.deliverIdleConcern(sessionID, state, advisory, advisory.findingHash, advisory.throughToolSeq)
       return
     }
@@ -562,6 +592,17 @@ export class WatchdogRuntime {
     }
 
     const concern = result.concern
+    if (claim.kind === "cadence" && isCompletionCategory(concern.category)) {
+      this.telemetry("watchdog concern dropped", {
+        sessionID: root,
+        checkID,
+        trigger: claim.kind,
+        reason: "cadence_completion_category",
+        category: concern.category,
+      })
+      void this.requestAdmission()
+      return
+    }
     const hash = concernIdentity(concern.category, concern.message)
     const packetFingerprint = evidenceFingerprint(packet)
 
@@ -603,7 +644,7 @@ export class WatchdogRuntime {
     state.previousConcern = { category: concern.category, message: concern.message, evidenceFingerprint: packetFingerprint }
 
     if (state.latestUserKind === "foreign") {
-      this.retainAdvisory(state, concern, hash, claim.throughToolSeq)
+      this.retainAdvisory(state, concern, hash, claim.throughToolSeq, claim.kind)
       void this.showConcernToast(state, concern, hash)
       void this.requestAdmission()
       return
@@ -614,28 +655,35 @@ export class WatchdogRuntime {
     }
 
     if (claim.kind === "cadence" && this.deps.config.midRunDelivery) {
-      this.retainAdvisory(state, concern, hash, claim.throughToolSeq)
+      this.retainAdvisory(state, concern, hash, claim.throughToolSeq, claim.kind)
       void this.showConcernToast(state, concern, hash)
       void this.requestAdmission()
       return
     }
 
-    if (state.busy && claim.kind !== "idle") {
-      this.retainAdvisory(state, concern, hash, claim.throughToolSeq)
+    if (claim.kind === "cadence" || (state.busy && claim.kind !== "idle")) {
+      this.retainAdvisory(state, concern, hash, claim.throughToolSeq, claim.kind)
       void this.showConcernToast(state, concern, hash)
       void this.requestAdmission()
       return
     }
 
-    void this.deliverIdleConcern(root, state, concern, hash, claim.throughToolSeq)
+    void this.deliverIdleConcern(root, state, concern, hash, claim.throughToolSeq, claim.kind)
     void this.requestAdmission()
   }
 
-  private retainAdvisory(state: SessionState, concern: AcceptedConcern, findingHash: string, throughToolSeq: number): void {
+  private retainAdvisory(
+    state: SessionState,
+    concern: AcceptedConcern,
+    findingHash: string,
+    throughToolSeq: number,
+    claimKind?: PacketTrigger,
+  ): void {
     state.activeAdvisory = {
       ...concern,
       installedAtEpoch: state.turnEpoch,
       throughToolSeq,
+      claimKind,
       concernToast: undefined,
       installedPartID: undefined,
       installedText: undefined,
@@ -671,6 +719,7 @@ export class WatchdogRuntime {
     concern: AcceptedConcern,
     findingHash: string,
     throughToolSeq: number,
+    claimKind?: PacketTrigger,
   ): Promise<void> {
     if (state.continuationClaim) return
     const epoch = state.turnEpoch
@@ -687,7 +736,7 @@ export class WatchdogRuntime {
       findingHash,
       turnEpoch: epoch,
     })
-    if (!state.activeAdvisory) this.retainAdvisory(state, concern, findingHash, throughToolSeq)
+    if (!state.activeAdvisory) this.retainAdvisory(state, concern, findingHash, throughToolSeq, claimKind)
     if (state.activeAdvisory) state.activeAdvisory.deliveredAtEpoch = epoch
     void this.showConcernToast(state, concern, findingHash)
     try {
@@ -870,6 +919,10 @@ export function createWatchdogHooks(runtime: WatchdogRuntime): Hooks {
       if (input.agent !== WATCHDOG_AGENT_NAME) return
       if (!runtime.activeCriticSessions.has(input.sessionID)) return
       output.maxOutputTokens = 256
+    },
+    "experimental.chat.system.transform": async (input, output) => {
+      if (!input.sessionID || !runtime.activeCriticSessions.has(input.sessionID)) return
+      output.system.splice(0, output.system.length, CRITIC_SYSTEM_PROMPT)
     },
     "chat.message": async (input, output) => {
       const outputMessageID = (output.message as { id?: unknown }).id

@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test"
 import { compileForeignPatterns } from "../plugin-generated-user/helpers"
 import { parseWatchdogConfig, WATCHDOG_AGENT_NAME } from "./config"
 import { createWatchdogHooks, WatchdogRuntime, type WatchdogClient } from "./plugin"
+import { CRITIC_SYSTEM_PROMPT } from "./prompt"
 import { ExploreGate, WatchdogLease } from "./scheduler"
 import type { WatchdogConfig } from "./config"
 
@@ -127,6 +128,20 @@ describe("watchdog plugin runtime", () => {
     await hooks["chat.params"]?.({ sessionID: "child-x", agent: WATCHDOG_AGENT_NAME } as never, output as never)
     expect(output.maxOutputTokens).toBe(256)
     void client
+  })
+
+  test("system transform replaces the critic child system prompt and leaves other sessions untouched", async () => {
+    const { runtime } = makeRuntime()
+    const hooks = createWatchdogHooks(runtime)
+    runtime.activeCriticSessions.add("child-x")
+    const criticSystem = ["You are opencode, an interactive CLI tool.", "Instructions from: /repo/AGENTS.md\nproject rules", CRITIC_SYSTEM_PROMPT]
+    const criticOutput = { system: criticSystem }
+    await hooks["experimental.chat.system.transform"]?.({ sessionID: "child-x", model: {} } as never, criticOutput as never)
+    expect(criticSystem).toEqual([CRITIC_SYSTEM_PROMPT])
+
+    const otherSystem = ["base", "Instructions from: /repo/AGENTS.md"]
+    await hooks["experimental.chat.system.transform"]?.({ sessionID: "root", model: {} } as never, { system: otherSystem } as never)
+    expect(otherSystem).toEqual(["base", "Instructions from: /repo/AGENTS.md"])
   })
 
   test("chat.message captures the persisted ID from the output message", async () => {
@@ -397,8 +412,8 @@ describe("watchdog plugin runtime", () => {
     const concern = JSON.stringify({
       status: "concern",
       severity: "warning",
-      category: "plan_drift",
-      message: "The implementation departed from the stated plan for the parser.",
+      category: "repeated_failure",
+      message: "The same failing command was repeated with identical errors.",
     })
     const messages = [{
       info: { id: "u1", role: "user", agent: "build", model: { providerID: "probe", modelID: "main-model" } },
@@ -925,7 +940,7 @@ describe("watchdog plugin runtime", () => {
     await runtime.dispose()
   })
 
-  test("an accepted cadence concern with no later provider boundary is delivered through idle", async () => {
+  test("an accepted cadence concern with no later provider boundary is revalidated on idle, not delivered directly", async () => {
     const concern = JSON.stringify({
       status: "concern",
       severity: "warning",
@@ -955,11 +970,53 @@ describe("watchdog plugin runtime", () => {
 
     runtime.recordAssistantText("root", "a2", "Turn finished without another provider call.")
     runtime.handleIdle("root")
-    await Bun.sleep(40)
+    await Bun.sleep(80)
     const rootPrompts = fake.calls.prompts.filter((call) => call.id === "root")
     expect(rootPrompts).toHaveLength(1)
     expect(rootPrompts[0]!.body.parts[0].text.startsWith("[watchdog advisory:")).toBe(true)
-    expect(fake.calls.create).toHaveLength(1)
+    const revalidation = fake.calls.prompts.find((call) => call.body.agent === WATCHDOG_AGENT_NAME && call.body.parts[0].text.includes('"revalidateConcern"'))
+    expect(revalidation).toBeDefined()
+    await runtime.dispose()
+  })
+
+  test("a cadence completion-category concern is dropped and can still be caught by a later idle check", async () => {
+    const concern = JSON.stringify({
+      status: "concern",
+      severity: "warning",
+      category: "plan_drift",
+      message: "The implementation departed from the stated plan for the parser.",
+    })
+    const fake = fakeClient({ criticText: concern })
+    const runtime = new WatchdogRuntime({
+      client: fake.client,
+      config: configFor({ midRunDelivery: true, debug: true }, { everyTools: 5, foreignContinuationSettleMs: 0 }),
+      patterns: compileForeignPatterns(undefined).patterns,
+      lease: new WatchdogLease({ path: ":memory:" }),
+      explore: new ExploreGate(),
+      log: () => {},
+    })
+    await realTurn(runtime)
+    for (let seq = 1; seq <= 5; seq += 1) {
+      runtime.recordTerminalTool("root", {
+        type: "tool",
+        tool: "bash",
+        callID: `call-${seq}`,
+        state: { status: "completed", input: { command: `echo ${seq}` }, output: `out-${seq}` },
+      })
+    }
+    await Bun.sleep(40)
+    const state = runtime.states.get("root")!
+    expect(state.activeAdvisory).toBeUndefined()
+    expect(fake.calls.toasts).toHaveLength(0)
+    expect(fake.calls.prompts.filter((call) => call.id === "root")).toHaveLength(0)
+    const dropped = fake.calls.logs.find((entry) => entry.message === "watchdog concern dropped")
+    expect(dropped?.extra).toMatchObject({ trigger: "cadence", reason: "cadence_completion_category", category: "plan_drift" })
+
+    runtime.recordAssistantText("root", "a2", "Audit complete; awaiting direction.")
+    runtime.handleIdle("root")
+    await Bun.sleep(60)
+    expect(fake.calls.create).toHaveLength(2)
+    expect(fake.calls.prompts.filter((call) => call.id === "root")).toHaveLength(1)
     await runtime.dispose()
   })
 

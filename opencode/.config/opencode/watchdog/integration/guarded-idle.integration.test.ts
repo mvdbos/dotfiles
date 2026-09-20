@@ -60,6 +60,13 @@ describe("production guarded idle concerns", () => {
       )
       expect(advisory).toContain("Potential issue:")
 
+      const criticRequest = instance.llm.requestsOf("critic")[0]!
+      const criticPrompt = JSON.stringify(criticRequest.body.messages)
+      expect(criticPrompt).toContain("conservative trajectory critic")
+      expect(criticPrompt).not.toContain("PROBE_FIXTURE_AGENTS_MARKER")
+      const mainPrompt = JSON.stringify(instance.llm.requestsOf("main")[0]!.body.messages)
+      expect(mainPrompt).toContain("PROBE_FIXTURE_AGENTS_MARKER")
+
       const messages = await storedMessages(instance, sessionID)
       const advisoryMessage = messages.find((message) =>
         message.parts.some((part) => part.type === "text" && part.text === advisory),

@@ -274,6 +274,7 @@ export async function startProbeInstance(options: ProbeOptions = {}): Promise<Pr
   const cachePackagesDir = path.join(home, "xdg-cache", "opencode", "packages")
   mkdirSync(workdir, { recursive: true })
   mkdirSync(path.join(configDir, "plugins"), { recursive: true })
+  writeFileSync(path.join(configDir, "AGENTS.md"), "PROBE_FIXTURE_AGENTS_MARKER: fixture project instructions that must not reach the critic.\n")
 
   for (const scope of options.linkCachePackages ?? []) {
     const source = path.join(homedir(), ".cache", "opencode", "packages", scope)

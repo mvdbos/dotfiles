@@ -76,6 +76,7 @@ beforeAll(async () => {
                     attachment: false,
                     reasoning: true,
                     tool_call: true,
+                    temperature: true,
                     limit: { context: 114688, output: 16384 },
                   },
                 },

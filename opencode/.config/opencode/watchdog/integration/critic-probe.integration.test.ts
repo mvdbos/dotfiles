@@ -55,7 +55,10 @@ describe("watchdog critic provider contract", () => {
       const toolPart = body.tools
       expect(toolPart === undefined || (Array.isArray(toolPart) && toolPart.length === 0)).toBe(true)
       expect(body.tool_choice).toBeUndefined()
-      expect(body.response_format).toBeUndefined()
+      expect(body.response_format).toMatchObject({
+        type: "json_schema",
+        json_schema: { name: "watchdog_verdict", strict: true },
+      })
       expect(tokenLimit(body), JSON.stringify(body)).toBe(256)
       expect(thinkingDisabled(body), JSON.stringify(body)).toBe(true)
 

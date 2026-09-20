@@ -6,7 +6,7 @@ import {
   type ForeignContinuationPatternInput,
 } from "../plugin-generated-user/helpers"
 import { watchdogConfigPath } from "../plugin-generated-user/config"
-import { CRITIC_SYSTEM_PROMPT } from "./prompt"
+import { CRITIC_SYSTEM_PROMPT, OUTPUT_SCHEMA } from "./prompt"
 import { MID_RUN_DELIVERY_ENABLED } from "./probe-outcomes"
 
 export const WATCHDOG_AGENT_NAME = "watchdog-critic"
@@ -191,7 +191,13 @@ export function buildCriticAgent(config: WatchdogConfig): Record<string, unknown
     prompt: CRITIC_SYSTEM_PROMPT,
     description: "Internal observation-only trajectory critic.",
     hidden: true,
-    options: { enable_thinking: false },
+    options: {
+      enable_thinking: false,
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "watchdog_verdict", strict: true, schema: OUTPUT_SCHEMA },
+      },
+    },
     permission: { "*": "deny" },
   }
 }

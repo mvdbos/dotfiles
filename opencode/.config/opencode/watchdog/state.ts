@@ -10,6 +10,7 @@ import {
   type RevalidationCandidate,
   type ToolObservation,
   type TodoObservation,
+  type PacketTrigger,
 } from "./packet"
 
 export const DEFAULT_RING_TOOLS = 24
@@ -59,6 +60,13 @@ export class LruSet<T> {
     this.items.push(value)
     if (this.items.length > this.capacity) this.items.splice(0, this.items.length - this.capacity)
     return index < 0
+  }
+
+  delete(value: T): boolean {
+    const index = this.items.indexOf(value)
+    if (index < 0) return false
+    this.items.splice(index, 1)
+    return true
   }
 
   has(value: T): boolean {
@@ -132,6 +140,7 @@ export type ActiveAdvisory = AcceptedConcern & {
   concernToast?: { status: "pending" | "delivered" | "failed"; attempts: 1 | 2 }
   installedAtEpoch: number
   deliveredAtEpoch?: number
+  claimKind?: PacketTrigger
 }
 
 export type IdleAdmission = {

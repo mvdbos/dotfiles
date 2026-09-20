@@ -65,7 +65,10 @@ describe("production watchdog idle-only slice", () => {
       const critic = await waitFor("critic provider request", () => instance.llm.requestsOf("critic")[0], 20_000)
       expect(critic.body.model).toBe("critic-model")
       expect(critic.body.tool_choice).toBeUndefined()
-      expect(critic.body.response_format).toBeUndefined()
+      expect(critic.body.response_format).toMatchObject({
+        type: "json_schema",
+        json_schema: { name: "watchdog_verdict", strict: true },
+      })
       expect(critic.body.max_tokens ?? critic.body.max_completion_tokens ?? critic.body.max_output_tokens).toBe(256)
       const serialized = JSON.stringify(critic.body.messages ?? [])
       expect(serialized).toContain("Implement the bounded watchdog task.")
