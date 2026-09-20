@@ -10,6 +10,7 @@ import { CRITIC_SYSTEM_PROMPT, OUTPUT_SCHEMA } from "./prompt"
 import { MID_RUN_DELIVERY_ENABLED } from "./probe-outcomes"
 
 export const WATCHDOG_AGENT_NAME = "watchdog-critic"
+export const PLAN_AGENT_NAME = "plan"
 
 export type WatchdogConfig = {
   enabled: boolean

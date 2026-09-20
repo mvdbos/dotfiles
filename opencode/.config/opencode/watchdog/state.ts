@@ -192,6 +192,7 @@ export type SessionState = {
   activity?: string
   cleanupInProgress?: boolean
   busy?: boolean
+  suppressed?: boolean
 }
 
 export function createSessionState(): SessionState {
@@ -212,6 +213,7 @@ export function createSessionState(): SessionState {
     lastConcernToolSeq: 0,
     lastCheckToolSeq: 0,
     consecutiveFailures: 0,
+    suppressed: false,
   }
 }
 
@@ -232,6 +234,7 @@ export function isProtected(state: SessionState): boolean {
 export function beginRealTurn(state: SessionState, taskText: string, messageID?: string): void {
   state.turnEpoch += 1
   state.latestUserKind = "real"
+  state.suppressed = false
   state.latestForeignPatternID = undefined
   state.currentTask = taskText
   state.taskMessageID = messageID
@@ -494,4 +497,13 @@ export function settleInFlight(
 export function clearIdleAdmission(state: SessionState): void {
   if (state.idleAdmission?.timer) clearTimeout(state.idleAdmission.timer)
   state.idleAdmission = undefined
+}
+
+export function suppressWatchdog(state: SessionState): void {
+  state.suppressed = true
+  clearIdleAdmission(state)
+  state.activeAdvisory = undefined
+  for (const claim of [state.pendingIdle, state.pendingTrigger, state.pendingRevalidation]) {
+    if (claim) deferClaim(state, claim)
+  }
 }

@@ -253,6 +253,7 @@ The settle window is best-effort arbitration, not mutual exclusion. The goal plu
 Classify every root `chat.message` before changing turn state:
 
 - **Real user:** neither watchdog metadata nor a configured foreign-continuation pattern matches. Start a new turn epoch, reset warning/escalation budgets, clear addressed/pending feedback, cancel older activity/idle-admission timers, and update current scope. Do not automatically abort an already-running critic; its result follows stale revalidation rules.
+- **Restricted plan turn:** a real user turn whose agent is `plan` starts a new epoch and updates scope like any real turn, then suppresses the watchdog for that turn: no critic admission, advisory installation, toast, or root follow-up, and plan-mode tools/assistant text are not recorded. Pending cadence/idle/revalidation work moves into the deferred cadence owner, idle admission is cleared, and an active critic aborts and drops its result. A later non-plan real turn lifts suppression. A plan-agent foreign continuation keeps the foreign epoch/budget rules and also suppresses.
 - **Watchdog generated:** versioned watchdog metadata matches. Do not change epoch, task, or budgets. Store/consume the explicit continuation claim around its resulting loop and idle.
 - **Recognized foreign continuation:** text matches `foreignContinuationPatterns`. Keep the existing real-user epoch, original/current task, delivery budgets, and pending cadence state. Exclude the continuation boilerplate itself from task text and evidence fingerprints. Cancel pending idle admission and abort an active idle critic, but do not abort a cadence critic. Count its terminal tools, failures, todos, assistant output, and changes normally toward cadence. Its resulting idle cannot create an idle check or watchdog root follow-up.
 
@@ -544,6 +545,8 @@ This mechanism uses an experimental hook and must be proven by P0. Specifically 
 
 ### Idle, supported approximation with visible continuation
 
+A plan-mode real turn suppresses the idle path entirely: no idle admission, critic child, toast, or `session.prompt()` while the latest real turn used the `plan` agent. An idle admission armed before the switch is cancelled, and a critic completing after it is dropped without delivery. Plan mode is an interactive review gate, so automatic continuation must not bypass it.
+
 If the latest root user message is a recognized foreign continuation, idle may show an accepted concern toast but must not call `session.prompt()`; retain the advisory for the next eligible model boundary or real-user turn. This is the per-root mutual-continuation brake.
 
 For an eligible real-user idle, an accepted concern must be visible to the user and trigger agent action, not merely sit as an unprocessed `noReply` message. Before any toast or prompt side effect, re-read persisted messages and require the exact tracked latest real-user message ID, then synchronously recheck the expected real-turn epoch, latest-user kind, idle-admission generation, reserve the applicable delivery budget if not already reserved by this exact advisory, and store the continuation claim. If that compare-and-set fails, route through stale revalidation or suppress according to the stale-result rules. After successful reservation, invoke a best-effort warning/error toast immediately without awaiting it only when no earlier attempt exists or its state is already `failed`; set `pending` before invocation. A `pending` or `delivered` earlier attempt suppresses a duplicate. Then submit:
@@ -629,6 +632,7 @@ type SessionState = {
   parentChecked: boolean
   turnEpoch: number
   latestUserKind: "real" | "watchdog" | "foreign"
+  suppressed?: boolean // plan-mode turn: no watchdog observation or delivery until the next non-plan real turn
   latestForeignPatternID?: string
   originalTask?: string
   currentTask?: string
@@ -811,6 +815,7 @@ Require explicit `model`. The initial installation pins the same existing local 
 12. **Addressed suppression:** after delivery, do not re-report until new evidence. Do not attempt semantic "agent acknowledged it" detection in MVP.
 13. **Idle recursion proof:** claim the finding/real-turn before submitting feedback and mark the generated message when its ID returns. The watchdog-generated follow-up is not a real turn; its next idle consumes the claim and stays silent without relying on assistant/evidence hashes.
 14. **Foreign-continuation brake:** while latest-user kind is foreign, suppress watchdog idle checks and root prompts even when evidence changes. Pending cadence checks may run, but findings wait for an eligible model boundary. A foreign arrival cancels pending idle admission and aborts an idle critic. This prevents each plugin from resetting the other's stop valve.
+15. **Plan-mode gate:** when the latest real turn was launched with the `plan` agent, suppress critic admission, advisory installation, toasts, and root prompts entirely, and do not record plan-mode tools or assistant text. Pending claims move into the deferred cadence owner, idle admission is cleared, and an in-flight critic aborts and drops its result. Suppression is per real turn and is lifted by the next non-plan real turn; it never applies to `watchdog-critic` children or subagent sessions.
 
 The normalization/dedup approach is adapted from pi-subagents' bounded emission guard, which rejects content-free and duplicate warnings: [`emission-guard.ts`](https://github.com/nicobailon/pi-subagents/blob/07bd09e0f93a19caee3c39e3cf4069c70ee8dbcd/src/watchdog/emission-guard.ts). Its cadence runtime also coalesces reviews and skips duplicate review input: [`runtime.ts` lines 379-461](https://github.com/nicobailon/pi-subagents/blob/07bd09e0f93a19caee3c39e3cf4069c70ee8dbcd/src/watchdog/runtime.ts#L379-L461).
 

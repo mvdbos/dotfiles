@@ -113,6 +113,17 @@ async function realTurn(runtime: WatchdogRuntime, sessionID = "root", text = "Im
   runtime.recordAssistantText(sessionID, "a1", "Working on it.")
 }
 
+function recordTools(runtime: WatchdogRuntime, count: number, sessionID = "root", from = 1) {
+  for (let seq = from; seq < from + count; seq += 1) {
+    runtime.recordTerminalTool(sessionID, {
+      type: "tool",
+      tool: "bash",
+      callID: `call-${seq}`,
+      state: { status: "completed", input: { command: `echo ${seq}` }, output: `out-${seq}` },
+    })
+  }
+}
+
 describe("watchdog plugin runtime", () => {
   test("config hook injects the hidden critic agent and chat.params caps only registered critic sessions", async () => {
     const { runtime, client } = makeRuntime()
@@ -1199,6 +1210,201 @@ describe("watchdog plugin runtime", () => {
     void runtime.requestAdmission()
     await Bun.sleep(30)
     expect(fake.calls.create.length).toBeGreaterThanOrEqual(2)
+    await runtime.dispose()
+  })
+
+  test("plan-mode real turns suppress idle review and record no watchdog activity", async () => {
+    const { runtime, calls } = makeRuntime({}, { everyTools: 5, foreignContinuationSettleMs: 0 })
+    runtime.observeSessionCreated({ id: "root" })
+    await runtime.handleChatMessage(
+      { sessionID: "root", agent: "plan", messageID: "p1" },
+      { parts: [{ type: "text", text: "Plan the migration before implementation." }] },
+    )
+    const state = runtime.states.get("root")!
+    expect(state.suppressed).toBe(true)
+    expect(state.latestUserKind).toBe("real")
+    expect(state.turnEpoch).toBe(1)
+
+    recordTools(runtime, 5)
+    runtime.recordAssistantText("root", "a1", "Here is the plan.")
+    runtime.handleIdle("root")
+    await Bun.sleep(20)
+
+    expect(state.unclaimedSignificantTools).toBe(0)
+    expect(state.recentTools.size).toBe(0)
+    expect(state.latestAssistantText).toBeUndefined()
+    expect(calls.create).toHaveLength(0)
+    expect(calls.prompts).toHaveLength(0)
+    expect(calls.toasts).toHaveLength(0)
+  })
+
+  test("a plan turn cancels an in-flight cadence critic and a later build turn resumes cadence", async () => {
+    const fake = fakeClient()
+    fake.holdCritic()
+    const runtime = new WatchdogRuntime({
+      client: fake.client,
+      config: configFor({}, { everyTools: 5, foreignContinuationSettleMs: 0, timeoutMs: 5_000 }),
+      patterns: compileForeignPatterns(undefined).patterns,
+      lease: new WatchdogLease({ path: ":memory:" }),
+      explore: new ExploreGate(),
+      log: () => {},
+    })
+    await realTurn(runtime)
+    recordTools(runtime, 5)
+    await Bun.sleep(30)
+    const state = runtime.states.get("root")!
+    expect(state.inFlight?.trigger.kind).toBe("cadence")
+
+    await runtime.handleChatMessage(
+      { sessionID: "root", agent: "plan", messageID: "p2" },
+      { parts: [{ type: "text", text: "Plan the next phase." }] },
+    )
+    await Bun.sleep(30)
+    expect(fake.calls.aborts).toContain("child-1")
+    expect(state.inFlight).toBeUndefined()
+    expect(state.suppressed).toBe(true)
+    expect(state.deferredCadenceClaim ?? state.pendingTrigger).toBeDefined()
+    expect(fake.calls.prompts.filter((call) => call.id === "root")).toHaveLength(0)
+    expect(fake.calls.toasts).toHaveLength(0)
+
+    await runtime.handleChatMessage(
+      { sessionID: "root", agent: "build", messageID: "u3" },
+      { parts: [{ type: "text", text: "Implement the plan." }] },
+    )
+    expect(state.suppressed).toBe(false)
+    recordTools(runtime, 5, "root", 6)
+    await Bun.sleep(40)
+    expect(fake.calls.create.length).toBeGreaterThanOrEqual(2)
+    await runtime.dispose()
+  })
+
+  test("an idle admission armed before a plan turn never fires", async () => {
+    const { runtime, calls } = makeRuntime({}, { foreignContinuationSettleMs: 50 })
+    await realTurn(runtime)
+    runtime.handleIdle("root")
+    expect(runtime.states.get("root")!.idleAdmission).toBeDefined()
+
+    await runtime.handleChatMessage(
+      { sessionID: "root", agent: "plan", messageID: "p2" },
+      { parts: [{ type: "text", text: "Plan the migration." }] },
+    )
+    expect(runtime.states.get("root")!.idleAdmission).toBeUndefined()
+
+    await Bun.sleep(150)
+    expect(calls.create).toHaveLength(0)
+    expect(calls.prompts).toHaveLength(0)
+  })
+
+  test("a plan-agent foreign continuation suppresses idle and cadence admission", async () => {
+    const { runtime, calls } = makeRuntime({}, { everyTools: 5, foreignContinuationSettleMs: 0 })
+    runtime.observeSessionCreated({ id: "root" })
+    await runtime.handleChatMessage(
+      { sessionID: "root", agent: "build", messageID: "u1" },
+      { parts: [{ type: "text", text: "Real task." }] },
+    )
+    await runtime.handleChatMessage(
+      { sessionID: "root", agent: "plan", messageID: "u2" },
+      { parts: [{ type: "text", text: GOAL_ACTIVE }] },
+    )
+    const state = runtime.states.get("root")!
+    expect(state.latestUserKind).toBe("foreign")
+    expect(state.suppressed).toBe(true)
+
+    recordTools(runtime, 5)
+    runtime.handleIdle("root")
+    await Bun.sleep(20)
+
+    expect(state.unclaimedSignificantTools).toBe(0)
+    expect(state.deferredCadenceClaim ?? state.pendingTrigger).toBeUndefined()
+    expect(calls.create).toHaveLength(0)
+  })
+
+  test("plan suppression blocks request-local advisory installation", async () => {
+    const { runtime } = makeRuntime({ midRunDelivery: true }, { foreignContinuationSettleMs: 0 })
+    await realTurn(runtime)
+    const state = runtime.states.get("root")!
+    state.suppressed = true
+    state.activeAdvisory = {
+      severity: "warning",
+      category: "plan_drift",
+      message: "The implementation departed from the stated plan for the parser.",
+      throughToolSeq: 1,
+      installedAtEpoch: state.turnEpoch,
+      findingHash: "hash-1",
+    }
+    const messages = [
+      { info: { sessionID: "root" }, parts: [{ id: "tool-1", type: "tool", state: { status: "completed", output: "clean" } }] },
+    ]
+    await runtime.transformMessages({ messages: messages as never })
+    expect(String(messages[0]!.parts[0]!.state.output)).toBe("clean")
+  })
+
+  test("a build turn after a plan turn restores idle review", async () => {
+    const messages = [
+      { info: { id: "p1", role: "user", agent: "plan", model: { providerID: "probe", modelID: "main-model" } }, parts: [{ type: "text", text: "Plan the migration." }] },
+      { info: { id: "u2", role: "user", agent: "build", model: { providerID: "probe", modelID: "main-model" } }, parts: [{ type: "text", text: "Implement the migration." }] },
+    ]
+    const fake = fakeClient({ messages })
+    const runtime = new WatchdogRuntime({
+      client: fake.client,
+      config: configFor({}, { foreignContinuationSettleMs: 0 }),
+      patterns: compileForeignPatterns(undefined).patterns,
+      lease: new WatchdogLease({ path: ":memory:" }),
+      explore: new ExploreGate(),
+      log: () => {},
+    })
+    runtime.observeSessionCreated({ id: "root" })
+    await runtime.handleChatMessage(
+      { sessionID: "root", agent: "plan", messageID: "p1" },
+      { parts: [{ type: "text", text: "Plan the migration." }] },
+    )
+    runtime.handleIdle("root")
+    await Bun.sleep(20)
+    expect(fake.calls.create).toHaveLength(0)
+
+    await runtime.handleChatMessage(
+      { sessionID: "root", agent: "build", messageID: "u2" },
+      { parts: [{ type: "text", text: "Implement the migration." }] },
+    )
+    runtime.recordAssistantText("root", "a2", "Implementation done.")
+    runtime.handleIdle("root")
+    await Bun.sleep(20)
+
+    expect(runtime.states.get("root")!.suppressed).toBe(false)
+    expect(fake.calls.create).toHaveLength(1)
+  })
+
+  test("a concern completing while suppression is active is dropped without delivery", async () => {
+    const concern = JSON.stringify({
+      status: "concern",
+      severity: "warning",
+      category: "plan_drift",
+      message: "The implementation departed from the stated plan for the parser.",
+    })
+    const fake = fakeClient({ criticText: concern })
+    fake.holdCritic()
+    const runtime = new WatchdogRuntime({
+      client: fake.client,
+      config: configFor({}, { foreignContinuationSettleMs: 0, timeoutMs: 5_000 }),
+      patterns: compileForeignPatterns(undefined).patterns,
+      lease: new WatchdogLease({ path: ":memory:" }),
+      explore: new ExploreGate(),
+      log: () => {},
+    })
+    await realTurn(runtime)
+    runtime.handleIdle("root")
+    await Bun.sleep(20)
+    const state = runtime.states.get("root")!
+    expect(state.inFlight).toBeDefined()
+
+    state.suppressed = true
+    fake.releaseCritic()
+    await Bun.sleep(60)
+
+    expect(state.inFlight).toBeUndefined()
+    expect(fake.calls.prompts.filter((call) => call.id === "root")).toHaveLength(0)
+    expect(fake.calls.toasts).toHaveLength(0)
+    expect(state.activeAdvisory).toBeUndefined()
     await runtime.dispose()
   })
 })

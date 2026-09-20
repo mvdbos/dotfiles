@@ -14,6 +14,7 @@ import {
   recordTool,
   settleClaim,
   settleInFlight,
+  suppressWatchdog,
   type InFlight,
 } from "./state"
 
@@ -133,6 +134,44 @@ describe("turn state", () => {
     expect(state.deliveryBudget.baseDeliveryUsed).toBe(false)
     expect(state.originalTask).toBe("first task")
     expect(state.currentTask).toBe("second task")
+  })
+
+  test("plan suppression defers pending claims, clears idle admission and advisory, and real turns lift it", () => {
+    const state = createSessionState()
+    for (let seq = 1; seq <= 3; seq += 1) recordTool(state, tool(seq))
+    state.pendingTrigger = claimCadence(state, cadenceOptions())
+    state.idleAdmission = { generation: 1, epoch: state.turnEpoch }
+    state.activeAdvisory = {
+      severity: "warning",
+      category: "plan_drift",
+      message: "The implementation departed from the stated plan.",
+      throughToolSeq: 3,
+      installedAtEpoch: state.turnEpoch,
+    }
+
+    suppressWatchdog(state)
+
+    expect(state.suppressed).toBe(true)
+    expect(state.pendingTrigger).toBeUndefined()
+    expect(state.pendingIdle).toBeUndefined()
+    expect(state.idleAdmission).toBeUndefined()
+    expect(state.activeAdvisory).toBeUndefined()
+    expect(state.deferredCadenceClaim?.claimedToolCount).toBe(3)
+    expect(state.deferredCadenceClaim?.ownedSequences).toEqual([1, 2, 3])
+
+    beginRealTurn(state, "next task", "u2")
+    expect(state.suppressed).toBe(false)
+  })
+
+  test("suppression without pending work stays idempotent and protected state survives", () => {
+    const state = createSessionState()
+    state.pendingIdle = claimIdle(state, { idleKey: "idle-1", snapshotKey: "snap", maxRecentTools: 12 })
+    suppressWatchdog(state)
+    suppressWatchdog(state)
+    expect(state.suppressed).toBe(true)
+    expect(state.pendingIdle).toBeUndefined()
+    expect(state.deferredCadenceClaim?.claimedToolCount).toBe(0)
+    expect(isProtected(state)).toBe(true)
   })
 
   test("protected work prevents eviction eligibility", () => {

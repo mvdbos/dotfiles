@@ -4,7 +4,7 @@ import {
   userMessageText,
   type CompiledForeignPatterns,
 } from "../plugin-generated-user/helpers"
-import { buildCriticAgent, parseModelRef, WATCHDOG_AGENT_NAME, type WatchdogConfig } from "./config"
+import { buildCriticAgent, parseModelRef, PLAN_AGENT_NAME, WATCHDOG_AGENT_NAME, type WatchdogConfig } from "./config"
 import { assistantTextFromPart, changeFingerprintFromTool, eventSessionID, terminalToolObservation } from "./collect"
 import { CriticRunner } from "./critic"
 import {
@@ -36,6 +36,7 @@ import {
   recordTool,
   settleClaim,
   settleInFlight,
+  suppressWatchdog,
   type ClaimedCadence,
   type ClaimedIdle,
   type ClaimedRevalidation,
@@ -206,6 +207,7 @@ export class WatchdogRuntime {
     if (!(await this.markRootIfUnparented(input.sessionID))) return
 
     const state = this.stateFor(input.sessionID)
+    const restricted = input.agent === PLAN_AGENT_NAME
     const classification = classifyUserMessage({ parts: output.parts as never }, this.deps.patterns)
 
     if (classification.kind === "watchdog") {
@@ -215,6 +217,7 @@ export class WatchdogRuntime {
     if (classification.kind === "foreign") {
       applyForeignContinuation(state, classification.patternID ?? "foreign", input.messageID)
       if (state.inFlight?.trigger.kind === "idle") void this.cancelInFlight(state, "foreign")
+      if (restricted) this.suppressForPlan(state)
       this.deps.explore.markEnded(input.sessionID)
       return
     }
@@ -223,12 +226,18 @@ export class WatchdogRuntime {
     beginRealTurn(state, text, input.messageID)
     state.continuationClaim = undefined
     clearIdleAdmission(state)
+    if (restricted) this.suppressForPlan(state)
+  }
+
+  private suppressForPlan(state: SessionState): void {
+    suppressWatchdog(state)
+    if (state.inFlight) void this.cancelInFlight(state, "plan")
   }
 
   recordTerminalTool(sessionID: string, part: Record<string, unknown>): void {
     if (this.disposed) return
     const state = this.states.get(sessionID)
-    if (!state) return
+    if (!state || state.suppressed) return
     const nextToolSeq = state.toolSeq + 1
     const observation = terminalToolObservation(part as never, nextToolSeq)
     if (!observation) return
@@ -255,7 +264,7 @@ export class WatchdogRuntime {
 
   recordAssistantText(sessionID: string, messageID: string, text: string): void {
     const state = this.states.get(sessionID)
-    if (!state) return
+    if (!state || state.suppressed) return
     state.latestAssistantText = text
     state.latestAssistantMessageID = messageID
   }
@@ -272,6 +281,7 @@ export class WatchdogRuntime {
       state.continuationClaim = undefined
       return
     }
+    if (state.suppressed) return
     if (!this.deps.config.onIdle) return
     if (state.latestUserKind === "foreign") return
     if (state.continuationClaim) return
@@ -295,12 +305,14 @@ export class WatchdogRuntime {
     state.busy = false
     if (state.turnEpoch !== admission.epoch) return
     if (state.latestUserKind !== "real") return
+    if (state.suppressed) return
     if (state.continuationClaim) return
     if (!(await this.markRootIfUnparented(sessionID))) return
     if (this.childSessions.has(sessionID)) return
     const persistedTurn = await this.latestPersistedUser(sessionID)
     if (
       state.turnEpoch !== admission.epoch ||
+      state.suppressed ||
       state.latestUserKind !== "real" ||
       !this.matchesPersistedRealTurn(state, persistedTurn)
     ) {
@@ -392,6 +404,10 @@ export class WatchdogRuntime {
 
     const lease = await this.deps.lease.tryAcquire()
     if (!lease) return
+    if (state.suppressed) {
+      this.deps.lease.release(lease)
+      return
+    }
 
     const claim = selection.trigger
     const trigger = claim.kind as PacketTrigger
@@ -462,6 +478,7 @@ export class WatchdogRuntime {
   }
 
   private reclaimCadenceIfEligible(state: SessionState): void {
+    if (state.suppressed) return
     if (state.pendingTrigger) return
     if (cadenceEligibleCount(state, this.deps.config.everyTools) < this.deps.config.everyTools) return
     const claim = claimCadence(state, {
@@ -476,6 +493,7 @@ export class WatchdogRuntime {
     const roots: string[] = []
     for (const [sessionID, state] of this.states) {
       if (this.childSessions.has(sessionID)) continue
+      if (state.suppressed) continue
       if (state.pendingIdle || state.pendingRevalidation || state.pendingTrigger) {
         if (state.inFlight) continue
         roots.push(sessionID)
@@ -565,6 +583,17 @@ export class WatchdogRuntime {
     settleClaim(state, claim, completed)
     if (newToolsDuringFlight > 0) this.reclaimCadenceIfEligible(state)
 
+    if (state.suppressed) {
+      this.telemetry("watchdog check dropped", {
+        sessionID: root,
+        checkID,
+        trigger: claim.kind,
+        reason: "plan_mode",
+      })
+      void this.requestAdmission()
+      return
+    }
+
     if (
       result.kind === "timeout" ||
       result.kind === "error" ||
@@ -609,6 +638,16 @@ export class WatchdogRuntime {
     if (this.deferStaleConcern(state, claim, concern, packetFingerprint)) return
 
     const persistedTurn = await this.latestPersistedUser(root)
+    if (state.suppressed) {
+      this.telemetry("watchdog check dropped", {
+        sessionID: root,
+        checkID,
+        trigger: claim.kind,
+        reason: "plan_mode",
+      })
+      void this.requestAdmission()
+      return
+    }
     if (this.deferStaleConcern(state, claim, concern, packetFingerprint)) return
     if (!this.matchesPersistedDeliveryTurn(state, persistedTurn)) {
       this.telemetry("watchdog concern discarded", {
@@ -692,6 +731,7 @@ export class WatchdogRuntime {
   }
 
   private async showConcernToast(state: SessionState, concern: AcceptedConcern, findingHash: string): Promise<void> {
+    if (state.suppressed) return
     const advisory = state.activeAdvisory
     if (!advisory) return
     if (!shouldAttemptToast(advisory.concernToast)) return
@@ -722,10 +762,17 @@ export class WatchdogRuntime {
     claimKind?: PacketTrigger,
   ): Promise<void> {
     if (state.continuationClaim) return
+    if (state.suppressed) return
     const epoch = state.turnEpoch
     state.continuationClaim = { epoch, findingHash }
     const latest = await this.latestPersistedUser(root)
-    if (!latest || !this.matchesPersistedRealTurn(state, latest) || state.turnEpoch !== epoch || state.latestUserKind !== "real") {
+    if (
+      !latest ||
+      state.suppressed ||
+      !this.matchesPersistedRealTurn(state, latest) ||
+      state.turnEpoch !== epoch ||
+      state.latestUserKind !== "real"
+    ) {
       state.continuationClaim = undefined
       return
     }
@@ -796,10 +843,11 @@ export class WatchdogRuntime {
     if (this.compactionSkips.consume(sessionID)) return
     const state = this.states.get(sessionID)
     const advisory = state?.activeAdvisory
-    if (!state || !advisory) return
+    if (!state || !advisory || state.suppressed) return
     if (advisory.installedAtEpoch !== state.turnEpoch) return
     if (!this.deps.config.midRunDelivery) return
-    if (!this.matchesPersistedDeliveryTurn(state, await this.latestPersistedUser(sessionID))) return
+    const persistedTurn = await this.latestPersistedUser(sessionID)
+    if (state.suppressed || !this.matchesPersistedDeliveryTurn(state, persistedTurn)) return
     let seen = this.advisorySeen.get(sessionID)
     if (!seen) {
       seen = new Set<string>()
