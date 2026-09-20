@@ -26,10 +26,21 @@ export function mirrorTextParts(target: MessageWithParts): Array<Extract<Part, {
 }
 
 export const TodoReconcilePlugin: Plugin = async ({ client }) => {
-  const config = loadTodoReconcileConfig()
-  for (const warning of config.warnings) {
-    console.warn(`[todo-reconcile] ${warning}`)
+  const log = (message: string, detail?: unknown) => {
+    void client.app
+      .log({
+        body: {
+          service: "todo-reconcile",
+          level: "warn",
+          message,
+          extra: detail === undefined ? undefined : { detail },
+        },
+      })
+      .catch(() => {})
   }
+
+  const config = loadTodoReconcileConfig()
+  for (const warning of config.warnings) log(warning)
 
   const persistSnapshot = async (input: PersistSnapshotInput) => {
     try {
@@ -80,9 +91,7 @@ export const TodoReconcilePlugin: Plugin = async ({ client }) => {
     readTodos: (sessionID) => readTodosThroughClient(client, sessionID),
     persistSnapshot,
     nudge: config.nudge,
-    log: (message, detail) => {
-      console.warn(`[todo-reconcile] ${message}`, detail ?? "")
-    },
+    log,
   })
 }
 
