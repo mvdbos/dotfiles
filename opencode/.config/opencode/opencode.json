@@ -279,12 +279,12 @@
       "model": "omlx/Qwen3.5-0.8B-8bit"
     },
     "general": {
-      "description": "General-purpose agent for independent research, substantial code reviews or audits, and focused multi-step work. The primary agent verifies and synthesizes its findings."
+      "description": "Delegate substantial multi-step work here: code reviews, audits, independent research, and investigations that span many files or sources. Use when a task needs its own context and several steps. Do NOT use for simple lookups or single-file reads — keep those in the primary agent. The primary agent verifies and synthesizes the findings."
     },
     "explore": {
       "model": "omlx/Qwen3.5-4B-oQ4e-mtp",
       "prompt": "{file:./explore-controls/explore-prompt.txt}",
-      "description": "Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. \"src/components/**/*.tsx\"), search code for keywords (eg. \"API endpoints\"), or answer questions about the codebase (eg. \"how do API endpoints work?\"). Keep each task focused and bounded; split broad investigations into smaller tasks. Search budget and context are limited, so findings may be partial. Use only for exploration and evidence gathering, not code reviews or audits.",
+      "description": "Codebase explorer for discovery and evidence gathering. Use for broad or multi-file exploration: finding files by pattern (eg. \"src/components/**/*.tsx\"), searching for keywords, tracing code paths, or answering how-the-codebase-works questions (eg. \"how do API endpoints work?\"). Do NOT use for reviews, audits, or research; use general for those. Keep each task focused and bounded; split broad investigations into smaller tasks, since search budget and context are limited and findings may be partial.",
       "options": {
         "enable_thinking": false
       },
