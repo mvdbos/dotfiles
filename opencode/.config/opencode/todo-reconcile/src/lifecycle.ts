@@ -1,5 +1,20 @@
 import type { Event, Message, Part } from "@opencode-ai/sdk"
 import type { Hooks } from "@opencode-ai/plugin"
+import { CompactionSkipGuard } from "./guard"
+import {
+  baselineKeyOf,
+  countWorkSince,
+  findTodoWriteBaseline,
+  formatTodoNudge,
+  isNudgePart,
+  makeNudgePart,
+  nudgePartID,
+  shouldNudge,
+  visibleTodoWritePart,
+  NUDGE_LIST_HEADING,
+  type NudgeConfig,
+  type NudgeWindow,
+} from "./nudge"
 import {
   DEFAULT_REMINDER_MAX_BYTES,
   formatTodoReminder,
@@ -56,10 +71,17 @@ export type LifecycleDeps = {
   readTodos(sessionID: string): Promise<ReadTodosResult>
   /** Persisting is supplied by the plugin through `session.prompt(noReply)`. */
   persistSnapshot?(input: PersistSnapshotInput): Promise<PersistSnapshotResult>
+  /** Stale-todo nudge policy; omitted means the documented defaults. */
+  nudge?: NudgeConfig
+  /** Clock override for tests. */
+  now?: () => number
   log?(message: string, detail?: unknown): void
 }
 
-export type TodoReconcileHooks = Pick<Hooks, "experimental.chat.messages.transform" | "event" | "dispose">
+export type TodoReconcileHooks = Pick<
+  Hooks,
+  "experimental.chat.messages.transform" | "experimental.session.compacting" | "event" | "dispose"
+>
 
 type TransformOutput = Parameters<NonNullable<Hooks["experimental.chat.messages.transform"]>>[1]
 
@@ -95,6 +117,7 @@ type SessionState = {
   validated: boolean
   invalidated: boolean
   readInFlight?: Promise<ReadTodosResult>
+  nudge?: NudgeWindow
 }
 
 function isAfter(current: HistoryInfo, other: HistoryInfo): boolean {
@@ -203,9 +226,7 @@ function todosFromUnknown(value: unknown): TodoItem[] | undefined {
 }
 
 function todosFromToolPart(part: Extract<Part, { type: "tool" }>): TodoItem[] | undefined {
-  if (part.tool !== "todowrite" || part.state.status !== "completed") return undefined
-  if (part.state.time.compacted !== undefined) return undefined
-  if (part.metadata?.hidden === true || part.state.metadata?.hidden === true) return undefined
+  if (!visibleTodoWritePart(part) || part.state.status !== "completed") return undefined
 
   const input = part.state.input as Record<string, unknown>
   const fromInput = todosFromUnknown(input.todos) ?? todosFromUnknown(input)
@@ -226,14 +247,18 @@ function todosFromToolPart(part: Extract<Part, { type: "tool" }>): TodoItem[] | 
   return undefined
 }
 
-/** Find the newest successful, model-visible full todo update after a boundary. */
-export function findNativeTodoCoverage(
+/**
+ * Newest successful, model-visible full todo update, optionally restricted to
+ * updates after a boundary. Later parts within one assistant message win.
+ */
+export function findLatestNativeTodoUpdate(
   messages: readonly MessageWithParts[],
-  boundary: Boundary,
+  after?: HistoryInfo,
 ): TodoUpdate | undefined {
   let best: TodoUpdate | undefined
   for (const message of messages) {
-    if (message.info.role !== "assistant" || message.info.error || !isAfter(message.info, boundary.summary)) continue
+    if (message.info.role !== "assistant" || message.info.error) continue
+    if (after && !isAfter(message.info, after)) continue
     for (const part of message.parts) {
       if (part.type !== "tool") continue
       const todos = todosFromToolPart(part)
@@ -243,10 +268,18 @@ export function findNativeTodoCoverage(
         todos,
         fingerprint: canonicalTodoFingerprint(todos),
       }
-      if (!best || isAfter(update.key, best.key)) best = update
+      if (!best || isAfter(update.key, best.key) || !isAfter(best.key, update.key)) best = update
     }
   }
   return best
+}
+
+/** Find the newest successful, model-visible full todo update after a boundary. */
+export function findNativeTodoCoverage(
+  messages: readonly MessageWithParts[],
+  boundary: Boundary,
+): TodoUpdate | undefined {
+  return findLatestNativeTodoUpdate(messages, boundary.summary)
 }
 
 function snapshotRecords(messages: readonly MessageWithParts[]): Array<SnapshotRecord & { message: MessageWithParts }> {
@@ -277,6 +310,7 @@ function stripPluginSnapshots(
 ): void {
   for (const message of messages) {
     message.parts = message.parts.filter((part) => {
+      if (isNudgePart(part)) return false
       if (!isPluginSnapshotPart(part)) return true
       return keep?.part.id === part.id && keep.message.info.id === message.info.id
     })
@@ -343,8 +377,10 @@ function stateCoverageMatches(state: SessionState, boundaryID: string): boolean 
 
 export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHooks {
   const log = deps.log ?? (() => {})
+  const now = deps.now ?? (() => Date.now())
   const states = new Map<string, SessionState>()
   const persistInFlight = new Map<string, Promise<PersistSnapshotResult>>()
+  const compactionSkips = new CompactionSkipGuard()
 
   const stateFor = (sessionID: string): SessionState => {
     const existing = states.get(sessionID)
@@ -466,17 +502,102 @@ export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHook
     }
   }
 
+  /**
+   * Request-local stale-todo nudge. The part is appended to the newest user
+   * message for this provider request only; nothing is persisted, so the
+   * one-shot window state can safely live in memory.
+   */
+  const addNudge = async (input: {
+    messages: MessageWithParts[]
+    target: MessageWithParts
+    sessionID: string
+    state: SessionState
+    nowMs: number
+  }): Promise<void> => {
+    const config = deps.nudge
+    if (!config?.enabled) return
+    const target = input.target
+    if (target.info.role !== "user") return
+    if (target.info.agent === "plan") return
+    if (todowriteAvailable(target) === false) return
+    if (target.parts.some((part) => isNudgePart(part))) return
+
+    const baseline = findTodoWriteBaseline(input.messages)
+    if (!baseline) return
+    const baselineKey = baselineKeyOf(baseline)
+    const toolCalls = countWorkSince(input.messages, baseline)
+    const elapsedMs = Math.max(0, input.nowMs - baseline.atMs)
+    if (
+      !shouldNudge({
+        config,
+        baselineKey,
+        toolCalls,
+        elapsedMs,
+        nowMs: input.nowMs,
+        ...(input.state.nudge ? { last: input.state.nudge } : {}),
+      })
+    ) {
+      return
+    }
+
+    const result = await read(input.sessionID, input.state)
+    if (!result.ok) {
+      log("todo read failed; stale reminder skipped", { sessionID: input.sessionID, reason: result.reason })
+      return
+    }
+    if (result.todos.length === 0) return
+
+    const listText = config.includeList
+      ? formatTodoReminder(result.todos, {
+          maxBytes: config.maxListBytes,
+          todowriteAvailable: true,
+          heading: NUDGE_LIST_HEADING,
+        })?.text
+      : undefined
+    const text = formatTodoNudge({ toolCalls, elapsedMs, ...(listText ? { listText } : {}) })
+    target.parts.push(
+      makeNudgePart({
+        sessionID: input.sessionID,
+        messageID: target.info.id,
+        partID: nudgePartID({
+          sessionID: input.sessionID,
+          messageID: target.info.id,
+          baselineKey,
+          atMs: input.nowMs,
+        }),
+        text,
+        baselineKey,
+        toolCalls,
+        elapsedMs,
+      }),
+    )
+    input.state.nudge = { baselineKey, toolCalls, atMs: input.nowMs }
+    log("stale todo reminder injected", { sessionID: input.sessionID, toolCalls, elapsedMs })
+  }
+
   const transform = async (_input: {}, output: TransformOutput): Promise<void> => {
     try {
-    const messages = output.messages as MessageWithParts[]
+      const messages = output.messages as MessageWithParts[]
       const target = lastUserMessage(messages)
+      const sessionID = target?.info.sessionID ?? messages.find((message) => message.info.sessionID)?.info.sessionID
       const persistSafe = persistTargetAllowed(target)
+      const nowMs = now()
+
+      // `experimental.session.compacting` arms this immediately before the
+      // summarizer transform; skip every mutation for that request.
+      if (sessionID && compactionSkips.consume(sessionID)) {
+        stripPluginSnapshots(messages)
+        return
+      }
 
       // A verified summarizer payload has no completed compaction pair. Strip
       // persisted plugin parts independently of restoration eligibility.
       const boundary = findCompactionBoundary(messages)
       if (!boundary) {
         stripPluginSnapshots(messages)
+        if (sessionID && target) {
+          await addNudge({ messages, target, sessionID, state: stateFor(sessionID), nowMs })
+        }
         return
       }
       if (hasNewerUnsuccessfulCompaction(messages, boundary)) {
@@ -605,6 +726,9 @@ export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHook
   }
 
   return {
+    "experimental.session.compacting": async (input: { sessionID: string }) => {
+      compactionSkips.arm(input.sessionID)
+    },
     "experimental.chat.messages.transform": transform,
     event: async ({ event }: { event: Event }) => {
       if (event.type !== "todo.updated") return
@@ -618,6 +742,7 @@ export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHook
     dispose: async () => {
       states.clear()
       persistInFlight.clear()
+      compactionSkips.clearAll()
     },
   }
 }

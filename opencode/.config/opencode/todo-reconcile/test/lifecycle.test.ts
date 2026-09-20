@@ -13,7 +13,9 @@ import {
   type PersistSnapshotInput,
   type TodoItem,
   type TodoResponse,
+  type TodoReconcileHooks,
 } from "../src/lifecycle"
+import { DEFAULT_NUDGE_CONFIG, isNudgePart, type NudgeConfig } from "../src/nudge"
 import { formatTodoReminder } from "../src/reminder"
 import {
   canonicalTodoFingerprint,
@@ -40,6 +42,7 @@ type MessageOptions = {
   summary?: boolean
   error?: unknown
   tools?: Record<string, boolean>
+  agent?: string
 }
 
 function user(id: string, created: number, parts: Part[] = [], options: MessageOptions = {}): MessageWithParts {
@@ -49,7 +52,7 @@ function user(id: string, created: number, parts: Part[] = [], options: MessageO
       sessionID: options.sessionID ?? "s1",
       role: "user",
       time: { created },
-      agent: "build",
+      agent: options.agent ?? "build",
       model: { providerID: "test", modelID: "test" },
       ...(options.tools ? { tools: options.tools } : {}),
     },
@@ -124,7 +127,17 @@ function snapshotPart(
   })
 }
 
-function toolPart(input: { id: string; messageID: string; todos: TodoItem[]; failed?: boolean; compacted?: boolean }): Part {
+function toolPart(input: {
+  id: string
+  messageID: string
+  todos: TodoItem[]
+  failed?: boolean
+  compacted?: boolean
+  start?: number
+  end?: number
+}): Part {
+  const start = input.start ?? 1
+  const end = input.end ?? 2
   if (input.failed) {
     return {
       id: input.id,
@@ -137,7 +150,7 @@ function toolPart(input: { id: string; messageID: string; todos: TodoItem[]; fai
         status: "error",
         input: { todos: input.todos },
         error: "failed",
-        time: { start: 1, end: 2 },
+        time: { start, end },
       },
     } as unknown as Part
   }
@@ -154,7 +167,7 @@ function toolPart(input: { id: string; messageID: string; todos: TodoItem[]; fai
       output: "todos written",
       title: "todowrite",
       metadata: {},
-      time: { start: 1, end: 2, ...(input.compacted ? { compacted: 3 } : {}) },
+      time: { start, end, ...(input.compacted ? { compacted: end + 1 } : {}) },
     },
   } as unknown as Part
 }
@@ -559,5 +572,236 @@ describe("readTodosThroughClient", () => {
       "s1",
     )
     expect(result).toEqual({ ok: false, reason: "offline" })
+  })
+})
+
+const NUDGE_BASE = 2_000_000
+const nudgePolicy: NudgeConfig = {
+  enabled: true,
+  toolThreshold: 3,
+  minutesThreshold: 0,
+  includeList: false,
+  maxListBytes: 1_024,
+}
+
+function workPart(
+  id: string,
+  messageID: string,
+  options: { tool?: string; status?: "completed" | "error" | "running"; start?: number; end?: number } = {},
+): Part {
+  const tool = options.tool ?? "glob"
+  const status = options.status ?? "completed"
+  const start = options.start ?? NUDGE_BASE
+  const end = options.end ?? start + 1
+  if (status === "running") {
+    return {
+      id,
+      sessionID: "s1",
+      messageID,
+      type: "tool",
+      callID: `call-${id}`,
+      tool,
+      state: { status: "running", input: {}, time: { start } },
+    } as unknown as Part
+  }
+  if (status === "error") {
+    return {
+      id,
+      sessionID: "s1",
+      messageID,
+      type: "tool",
+      callID: `call-${id}`,
+      tool,
+      state: { status: "error", input: {}, error: "boom", time: { start, end } },
+    } as unknown as Part
+  }
+  return {
+    id,
+    sessionID: "s1",
+    messageID,
+    type: "tool",
+    callID: `call-${id}`,
+    tool,
+    state: { status: "completed", input: {}, output: "ok", title: tool, metadata: {}, time: { start, end } },
+  } as unknown as Part
+}
+
+function workAssistant(id: string, created: number, options: MessageOptions = {}): MessageWithParts {
+  return assistant(id, created, { parentID: "u1", finish: "tool-calls", ...options }, [workPart(`p-${id}`, id)])
+}
+
+function staleMessages(workSteps: number, options: MessageOptions = {}): MessageWithParts[] {
+  const messages: MessageWithParts[] = [
+    user("u1", NUDGE_BASE, [textPart("p-text", "keep working")], options),
+    assistant("a1", NUDGE_BASE + 1, { parentID: "u1", finish: "tool-calls" }, [
+      toolPart({ id: "tool-todo", messageID: "a1", todos, start: NUDGE_BASE, end: NUDGE_BASE + 2 }),
+    ]),
+  ]
+  for (let index = 0; index < workSteps; index++) {
+    messages.push(workAssistant(`w${index + 1}`, NUDGE_BASE + 10 + index * 10))
+  }
+  return messages
+}
+
+function nudgeHarness(options: { policy?: Partial<NudgeConfig>; nowMs?: number; read?: LifecycleDeps["readTodos"] } = {}) {
+  const policy: NudgeConfig = { ...DEFAULT_NUDGE_CONFIG, ...nudgePolicy, ...options.policy }
+  const { deps, reads, writes } = fakeDeps(options.read ?? (async () => ({ ok: true, todos })))
+  let current = options.nowMs ?? NUDGE_BASE + 10_000
+  const hooks = createTodoReconcileHooks({ ...deps, nudge: policy, now: () => current })
+  return { hooks, reads, writes, setNow: (value: number) => void (current = value) }
+}
+
+async function runTransform(hooks: TodoReconcileHooks, messages: MessageWithParts[]): Promise<void> {
+  await hooks["experimental.chat.messages.transform"]!({}, { messages } as never)
+}
+
+function nudgeParts(messages: MessageWithParts[]): Array<Extract<Part, { type: "text" }>> {
+  const parts: Array<Extract<Part, { type: "text" }>> = []
+  for (const message of messages) {
+    for (const part of message.parts) {
+      if (part.type === "text" && isNudgePart(part)) parts.push(part)
+    }
+  }
+  return parts
+}
+
+describe("stale todo nudges", () => {
+  test("injects one request-local reminder once the tool window is crossed", async () => {
+    const { hooks, reads } = nudgeHarness()
+    const messages = staleMessages(2)
+    await runTransform(hooks, messages)
+    expect(nudgeParts(messages)).toHaveLength(0)
+
+    messages.push(workAssistant("w3", NUDGE_BASE + 40))
+    await runTransform(hooks, messages)
+    const injected = nudgeParts(messages)
+    expect(injected).toHaveLength(1)
+    expect(injected[0]!.synthetic).toBe(true)
+    expect(injected[0]!.messageID).toBe("u1")
+    expect(injected[0]!.text).toContain("3 tool calls")
+    expect(reads).toEqual(["s1"])
+  })
+
+  test("holds the one-shot window and fires again after another full window", async () => {
+    const { hooks } = nudgeHarness()
+    const messages = staleMessages(3)
+    await runTransform(hooks, messages)
+    expect(nudgeParts(messages)).toHaveLength(1)
+
+    await runTransform(hooks, messages)
+    expect(nudgeParts(messages)).toHaveLength(0)
+
+    messages.push(
+      workAssistant("w4", NUDGE_BASE + 40),
+      workAssistant("w5", NUDGE_BASE + 50),
+      workAssistant("w6", NUDGE_BASE + 60),
+    )
+    await runTransform(hooks, messages)
+    expect(nudgeParts(messages)).toHaveLength(1)
+  })
+
+  test("a newer native todowrite resets the baseline", async () => {
+    const { hooks } = nudgeHarness()
+    const messages = staleMessages(3)
+    await runTransform(hooks, messages)
+    expect(nudgeParts(messages)).toHaveLength(1)
+
+    messages.push(
+      assistant("a2", NUDGE_BASE + 100, { parentID: "u1", finish: "tool-calls" }, [
+        toolPart({ id: "tool-todo-2", messageID: "a2", todos, start: NUDGE_BASE + 100, end: NUDGE_BASE + 102 }),
+      ]),
+      workAssistant("w4", NUDGE_BASE + 110),
+    )
+    await runTransform(hooks, messages)
+    expect(nudgeParts(messages)).toHaveLength(0)
+  })
+
+  test("the compaction guard suppresses exactly one transform", async () => {
+    const { hooks } = nudgeHarness()
+    const messages = staleMessages(3)
+    await hooks["experimental.session.compacting"]!({ sessionID: "s1" }, { context: [] })
+    await runTransform(hooks, messages)
+    expect(nudgeParts(messages)).toHaveLength(0)
+
+    await runTransform(hooks, messages)
+    expect(nudgeParts(messages)).toHaveLength(1)
+  })
+
+  test("skips plan turns and requests that disable todowrite", async () => {
+    const plan = nudgeHarness()
+    const planMessages = staleMessages(3, { agent: "plan" })
+    await runTransform(plan.hooks, planMessages)
+    expect(nudgeParts(planMessages)).toHaveLength(0)
+    expect(plan.reads).toEqual([])
+
+    const disabled = nudgeHarness()
+    const disabledMessages = staleMessages(3, { tools: { todowrite: false } })
+    await runTransform(disabled.hooks, disabledMessages)
+    expect(nudgeParts(disabledMessages)).toHaveLength(0)
+    expect(disabled.reads).toEqual([])
+  })
+
+  test("skips empty lists and retries after a failed read", async () => {
+    const empty = nudgeHarness({ read: async () => ({ ok: true, todos: [] }) })
+    const emptyMessages = staleMessages(3)
+    await runTransform(empty.hooks, emptyMessages)
+    expect(nudgeParts(emptyMessages)).toHaveLength(0)
+
+    let attempt = 0
+    const flaky = nudgeHarness({
+      read: async () => {
+        attempt++
+        return attempt === 1 ? { ok: false, reason: "offline" } : { ok: true, todos }
+      },
+    })
+    const flakyMessages = staleMessages(3)
+    await runTransform(flaky.hooks, flakyMessages)
+    expect(nudgeParts(flakyMessages)).toHaveLength(0)
+    await runTransform(flaky.hooks, flakyMessages)
+    expect(nudgeParts(flakyMessages)).toHaveLength(1)
+  })
+
+  test("the time threshold fires without tool calls", async () => {
+    const { hooks } = nudgeHarness({
+      policy: { toolThreshold: 0, minutesThreshold: 5 },
+      nowMs: NUDGE_BASE + 2 + 5 * 60_000,
+    })
+    const messages = staleMessages(0)
+    await runTransform(hooks, messages)
+    const injected = nudgeParts(messages)
+    expect(injected).toHaveLength(1)
+    expect(injected[0]!.text).toContain("5 min")
+    expect(injected[0]!.text).not.toContain("tool call")
+  })
+
+  test("includeList appends the bounded persisted list", async () => {
+    const { hooks } = nudgeHarness({ policy: { includeList: true, maxListBytes: 1_024 } })
+    const messages = staleMessages(3)
+    await runTransform(hooks, messages)
+    const injected = nudgeParts(messages)
+    expect(injected).toHaveLength(1)
+    expect(injected[0]!.text).toContain("Investigate crash")
+    expect(injected[0]!.text).toContain("Todo status reminder: persisted list")
+  })
+
+  test("targets the newest user turn without needing a compaction boundary", async () => {
+    const { hooks } = nudgeHarness()
+    const messages = staleMessages(3)
+    messages.push(user("u2", NUDGE_BASE + 200, [textPart("p2", "next")]))
+    await runTransform(hooks, messages)
+    const injected = nudgeParts(messages)
+    expect(injected).toHaveLength(1)
+    expect(injected[0]!.messageID).toBe("u2")
+  })
+
+  test("does not nudge without a visible todowrite baseline", async () => {
+    const { hooks, reads } = nudgeHarness()
+    const messages: MessageWithParts[] = [user("u1", NUDGE_BASE, [textPart("p1", "task")])]
+    for (let index = 0; index < 5; index++) {
+      messages.push(workAssistant(`w${index}`, NUDGE_BASE + 10 + index))
+    }
+    await runTransform(hooks, messages)
+    expect(nudgeParts(messages)).toHaveLength(0)
+    expect(reads).toEqual([])
   })
 })

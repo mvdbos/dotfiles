@@ -154,8 +154,9 @@ For each transform invocation:
 Properties:
 
 - One write per boundary; later requests keep the persisted part as ordinary history
-  (`stripPluginSnapshots(messages, matchingCached)`), so there is no per-request injection
-  and no per-request plugin work beyond the keep/strip decision.
+  (`stripPluginSnapshots(messages, matchingCached)`), so the boundary path adds no
+  per-request injection. A separate stale-todo nudge can append one request-local synthetic
+  part per stale window (§9); it is never persisted.
 - In-memory state avoids repeated reads during one process; persisted snapshot metadata
   recovers coverage after restart.
 - Retry-safe: a failed write leaves coverage `pending`; the next transform retries the same
@@ -209,7 +210,50 @@ including manual compaction. An event-only in-memory flag was rejected:
 History-derived eligibility remains the source of truth; the event only invalidates the
 process-local cache and is not required for restart recovery.
 
-## 9. Limitations (stated honestly)
+## 9. Stale-todo nudge (pre-compaction)
+
+Status: verified against OpenCode v1.18.31 (`anomalyco/opencode` tag `v1.18.31`) with unit,
+lifecycle, and mock-provider integration tests. The delivery mechanism is the same
+request-local transform mutation used by the boundary path, so the §2 semantics apply.
+
+When history has no completed compaction pair — the ordinary pre-compaction path — the
+plugin may append one synthetic text part to the newest user message in `output.messages`.
+Nothing is written through `session.prompt`, so the part reaches exactly one provider
+request and never enters stored history.
+
+Eligibility, in order:
+
+1. The transform is not the compaction summarizer: `experimental.session.compacting` arms a
+   one-shot `CompactionSkipGuard` keyed by session, and the immediately following transform
+   consumes it and performs no mutation. This mirrors the watchdog contract
+   (`watchdog/feedback.ts`); the ordering relies on `compaction.ts` triggering
+   `experimental.session.compacting` (line 373) before
+   `experimental.chat.messages.transform` (line 379), with no ordinary transform between
+   them for that session.
+2. A target user message exists; it is not a plan-agent turn; `info.tools.todowrite` is not
+   `false`; and the target does not already carry a nudge part for this request.
+3. A baseline exists: the newest successful, model-visible, uncompacted `todowrite` part
+   (`visibleTodoWritePart`). No baseline means no nudge, so a list the model never wrote
+   stays the boundary path's concern.
+4. The window is stale: `toolThreshold` completed/errored tool parts after the baseline
+   (excluding `todowrite`, `question`, `skill`, and image tools), or `minutesThreshold`
+   elapsed since the baseline part's `time.end`.
+5. The window is due: first crossing of a baseline, or another full window (tool-count or
+   time delta) since the previous nudge. A native `todowrite` changes the baseline key and
+   re-arms the first crossing.
+
+The reminder text is short and framed as system-generated task data; it does not include
+the list unless `includeList` is enabled, in which case the bounded projection from
+`formatReminder` is appended with `maxListBytes`. The read is the same fail-open SDK read
+as the boundary path; a failed read or empty list skips the nudge without consuming the
+window.
+
+Config: optional `todo-reconcile.json` (`OPENCODE_TODO_RECONCILE_CONFIG` overrides) with
+`nudge.enabled`, `nudge.toolThreshold`, `nudge.minutesThreshold`, `nudge.includeList`, and
+`nudge.maxListBytes`; defaults are `true`, `10`, `5`, `false`, `1024`. Invalid fields fall
+back per field and log one warning.
+
+## 10. Limitations (stated honestly)
 
 - No acknowledgement mechanism exists, so strict exactly-once provider delivery cannot be
   promised. The stable persisted part provides retry and restart recovery, not provider
@@ -227,5 +271,14 @@ process-local cache and is not required for restart recovery.
   `todowrite` parts.
 - `lastUser.info.tools?.todowrite` is the only availability signal at this hook; dynamic
   agent permissions are not visible.
+- Nudge delivery has no acknowledgement: if the containing provider request fails after the
+  window was consumed, that nudge is lost and the next one waits for another full window.
+  Restarting the plugin clears in-memory window state, which can produce one earlier nudge.
+- An armed compaction guard that is never consumed (an aborted compaction) suppresses one
+  subsequent nudge; the count is dropped on the next consume.
+- The transform has no session parent information, so subagent sessions with their own todo
+  lists are nudged like root sessions.
+- With `includeList`, the total part size is the short sentence plus the bounded projection;
+  `maxListBytes` caps only the projection.
 - Experimental hooks may change in later OpenCode versions. This contract applies to
-  v1.18.30; re-verify the two call sites before upgrading.
+  v1.18.30/v1.18.31; re-verify the two call sites before upgrading.

@@ -1,0 +1,9 @@
+{
+  "nudge": {
+    "enabled": true,
+    "toolThreshold": 10,
+    "minutesThreshold": 5,
+    "includeList": false,
+    "maxListBytes": 1024
+  }
+}

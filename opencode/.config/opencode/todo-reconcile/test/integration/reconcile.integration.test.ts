@@ -82,6 +82,10 @@ function hasToolResult(body: Record<string, any>): boolean {
   return (body.messages ?? []).some((message: Record<string, any>) => message.role === "tool")
 }
 
+function containsNudge(body: Record<string, any>): boolean {
+  return textOf(body).includes("Todo status reminder")
+}
+
 function setDefaultHandler(): void {
   mock.handler = (body) => {
     if (isTitleRequest(body)) return { kind: "text", text: "Mock title" }
@@ -408,6 +412,47 @@ describe("todo reconciliation integration", () => {
       const withReminder = mock.ordinaryRequests().filter((request) => containsReminder(request.body))
       expect(withReminder).toHaveLength(1)
        expect(textOf(withReminder[0]!.body)).toContain("Closed counts: completed=2, cancelled=0.")
+    },
+    90_000,
+  )
+
+  maybe(
+    "a stale todo list receives one request-local nudge without persisting it",
+    async () => {
+      setDefaultHandler()
+      const instance = await launch()
+      const sessionID = await createSession(instance)
+      await prompt(instance, sessionID, "seed tasks")
+      expect(await readTodos(instance, sessionID)).toEqual([pending, inProgress, completed, cancelled])
+
+      mock.requests.length = 0
+      let steps = 0
+      mock.handler = (body) => {
+        if (isTitleRequest(body)) return { kind: "text", text: "Mock title" }
+        if (isSummarizerRequest(body)) return { kind: "text", text: "## Objective\n- mock summary" }
+        steps++
+        if (steps <= 10) return { kind: "tool", tool: "glob", args: { pattern: "**/*.ts" } }
+        return { kind: "text", text: "done" }
+      }
+      await prompt(instance, sessionID, "keep working")
+
+      const ordinary = mock.ordinaryRequests()
+      expect(ordinary).toHaveLength(11)
+      expect(ordinary.slice(0, 10).every((request) => !containsNudge(request.body))).toBe(true)
+      expect(containsNudge(ordinary[10]!.body)).toBe(true)
+      expect(containsReminder(ordinary[10]!.body)).toBe(false)
+      expect(containsNudge(ordinary[10]!.body) ? textOf(ordinary[10]!.body) : "").toContain(
+        "10 tool calls",
+      )
+
+      const history = await instance.client.session.messages({ path: { id: sessionID } })
+      expect(
+        (history.data ?? []).some((message) =>
+          message.parts.some(
+            (part) => part.type === "text" && part.metadata?.["todo-reconcile-nudge"] === true,
+          ),
+        ),
+      ).toBe(false)
     },
     90_000,
   )

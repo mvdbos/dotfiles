@@ -1,6 +1,7 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import type { Part } from "@opencode-ai/sdk"
 import type { UserMessage } from "@opencode-ai/sdk/v2"
+import { loadTodoReconcileConfig } from "./config"
 import { isPluginSnapshotPart } from "./snapshot"
 import {
   createTodoReconcileHooks,
@@ -25,6 +26,11 @@ export function mirrorTextParts(target: MessageWithParts): Array<Extract<Part, {
 }
 
 export const TodoReconcilePlugin: Plugin = async ({ client }) => {
+  const config = loadTodoReconcileConfig()
+  for (const warning of config.warnings) {
+    console.warn(`[todo-reconcile] ${warning}`)
+  }
+
   const persistSnapshot = async (input: PersistSnapshotInput) => {
     try {
       const target = input.target
@@ -73,6 +79,7 @@ export const TodoReconcilePlugin: Plugin = async ({ client }) => {
   return createTodoReconcileHooks({
     readTodos: (sessionID) => readTodosThroughClient(client, sessionID),
     persistSnapshot,
+    nudge: config.nudge,
     log: (message, detail) => {
       console.warn(`[todo-reconcile] ${message}`, detail ?? "")
     },

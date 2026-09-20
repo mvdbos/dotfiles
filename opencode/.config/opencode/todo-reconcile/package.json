@@ -7,7 +7,7 @@
   "scripts": {
     "build": "bun build src/plugin.ts --outfile dist/todo-reconcile.js --target node --format esm",
     "test": "bun test",
-    "test:unit": "bun test test/reminder.test.ts test/lifecycle.test.ts test/plugin.test.ts",
+    "test:unit": "bun test test/reminder.test.ts test/nudge.test.ts test/config.test.ts test/lifecycle.test.ts test/plugin.test.ts",
     "test:integration": "bun test test/integration",
     "typecheck": "tsc --noEmit"
   },
