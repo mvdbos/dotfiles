@@ -8,7 +8,7 @@
 
 - [ ] A frozen corpus contains at least 20 positive and 40 negative bounded packet fixtures covering every planned concern class, valid unusual work, stale findings, prompt injection, and malformed output.
 - [ ] Evaluation reports true-positive rate, false-positive rate, category precision, duplicate-warning rate, interruption frequency, latency, token/character use, malformed output, and packet-size distributions.
-- [ ] Runtime evaluation reports activity/concern toast behavior, skipped unchanged evidence, prefix-cache impact, critic cache behavior, foreign pattern matches, dual-prompt races, goal deferral, and goal token accounting.
+- [ ] Runtime evaluation reports debug activity-toast behavior, skipped unchanged evidence, prefix-cache impact, critic cache behavior, foreign pattern matches, dual-prompt races, goal deferral, and goal token accounting.
 - [ ] Results compare no-watchdog, idle-only, and cadence modes using the same frozen cases.
 - [ ] The final user prompt never exceeds 16,384 UTF-8 bytes; packet p95, output length, latency, false-positive, true-positive, duplication, interruption, cache, and fail-open targets are checked against the plan.
 - [ ] The co-resident goal fixture produces at most one ordinary-timing root prompt or activates the no-watchdog-idle-prompt fallback before enablement.

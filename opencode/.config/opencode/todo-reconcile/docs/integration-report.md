@@ -7,9 +7,8 @@
 - Plugin/SDK types: `@opencode-ai/plugin@1.18.30`, `@opencode-ai/sdk@1.18.30`
 - Runtime: Bun 1.3.14
 
-The tested hook dependency is `experimental.chat.messages.transform`, which OpenCode marks
-experimental. Re-verify the two call sites (`session/prompt.ts:1255`,
-`session/compaction.ts:379` in v1.18.30) before upgrading.
+The tested hook dependencies are `experimental.chat.messages.transform` for initial
+post-compaction installation and `tool.execute.after` for unseen tool-output trailers.
 
 ## How to reproduce
 
@@ -51,7 +50,9 @@ The integration suite covers the following scenarios (see `test/integration/reco
  6. **Empty list** — compaction with no persisted todos produces no reminder on the next
    prompt (ordinary requests still happen).
  7. **All-completed list** — a list whose items are already `completed` is represented by
-   closed-item counts.
+    closed-item counts.
+ 8. **Stale todo baseline** — the threshold-crossing successful tool output stores one
+    stable reminder; later requests include it and the same baseline never repeats it.
 
 Additional assertions in the same suite:
 
@@ -76,8 +77,7 @@ bun test                  # unit tests plus integration scenarios when the binar
 - `todowrite` availability is inferred from `user.tools` on the target prompt
   (`false` disables the guidance bullet). Agent-level permission denials are not visible at
   this hook; the default wording is conditional.
-- The snapshot remains in persisted history until newer native todo coverage or compaction
-  supersedes it. There is no provider acknowledgement, so strict exactly-once delivery is
-  not promised.
+- A visible snapshot remains byte-identical until ordinary compaction. Later native todo
+  updates supersede its claims semantically without deleting it.
 - The integration harness uses one process per scenario and a deterministic mock provider;
   it does not exercise real LLM behaviour.

@@ -86,7 +86,7 @@ describe("production guarded idle concerns", () => {
     }
   }, 90_000)
 
-  test("cadence review installs the advisory request-locally after five tools without persisting it", async () => {
+  test("cadence review persists the advisory on the next successful tool output", async () => {
     let instance: ProbeInstance | undefined
     try {
       instance = await makeInstance(true, false)
@@ -120,7 +120,7 @@ describe("production guarded idle concerns", () => {
       instance.llm.mainHoldIndex = undefined
 
       const withAdvisory = await waitFor(
-        "request-local advisory",
+         "persisted advisory",
         () =>
           instance!.llm
             .requestsOf("main")
@@ -129,9 +129,37 @@ describe("production guarded idle concerns", () => {
       )
       expect(withAdvisory).toBeDefined()
 
-      const stored = JSON.stringify(await storedMessages(instance, sessionID))
-      expect(stored).not.toContain("watchdog advisory")
+      const mainRequests = instance.llm.requestsOf("main")
+      const advisoryRequestIndex = mainRequests.indexOf(withAdvisory)
+      const previousMessages = mainRequests[advisoryRequestIndex - 1]!.body.messages
+      const advisoryMessages = withAdvisory.body.messages
+      expect(advisoryMessages.slice(0, previousMessages.length)).toEqual(previousMessages)
+
+      const storedBeforeNextTurn = await storedMessages(instance, sessionID)
+      const advisoryMessageIndex = storedBeforeNextTurn.findIndex((message) =>
+        message.parts.some((part) => part.type === "tool" && String(part.state?.output).includes("watchdog advisory")),
+      )
+      const advisoryPartIndex = storedBeforeNextTurn[advisoryMessageIndex]!.parts.findIndex(
+        (part) => part.type === "tool" && String(part.state?.output).includes("watchdog advisory"),
+      )
+      const advisoryPart = storedBeforeNextTurn[advisoryMessageIndex]!.parts[advisoryPartIndex]!
+      const stored = JSON.stringify(storedBeforeNextTurn)
+      expect(stored).toContain("watchdog advisory")
+      expect(stored.split("watchdog advisory")).toHaveLength(2)
       expect(instance.llm.requestsOf("critic")).toHaveLength(1)
+
+      const beforeNextTurn = instance.llm.requestsOf("main").length
+      await promptAsync(instance, sessionID, "Start a new real turn.")
+      const nextTurn = await waitFor(
+        "next real-turn request",
+        () => instance!.llm.requestsOf("main")[beforeNextTurn],
+        20_000,
+      )
+      expect(nextTurn.body.messages.slice(0, advisoryMessages.length)).toEqual(advisoryMessages)
+      const storedAfterNextTurn = await storedMessages(instance, sessionID)
+      expect(storedAfterNextTurn[advisoryMessageIndex]!.info.id).toBe(storedBeforeNextTurn[advisoryMessageIndex]!.info.id)
+      expect(storedAfterNextTurn[advisoryMessageIndex]!.parts[advisoryPartIndex]!.id).toBe(advisoryPart.id)
+      expect(storedAfterNextTurn[advisoryMessageIndex]!.parts[advisoryPartIndex]!.state.output).toBe(advisoryPart.state.output)
     } catch (error) {
       if (instance) writeFileSync("/tmp/watchdog-logs.txt", instance.logs())
       throw error

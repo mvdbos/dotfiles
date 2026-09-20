@@ -26,7 +26,7 @@ describe("loadTodoReconcileConfig", () => {
     const file = writeConfig(
       "valid.json",
       JSON.stringify({
-        nudge: { enabled: false, toolThreshold: 20, minutesThreshold: 0, includeList: true, maxListBytes: 2_048 },
+        nudge: { enabled: false, toolThreshold: 20, minutesThreshold: 0, unknown: true },
         other: 1,
       }),
     )
@@ -35,8 +35,6 @@ describe("loadTodoReconcileConfig", () => {
       enabled: false,
       toolThreshold: 20,
       minutesThreshold: 0,
-      includeList: true,
-      maxListBytes: 2_048,
     })
     expect(config.warnings).toEqual([])
   })
@@ -44,13 +42,11 @@ describe("loadTodoReconcileConfig", () => {
   test("falls back per invalid field and warns", () => {
     const file = writeConfig(
       "invalid-fields.json",
-      JSON.stringify({ nudge: { toolThreshold: -5, includeList: "yes", maxListBytes: 12 } }),
+      JSON.stringify({ nudge: { toolThreshold: -5, unknown: "ignored" } }),
     )
     const config = loadTodoReconcileConfig([file])
     expect(config.nudge.toolThreshold).toBe(DEFAULT_NUDGE_CONFIG.toolThreshold)
-    expect(config.nudge.includeList).toBe(DEFAULT_NUDGE_CONFIG.includeList)
-    expect(config.nudge.maxListBytes).toBe(DEFAULT_NUDGE_CONFIG.maxListBytes)
-    expect(config.warnings).toHaveLength(3)
+    expect(config.warnings).toHaveLength(1)
   })
 
   test("disables nudging when both triggers are zero", () => {

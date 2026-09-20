@@ -417,7 +417,7 @@ describe("todo reconciliation integration", () => {
   )
 
   maybe(
-    "a stale todo list receives one request-local nudge without persisting it",
+    "a stale todo list receives one persisted tool-output nudge",
     async () => {
       setDefaultHandler()
       const instance = await launch()
@@ -441,18 +441,13 @@ describe("todo reconciliation integration", () => {
       expect(ordinary.slice(0, 10).every((request) => !containsNudge(request.body))).toBe(true)
       expect(containsNudge(ordinary[10]!.body)).toBe(true)
       expect(containsReminder(ordinary[10]!.body)).toBe(false)
-      expect(containsNudge(ordinary[10]!.body) ? textOf(ordinary[10]!.body) : "").toContain(
-        "10 tool calls",
-      )
+      expect(containsNudge(ordinary[10]!.body) ? textOf(ordinary[10]!.body) : "").not.toContain("10 tool calls")
 
       const history = await instance.client.session.messages({ path: { id: sessionID } })
-      expect(
-        (history.data ?? []).some((message) =>
-          message.parts.some(
-            (part) => part.type === "text" && part.metadata?.["todo-reconcile-nudge"] === true,
-          ),
-        ),
-      ).toBe(false)
+      const delivered = (history.data ?? []).flatMap((message) => message.parts).filter(
+        (part) => part.type === "tool" && part.state.status === "completed" && part.state.output.includes("Todo status reminder"),
+      )
+      expect(delivered).toHaveLength(1)
     },
     90_000,
   )

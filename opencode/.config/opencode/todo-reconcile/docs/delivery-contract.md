@@ -127,15 +127,14 @@ For each transform invocation:
 3. Find the latest completed compaction boundary pair by scanning for the assistant `A`
    that satisfies the §3 test, comparing candidates with `isAfter`.
 4. Skip if no boundary exists.
-5. Read the session's todos through the SDK when no matching cached or persisted snapshot
-   covers the current fingerprint. Empty list → no-op. Read failure → log and leave the
-   request eligible for a later retry.
+5. Read the session's todos only before the boundary's first provider request. Empty list →
+   no-op. Read failure → log and seal the boundary without changing history.
 6. Format an active-first projection with the fixed byte ceiling in `src/reminder.ts`.
    Omitted items and excerpts are explicitly marked.
 7. Persist one synthetic text part on the newest user message through
    `session.prompt({ messageID, noReply: true })`. This creates no new user message or
-   model turn. A stable session/boundary/target/fingerprint ID makes retries idempotent.
-   The write is skipped for a compaction marker and deferred to the next transform; the
+   model turn. A stable session/boundary/target/fingerprint ID makes the write idempotent.
+   The write is skipped for a compaction marker and that boundary is sealed; the
    marker is excluded because OpenCode's `createUserMessage` always rewrites `time.created`
    on an existing `messageID`, and a marker bumped ahead of the finished summary re-arms
    `latest().tasks`, which reruns `SessionCompaction.process` (an unbounded compaction loop
@@ -148,20 +147,17 @@ For each transform invocation:
    idle-admission state. Mirroring makes classification identical to the original prompt.
    Upserts are by part ID, so stored parts, model-visible payloads, part order, and prefix
    caching are unchanged; the only new provider-visible content remains the snapshot part.
-8. Remove plugin snapshots from summarizer payloads. A successful model-visible native
-   `todowrite` update invalidates plugin coverage and removes the snapshot from later requests.
+8. Never remove, replace, or hide a provider-visible snapshot. A later model-visible native
+   `todowrite` supersedes its claims by appearing later in history.
 
 Properties:
 
-- One write per boundary; later requests keep the persisted part as ordinary history
-  (`stripPluginSnapshots(messages, matchingCached)`), so the boundary path adds no
-  per-request injection. A separate stale-todo nudge can append one request-local synthetic
-  part per stale window (§9); it is never persisted.
+- One attempted write per boundary; later requests keep the persisted part as ordinary
+  history. Active-loop feedback is appended only to unseen successful tool output (§9).
 - In-memory state avoids repeated reads during one process; persisted snapshot metadata
   recovers coverage after restart.
-- Retry-safe: a failed write leaves coverage `pending`; the next transform retries the same
-  write (deterministic part ID) without re-reading todos. The request that saw the failure
-  goes out without the reminder.
+- Fail-closed at the cache frontier: a failed initial read/write is never retried against an
+  already-sent target.
 - A later compaction introduces a new boundary, even with byte-identical todo text.
 
 ## 5. Todo-read semantics
@@ -170,9 +166,7 @@ Properties:
 - Success with `[]` → ordinary empty list → skip.
 - HTTP `{ error }` or missing `data` or thrown error → read failure → fail open, no
   reminder, concise log (`console.warn`), no todo content in logs.
-- "Bounded retry": at most one SDK attempt per invocation. Retry is provided by the
-  cached/persisted coverage check on the next request, not by an in-hook loop, so a slow or
-  down server cannot stall or amplify the agent request.
+- One SDK attempt is allowed before the first request at a boundary. Failure seals it.
 
 ## 6. Size bound
 
@@ -213,44 +207,31 @@ process-local cache and is not required for restart recovery.
 ## 9. Stale-todo nudge (pre-compaction)
 
 Status: verified against OpenCode v1.18.31 (`anomalyco/opencode` tag `v1.18.31`) with unit,
-lifecycle, and mock-provider integration tests. The delivery mechanism is the same
-request-local transform mutation used by the boundary path, so the §2 semantics apply.
+lifecycle, and mock-provider integration tests. Delivery uses `tool.execute.after`, before
+OpenCode persists a successful tool result.
 
-When history has no completed compaction pair — the ordinary pre-compaction path — the
-plugin may append one synthetic text part to the newest user message in `output.messages`.
-Nothing is written through `session.prompt`, so the part reaches exactly one provider
-request and never enters stored history.
+The plugin appends one bounded text trailer to the next eligible successful tool output.
+That output is then persisted normally, so every later provider request sees identical bytes.
 
 Eligibility, in order:
 
-1. The transform is not the compaction summarizer: `experimental.session.compacting` arms a
-   one-shot `CompactionSkipGuard` keyed by session, and the immediately following transform
-   consumes it and performs no mutation. This mirrors the watchdog contract
-   (`watchdog/feedback.ts`); the ordering relies on `compaction.ts` triggering
-   `experimental.session.compacting` (line 373) before
-   `experimental.chat.messages.transform` (line 379), with no ordinary transform between
-   them for that session.
-2. A target user message exists; it is not a plan-agent turn; `info.tools.todowrite` is not
-   `false`; and the target does not already carry a nudge part for this request.
+1. The latest user message is not a plan-agent turn and does not disable `todowrite`.
 3. A baseline exists: the newest successful, model-visible, uncompacted `todowrite` part
    (`visibleTodoWritePart`). No baseline means no nudge, so a list the model never wrote
    stays the boundary path's concern.
-4. The window is stale: `toolThreshold` completed/errored tool parts after the baseline
+4. The baseline is stale: `toolThreshold` successful eligible tool completions after it
    (excluding `todowrite`, `question`, `skill`, and image tools), or `minutesThreshold`
    elapsed since the baseline part's `time.end`.
-5. The window is due: first crossing of a baseline, or another full window (tool-count or
-   time delta) since the previous nudge. A native `todowrite` changes the baseline key and
-   re-arms the first crossing.
+5. The baseline has not already produced a reminder. A later successful `todowrite` creates
+   a new baseline and re-arms delivery.
 
-The reminder text is short and framed as system-generated task data; it does not include
-the list unless `includeList` is enabled, in which case the bounded projection from
-`formatReminder` is appended with `maxListBytes`. The read is the same fail-open SDK read
-as the boundary path; a failed read or empty list skips the nudge without consuming the
-window.
+The reminder text is short, stable, and framed as system-generated task data. It includes no
+dynamic counts or persisted list. Time is checked only in the successful tool hook; no timer
+creates a provider request.
 
 Config: optional `todo-reconcile.json` (`OPENCODE_TODO_RECONCILE_CONFIG` overrides) with
-`nudge.enabled`, `nudge.toolThreshold`, `nudge.minutesThreshold`, `nudge.includeList`, and
-`nudge.maxListBytes`; defaults are `true`, `10`, `5`, `false`, `1024`. Invalid fields fall
+`nudge.enabled`, `nudge.toolThreshold`, and `nudge.minutesThreshold`; defaults are
+`true`, `10`, and `5`. Invalid fields fall
 back per field and log one warning.
 
 ## 10. Limitations (stated honestly)
@@ -262,23 +243,17 @@ back per field and log one warning.
   native todo coverage or a newer compaction supersedes it. In goal sessions this places the
   snapshot on the generated continuation that resumed the session, which is also where the
   model needs it.
-- There is no in-request fallback. If the write fails, or the only candidate is a compaction
-  marker, the reminder is deferred to the next transform; the intervening request runs
-  without it. Reads stay cached, so the retry is a single SDK write attempt, not a re-read.
-- A failed transform invocation (thrown hook error) leaves the request unchanged and the
-  state untouched; the next request retries from the same state.
-- Cache invalidation is event-driven for `todo.updated` and history-driven for native
-  `todowrite` parts.
+- There is no hot-patch fallback. If initial installation fails, the request runs unchanged
+  and the boundary remains sealed.
+- External todo updates are appended at a future unseen eligible tool boundary; old visible
+  snapshots are never rewritten.
 - `lastUser.info.tools?.todowrite` is the only availability signal at this hook; dynamic
   agent permissions are not visible.
-- Nudge delivery has no acknowledgement: if the containing provider request fails after the
-  window was consumed, that nudge is lost and the next one waits for another full window.
-  Restarting the plugin clears in-memory window state, which can produce one earlier nudge.
+- Restart reconstruction can recover a visible `todowrite` baseline from history. A stale
+  reconstructed baseline waits for a future unseen eligible tool output.
 - An armed compaction guard that is never consumed (an aborted compaction) suppresses one
   subsequent nudge; the count is dropped on the next consume.
 - The transform has no session parent information, so subagent sessions with their own todo
   lists are nudged like root sessions.
-- With `includeList`, the total part size is the short sentence plus the bounded projection;
-  `maxListBytes` caps only the projection.
 - Experimental hooks may change in later OpenCode versions. This contract applies to
   v1.18.30/v1.18.31; re-verify the two call sites before upgrading.

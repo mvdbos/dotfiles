@@ -37,7 +37,7 @@ afterAll(async () => {
 })
 
 describe("idle feedback visibility", () => {
-  test("marker-tagged non-synthetic text renders in the TUI while synthetic text stays hidden and toasts leave the transcript alone", async () => {
+  test("marker-tagged non-synthetic text renders in the TUI while synthetic text stays hidden", async () => {
     try {
       const sessionID = await createSession(instance, "tui-visibility")
       await startTui(instance, { sessionID, readyText: "tui-visibility", timeoutMs: 90_000 })
@@ -68,13 +68,6 @@ describe("idle feedback visibility", () => {
       await Bun.sleep(3_000)
       expect(await readTuiLog(instance)).not.toContain("synthetic probe advisory line")
 
-      for (const variant of ["info", "warning", "error"] as const) {
-        await promptAsync(instance, sessionID, `__watchdog_probe_toast_${variant}__`)
-        await waitForTuiText(`${variant} probe toast`, 30_000)
-        await Bun.sleep(8_000)
-      }
-      const serialized = JSON.stringify(await storedMessages(sessionID))
-      expect(serialized).not.toContain("probe toast")
     } catch (error) {
       try {
         writeFileSync("/tmp/watchdog-tui.log", readFileSync(instance.tuiLog, "utf8"))

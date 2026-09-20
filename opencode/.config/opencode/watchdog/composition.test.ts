@@ -114,43 +114,40 @@ function partsOf(messages: Array<Record<string, any>>, partID: string) {
   return undefined
 }
 
-describe("watchdog transform composition", () => {
-  test("runs before and after existing message-transform plugins without deleting or duplicating markers", async () => {
-    const strip = await titleStrip()
-    const image = await imageStrip()
-    const explore = await exploreTransform()
-    const todo = todoTransform()
-
-    for (const order of [
-      ["watchdog", "todo", "reasoning", "image", "explore"],
-      ["explore", "image", "reasoning", "todo", "watchdog"],
-    ] as const) {
-      const output = bundle()
+describe("tool-output feedback composition", () => {
+  test("stores each plugin trailer exactly once in either hook order", async () => {
+    for (const order of [["watchdog", "todo"], ["todo", "watchdog"]] as const) {
       const runtime = watchdogRuntime()
+      const todo = createTodoReconcileHooks({
+        readTodos: async () => ({ ok: true, todos: [] }),
+        nudge: { enabled: true, toolThreshold: 1, minutesThreshold: 0 },
+      })
+      const history = bundle()
+      await todo["experimental.chat.messages.transform"]!({}, history as never)
+      await todo["tool.execute.after"]!(
+        {
+          sessionID: "root",
+          callID: "todo-1",
+          tool: "todowrite",
+          args: { todos: [{ content: "keep markers", status: "in_progress", priority: "high" }] },
+        },
+        { title: "todowrite", output: "written", metadata: {} },
+      )
+      const output = { title: "glob", output: '{"files":[]}', metadata: {} }
       for (const step of order) {
-        if (step === "reasoning") await strip({}, output as never)
-        if (step === "image") await image({}, output as never)
-        if (step === "todo") await todo({}, output as never)
-        if (step === "explore") await explore({}, output as never)
-        if (step === "watchdog") await runtime.transformMessages({ messages: output.messages as never })
+        if (step === "todo") {
+          await todo["tool.execute.after"]!(
+            { sessionID: "root", callID: "work-1", tool: "glob", args: {} },
+            output,
+          )
+        }
+        if (step === "watchdog") runtime.deliverPendingAdvisory("root", "glob", output)
       }
-
-      const reasoning = partsOf(output.messages, "reason-1")!
-      expect(reasoning.text).toBe("Original reasoning about the request.")
-      expect(reasoning.metadata?.["async-reasoning-titles"]).toBeUndefined()
-
-      const text = partsOf(output.messages, "text-1")!
-      expect(text.text).toBe("Shown.")
-      expect(stripDisplayAnnotations(text.text)).toBe(text.text)
-
-      const snapshot = partsOf(output.messages, "snapshot-1")!
-      expect(snapshot.text).toBe("Todos\n- [ ] keep markers")
-      expect(snapshot.synthetic).toBe(true)
-      expect(snapshot.metadata?.["todo-reconcile"]?.version).toBe(1)
-
-      const tool = partsOf(output.messages, "tool-1")!
-      const occurrences = String(tool.state.output).split("[watchdog advisory:").length - 1
-      expect(occurrences).toBe(1)
+      expect(output.output.split("[watchdog advisory:")).toHaveLength(2)
+      expect(output.output.split("Todo status reminder")).toHaveLength(2)
+      const stored = output.output
+      expect(stored.startsWith('{"files":[]}')).toBe(true)
+      expect(output.output).toBe(stored)
       await runtime.dispose()
     }
   })
@@ -173,7 +170,8 @@ describe("watchdog transform composition", () => {
         { info: real, parts: [{ id: "t1", sessionID: "s1", messageID: "u1", type: "text", text: "real instruction" }] },
         latest,
       ]
-      expect(lastUserMessage(messages as never, eligible as never)?.info.id).toBe("u1")
+      expect(eligible(latest)).toBe(false)
+      expect(lastUserMessage(messages as never)?.info.id).toBe(latest.info.id)
     }
   })
 
@@ -182,7 +180,7 @@ describe("watchdog transform composition", () => {
     const runtime = watchdogRuntime()
     runtime.states.get("root")!.activeAdvisory = undefined
     const output = bundle()
-    await runtime.transformMessages({ messages: output.messages as never })
+    runtime.deliverPendingAdvisory("root", "glob", { output: "unchanged" })
     await strip({}, output as never)
     const reasoning = partsOf(output.messages, "reason-1")!
     expect(reasoning.text).toBe("Original reasoning about the request.")

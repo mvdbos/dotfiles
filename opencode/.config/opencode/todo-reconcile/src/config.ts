@@ -63,18 +63,6 @@ function parseNudge(section: unknown, warnings: string[]): NudgeConfig {
     nudge.minutesThreshold = minutesThreshold
   }
 
-  if (raw.includeList !== undefined) {
-    if (typeof raw.includeList === "boolean") nudge.includeList = raw.includeList
-    else warnings.push("nudge.includeList was not a boolean; using default")
-  }
-
-  const maxListBytes = boundedInteger(raw.maxListBytes, DEFAULT_NUDGE_CONFIG.maxListBytes, 128, 4_096)
-  if (maxListBytes === undefined) {
-    warnings.push("nudge.maxListBytes must be an integer between 128 and 4096; using default")
-  } else {
-    nudge.maxListBytes = maxListBytes
-  }
-
   if (nudge.enabled && nudge.toolThreshold === 0 && nudge.minutesThreshold === 0) {
     warnings.push("nudge has no active trigger (toolThreshold and minutesThreshold are both 0); nudges disabled")
     nudge.enabled = false

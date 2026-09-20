@@ -1,5 +1,11 @@
 # OpenCode Trajectory Watchdog: Implementation Plan
 
+> Feedback-delivery sections are historical. `.scratch/cache-preserving-plugin-feedback/spec.md`
+> supersedes request-local message transforms: current active-loop feedback is appended to
+> unseen successful tool output in `tool.execute.after` and then remains immutable. Accepted
+> warning and critical concerns use guarded idle follow-ups when no tool boundary appears;
+> concern toasts are disabled because they do not influence autonomous trajectories.
+
 Research date: 2026-09-18
 
 OpenCode baseline: `v1.18.31`, commit [`a97622c`](https://github.com/anomalyco/opencode/tree/a97622c801f4ca571530ddc51076af659a9c32cd), released 2026-09-14. Upstream `dev` was also checked at commit [`3dd1b30`](https://github.com/anomalyco/opencode/tree/3dd1b3053979971d8eb03ef37b29de07b892d95c) from 2026-09-18. The APIs relevant to this plan are unchanged between those commits.

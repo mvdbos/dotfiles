@@ -5,17 +5,11 @@ import {
   type CompiledForeignPatterns,
 } from "../plugin-generated-user/helpers"
 import { buildCriticAgent, parseModelRef, PLAN_AGENT_NAME, WATCHDOG_AGENT_NAME, type WatchdogConfig } from "./config"
-import { assistantTextFromPart, changeFingerprintFromTool, eventSessionID, terminalToolObservation } from "./collect"
+import { assistantTextFromPart, changeFingerprintFromTool, eventSessionID, isSignificantTool, terminalToolObservation } from "./collect"
 import { CriticRunner } from "./critic"
 import {
   buildIdlePromptBody,
-  CompactionSkipGuard,
-  installRunAdvisory,
-  runAdvisoryFor,
-  sessionIDFromMessages,
-  shouldAttemptToast,
-  toastStateAfterAttempt,
-  type RequestMessage,
+  appendRunAdvisory,
 } from "./feedback"
 import { concernIdentity, decideDelivery, newDeliveryBudget, type AcceptedConcern } from "./noise"
 import { fitUserPrompt, materializePacket, snapshotKey, evidenceFingerprint, type PacketTrigger, type WatchdogPacket } from "./packet"
@@ -92,9 +86,7 @@ export class WatchdogRuntime {
   readonly knownRoots = new Set<string>()
   readonly childSessions = new Set<string>()
   readonly tombstones = new Set<string>()
-  readonly compactionSkips = new CompactionSkipGuard()
   readonly activeCriticSessions = new Set<string>()
-  readonly advisorySeen = new Map<string, Set<string>>()
   private readonly deps: WatchdogRuntimeDeps
   private readonly runner: CriticRunner
   private rotation = 0
@@ -333,36 +325,6 @@ export class WatchdogRuntime {
     const advisory = state.activeAdvisory
     if (advisory?.findingHash && advisory.installedAtEpoch === state.turnEpoch && advisory.deliveredAtEpoch !== state.turnEpoch) {
       state.pendingIdle = undefined
-      if (advisory.claimKind === "cadence") {
-        const candidate = {
-          severity: advisory.severity,
-          category: advisory.category,
-          message: advisory.message,
-          sourceEpoch: advisory.installedAtEpoch,
-          evidenceFingerprint: state.lastConcernEvidenceFingerprint ?? "",
-        }
-        const revalidation = claimRevalidation(state, {
-          candidate,
-          snapshotKey: this.currentSnapshotKey(state),
-          maxRecentTools: this.deps.config.maxRecentTools,
-        })
-        state.activeAdvisory = undefined
-        state.deliveryBudget = newDeliveryBudget()
-        state.deliveredConcernHashes.delete(advisory.findingHash)
-        state.lastConcernToolSeq = 0
-        state.lastConcernEvidenceFingerprint = undefined
-        if (revalidation.revalidationKey !== state.lastRevalidationKey) {
-          state.lastRevalidationKey = revalidation.revalidationKey
-          state.pendingRevalidation = revalidation
-        }
-        this.telemetry("watchdog advisory deferred to revalidation", {
-          sessionID,
-          reason: "cadence_claim_on_idle",
-          category: advisory.category,
-        })
-        void this.requestAdmission()
-        return
-      }
       void this.deliverIdleConcern(sessionID, state, advisory, advisory.findingHash, advisory.throughToolSeq)
       return
     }
@@ -684,7 +646,6 @@ export class WatchdogRuntime {
 
     if (state.latestUserKind === "foreign") {
       this.retainAdvisory(state, concern, hash, claim.throughToolSeq, claim.kind)
-      void this.showConcernToast(state, concern, hash)
       void this.requestAdmission()
       return
     }
@@ -693,16 +654,26 @@ export class WatchdogRuntime {
       return
     }
 
+    if (!state.busy && state.pendingIdle) {
+      const pendingIdle = state.pendingIdle
+      const ownedSequences = pendingIdle.ownedSequences.filter((seq) => seq > state.lastCheckToolSeq)
+      if (ownedSequences.length > 0) {
+        deferClaim(state, { ...pendingIdle, claimedToolCount: ownedSequences.length, ownedSequences })
+      } else {
+        state.pendingIdle = undefined
+      }
+      void this.deliverIdleConcern(root, state, concern, hash, claim.throughToolSeq, claim.kind)
+      return
+    }
+
     if (claim.kind === "cadence" && this.deps.config.midRunDelivery) {
       this.retainAdvisory(state, concern, hash, claim.throughToolSeq, claim.kind)
-      void this.showConcernToast(state, concern, hash)
       void this.requestAdmission()
       return
     }
 
     if (claim.kind === "cadence" || (state.busy && claim.kind !== "idle")) {
       this.retainAdvisory(state, concern, hash, claim.throughToolSeq, claim.kind)
-      void this.showConcernToast(state, concern, hash)
       void this.requestAdmission()
       return
     }
@@ -723,34 +694,8 @@ export class WatchdogRuntime {
       installedAtEpoch: state.turnEpoch,
       throughToolSeq,
       claimKind,
-      concernToast: undefined,
-      installedPartID: undefined,
-      installedText: undefined,
     }
     state.activeAdvisory.findingHash = findingHash
-  }
-
-  private async showConcernToast(state: SessionState, concern: AcceptedConcern, findingHash: string): Promise<void> {
-    if (state.suppressed) return
-    const advisory = state.activeAdvisory
-    if (!advisory) return
-    if (!shouldAttemptToast(advisory.concernToast)) return
-    advisory.concernToast = { status: "pending", attempts: (advisory.concernToast?.attempts ?? 0) + 1 > 1 ? 2 : 1 }
-    try {
-      await this.deps.client.tui.showToast({
-        body: {
-          title: "Watchdog",
-          message: concern.message,
-          variant: concern.severity === "critical" ? "error" : "warning",
-          duration: 6000,
-        },
-      })
-      advisory.concernToast = toastStateAfterAttempt(advisory.concernToast, true)
-    } catch (error) {
-      advisory.concernToast = toastStateAfterAttempt(advisory.concernToast, false)
-      this.log("watchdog concern toast failed", error)
-    }
-    void findingHash
   }
 
   private async deliverIdleConcern(
@@ -785,7 +730,6 @@ export class WatchdogRuntime {
     })
     if (!state.activeAdvisory) this.retainAdvisory(state, concern, findingHash, throughToolSeq, claimKind)
     if (state.activeAdvisory) state.activeAdvisory.deliveredAtEpoch = epoch
-    void this.showConcernToast(state, concern, findingHash)
     try {
       await this.deps.client.session.prompt({ path: { id: root }, body: { ...body } })
     } catch (error) {
@@ -837,37 +781,16 @@ export class WatchdogRuntime {
     )
   }
 
-  async transformMessages(output: { messages: RequestMessage[] }): Promise<void> {
-    const sessionID = sessionIDFromMessages(output.messages)
-    if (!sessionID || !this.knownRoots.has(sessionID)) return
-    if (this.compactionSkips.consume(sessionID)) return
+  deliverPendingAdvisory(sessionID: string, tool: string, output: { output: string }): void {
     const state = this.states.get(sessionID)
     const advisory = state?.activeAdvisory
-    if (!state || !advisory || state.suppressed) return
-    if (advisory.installedAtEpoch !== state.turnEpoch) return
-    if (!this.deps.config.midRunDelivery) return
-    const persistedTurn = await this.latestPersistedUser(sessionID)
-    if (state.suppressed || !this.matchesPersistedDeliveryTurn(state, persistedTurn)) return
-    let seen = this.advisorySeen.get(sessionID)
-    if (!seen) {
-      seen = new Set<string>()
-      this.advisorySeen.set(sessionID, seen)
-    }
-    const installState = {
-      ...(advisory.installedPartID ? { installedPartID: advisory.installedPartID } : {}),
-      ...(advisory.installedText ? { installedText: advisory.installedText } : {}),
-      seenParts: seen,
-    }
-    const installed = installRunAdvisory(output.messages, runAdvisoryFor(advisory.message), installState)
-    if (installed) {
-      advisory.installedPartID = installed.partID
-      advisory.installedText = installed.text
-      advisory.deliveredAtEpoch = state.turnEpoch
-    }
-  }
+    if (!state || !advisory || state.suppressed || !this.deps.config.midRunDelivery) return
+    if (advisory.installedAtEpoch !== state.turnEpoch || advisory.deliveredAtEpoch === state.turnEpoch) return
+    if (!isSignificantTool(tool) || /^mcp(?:[_.:-]|$)/i.test(tool)) return
 
-  handleCompacting(sessionID: string): void {
-    this.compactionSkips.arm(sessionID)
+    const delivered = appendRunAdvisory(output.output, advisory.message)
+    output.output = delivered.output
+    advisory.deliveredAtEpoch = state.turnEpoch
   }
 
   observeSessionCreated(info: { id?: unknown; parentID?: unknown; agent?: unknown }): void {
@@ -883,8 +806,6 @@ export class WatchdogRuntime {
   observeSessionDeleted(sessionID: string): void {
     this.childSessions.delete(sessionID)
     this.deps.explore.markEnded(sessionID)
-    this.compactionSkips.clear(sessionID)
-    this.advisorySeen.delete(sessionID)
     const state = this.states.get(sessionID)
     if (state?.inFlight) void this.cancelInFlight(state, "deleted")
     this.states.delete(sessionID)
@@ -947,7 +868,6 @@ export class WatchdogRuntime {
         state.inFlight = undefined
       }
     }
-    this.compactionSkips.clearAll()
     this.states.clear()
     this.knownRoots.clear()
     this.childSessions.clear()
@@ -993,19 +913,14 @@ export function createWatchdogHooks(runtime: WatchdogRuntime): Hooks {
       runtime.exploreGate.markAdmitted(`pending:${input.callID}`)
       await runtime.preemptForExplore()
     },
-    "tool.execute.after": async (input) => {
+    "tool.execute.after": async (input, output) => {
       if (runtime.activeCriticSessions.has(input.sessionID)) return
+      runtime.deliverPendingAdvisory(input.sessionID, input.tool, output)
       if (input.tool !== "task") return
       const args = input.args as { subagent_type?: unknown; background?: unknown } | undefined
       if (args?.subagent_type === "explore" && args.background !== true) {
         runtime.exploreGate.markEnded(`pending:${input.callID}`)
       }
-    },
-    "experimental.session.compacting": async (input) => {
-      runtime.handleCompacting(input.sessionID)
-    },
-    "experimental.chat.messages.transform": async (_input, output) => {
-      await runtime.transformMessages({ messages: output.messages as unknown as RequestMessage[] })
     },
     event: async ({ event }) => {
       const sessionID = eventSessionID(event as never)

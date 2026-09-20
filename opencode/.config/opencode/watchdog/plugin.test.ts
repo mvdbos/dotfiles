@@ -200,7 +200,7 @@ describe("watchdog plugin runtime", () => {
   test("accepted idle concern submits one marker-tagged follow-up and the resulting idle consumes the claim", async () => {
     const concern = JSON.stringify({
       status: "concern",
-      severity: "warning",
+      severity: "critical",
       category: "requirement_drift",
       message: "The implementation renames the public endpoint required by the task.",
     })
@@ -220,7 +220,7 @@ describe("watchdog plugin runtime", () => {
     expect(rootPrompt).toBeDefined()
     expect(rootPrompt!.body.parts[0].metadata.watchdog.version).toBe(1)
     expect(rootPrompt!.body.parts[0].text.startsWith("[watchdog advisory:")).toBe(true)
-    expect(fake.calls.toasts).toHaveLength(1)
+    expect(fake.calls.toasts).toHaveLength(0)
 
     const state = runtime.states.get("root")!
     expect(state.continuationClaim).toBeDefined()
@@ -277,11 +277,9 @@ describe("watchdog plugin runtime", () => {
     await Bun.sleep(30)
     expect(fake.calls.create).toHaveLength(1)
 
-    const messages = [
-      { info: { sessionID: "root" }, parts: [{ id: "tool-1", type: "tool", state: { status: "completed", output: "out-1" } }] },
-    ]
-    await runtime.transformMessages({ messages: messages as never })
-    expect(String(messages[0]!.parts[0]!.state.output)).toContain("[watchdog advisory:")
+    const output = { output: "out-6" }
+    runtime.deliverPendingAdvisory("root", "bash", output)
+    expect(output.output).toContain("[watchdog advisory:")
     expect(fake.calls.prompts.some((call) => call.id === "root")).toBe(false)
 
     runtime.recordAssistantText("root", "a2", "The provider request completed.")
@@ -289,10 +287,9 @@ describe("watchdog plugin runtime", () => {
     await Bun.sleep(40)
     expect(fake.calls.prompts.filter((call) => call.id === "root")).toHaveLength(0)
 
-    runtime.handleCompacting("root")
-    const compacted = [{ info: { sessionID: "root" }, parts: [{ id: "tool-2", type: "tool", state: { status: "completed", output: "clean" } }] }]
-    await runtime.transformMessages({ messages: compacted as never })
-    expect(String(compacted[0]!.parts[0]!.state.output)).toBe("clean")
+    const later = { output: "clean" }
+    runtime.deliverPendingAdvisory("root", "bash", later)
+    expect(later.output).toBe("clean")
   })
 
   test("explore admission preempts an active idle critic and defers its ownership", async () => {
@@ -321,7 +318,7 @@ describe("watchdog plugin runtime", () => {
   test("duplicate concerns are suppressed by the delivery budget and cooldown", async () => {
     const concern = JSON.stringify({
       status: "concern",
-      severity: "warning",
+      severity: "critical",
       category: "plan_drift",
       message: "The implementation departed from the stated plan for the parser.",
     })
@@ -462,7 +459,7 @@ describe("watchdog plugin runtime", () => {
     await Bun.sleep(60)
 
     expect(runtime.states.get("root")!.activeAdvisory).toBeDefined()
-    expect(fake.calls.toasts).toHaveLength(1)
+    expect(fake.calls.toasts).toHaveLength(0)
     expect(fake.calls.prompts.filter((call) => call.id === "root")).toHaveLength(0)
     await runtime.dispose()
   })
@@ -658,7 +655,7 @@ describe("watchdog plugin runtime", () => {
   test("a failed idle follow-up clears the continuation claim and does not retry that turn", async () => {
     const concern = JSON.stringify({
       status: "concern",
-      severity: "warning",
+      severity: "critical",
       category: "plan_drift",
       message: "The implementation departed from the stated plan for the parser.",
     })
@@ -719,10 +716,51 @@ describe("watchdog plugin runtime", () => {
     await runtime.cancelInFlight(runtime.states.get("root")!, "cleanup")
   })
 
-  test("a late foreign continuation after admission fires blocks further watchdog idle prompts", async () => {
+  test("a cadence concern completing after idle uses the pending guarded follow-up", async () => {
     const concern = JSON.stringify({
       status: "concern",
       severity: "warning",
+      category: "repeated_failure",
+      message: "The same failing command was repeated with identical errors.",
+    })
+    const fake = fakeClient({ criticText: concern })
+    fake.holdCritic()
+    const runtime = new WatchdogRuntime({
+      client: fake.client,
+      config: configFor({ midRunDelivery: true }, { everyTools: 5, foreignContinuationSettleMs: 0, timeoutMs: 5_000 }),
+      patterns: compileForeignPatterns(undefined).patterns,
+      lease: new WatchdogLease({ path: ":memory:" }),
+      explore: new ExploreGate(),
+      log: () => {},
+    })
+    await realTurn(runtime)
+    recordTools(runtime, 5)
+    await Bun.sleep(30)
+    runtime.recordAssistantText("root", "a2", "The turn reached idle while review was pending.")
+    runtime.handleIdle("root")
+    await Bun.sleep(20)
+    expect(runtime.states.get("root")!.pendingIdle).toBeDefined()
+
+    fake.releaseCritic()
+    await Bun.sleep(80)
+    expect(fake.calls.prompts.filter((call) => call.id === "root")).toHaveLength(1)
+    expect(fake.calls.create).toHaveLength(1)
+    expect(fake.calls.toasts).toHaveLength(0)
+    runtime.recordTerminalTool("root", {
+      type: "tool",
+      tool: "bash",
+      callID: "call-6",
+      state: { status: "completed", input: { command: "echo 6" }, output: "out-6" },
+    })
+    await Bun.sleep(30)
+    expect(fake.calls.create).toHaveLength(1)
+    await runtime.dispose()
+  })
+
+  test("a late foreign continuation after admission fires blocks further watchdog idle prompts", async () => {
+    const concern = JSON.stringify({
+      status: "concern",
+      severity: "critical",
       category: "plan_drift",
       message: "The implementation departed from the stated plan for the parser.",
     })
@@ -835,38 +873,6 @@ describe("watchdog plugin runtime", () => {
     await runtime.dispose()
   })
 
-  test("a delayed toast callback cannot mutate a replacement advisory", async () => {
-    const concern = JSON.stringify({
-      status: "concern",
-      severity: "warning",
-      category: "plan_drift",
-      message: "The implementation departed from the stated plan for the parser.",
-    })
-    let release: (() => void) | undefined
-    const hold = new Promise<void>((resolve) => {
-      release = resolve
-    })
-    const fake = fakeClient({ criticText: concern, toastHold: hold })
-    const runtime = new WatchdogRuntime({
-      client: fake.client,
-      config: configFor({}, { foreignContinuationSettleMs: 0 }),
-      patterns: compileForeignPatterns(undefined).patterns,
-      lease: new WatchdogLease({ path: ":memory:" }),
-      explore: new ExploreGate(),
-      log: () => {},
-    })
-    await realTurn(runtime)
-    runtime.handleIdle("root")
-    await Bun.sleep(40)
-    const state = runtime.states.get("root")!
-    const original = state.activeAdvisory!
-    state.activeAdvisory = { ...original, message: "Replacement advisory for newer evidence.", concernToast: undefined }
-    release?.()
-    await Bun.sleep(20)
-    expect(state.activeAdvisory!.concernToast).toBeUndefined()
-    expect(original.concernToast?.status).toBe("delivered")
-  })
-
   test("malformed critic output retries once, consumes the cadence claim, and opens no advisory", async () => {
     const fake = fakeClient({ criticText: "not json at all" })
     const runtime = new WatchdogRuntime({
@@ -951,7 +957,7 @@ describe("watchdog plugin runtime", () => {
     await runtime.dispose()
   })
 
-  test("an accepted cadence concern with no later provider boundary is revalidated on idle, not delivered directly", async () => {
+  test("an accepted warning with no later tool boundary receives one guarded idle follow-up", async () => {
     const concern = JSON.stringify({
       status: "concern",
       severity: "warning",
@@ -982,11 +988,9 @@ describe("watchdog plugin runtime", () => {
     runtime.recordAssistantText("root", "a2", "Turn finished without another provider call.")
     runtime.handleIdle("root")
     await Bun.sleep(80)
-    const rootPrompts = fake.calls.prompts.filter((call) => call.id === "root")
-    expect(rootPrompts).toHaveLength(1)
-    expect(rootPrompts[0]!.body.parts[0].text.startsWith("[watchdog advisory:")).toBe(true)
-    const revalidation = fake.calls.prompts.find((call) => call.body.agent === WATCHDOG_AGENT_NAME && call.body.parts[0].text.includes('"revalidateConcern"'))
-    expect(revalidation).toBeDefined()
+    expect(fake.calls.prompts.filter((call) => call.id === "root")).toHaveLength(1)
+    expect(fake.calls.toasts).toHaveLength(0)
+    expect(runtime.states.get("root")!.activeAdvisory).toBeDefined()
     await runtime.dispose()
   })
 
@@ -1028,10 +1032,11 @@ describe("watchdog plugin runtime", () => {
     await Bun.sleep(60)
     expect(fake.calls.create).toHaveLength(2)
     expect(fake.calls.prompts.filter((call) => call.id === "root")).toHaveLength(1)
+    expect(fake.calls.toasts).toHaveLength(0)
     await runtime.dispose()
   })
 
-  test("a newer tool does not stale an uninstalled concern; it installs request-locally and is not repeated at idle", async () => {
+  test("a newer tool receives the pending concern before its output is persisted", async () => {
     const concern = JSON.stringify({
       status: "concern",
       severity: "warning",
@@ -1087,12 +1092,9 @@ describe("watchdog plugin runtime", () => {
       callID: "call-6",
       state: { status: "completed", input: { command: "echo 6" }, output: "out-6" },
     })
-    const messages = [
-      { info: { sessionID: "root" }, parts: [{ id: "tool-6", type: "tool", state: { status: "completed", output: "out-6" } }] },
-    ]
-    await runtime.transformMessages({ messages: messages as never })
-    expect(String(messages[0]!.parts[0]!.state.output)).toContain("[watchdog advisory:")
-    expect(state.activeAdvisory?.installedPartID).toBe("tool-6")
+    const output = { output: "out-6" }
+    runtime.deliverPendingAdvisory("root", "bash", output)
+    expect(output.output).toContain("[watchdog advisory:")
     expect(state.activeAdvisory?.throughToolSeq).toBe(5)
     expect(state.activeAdvisory?.deliveredAtEpoch).toBe(state.turnEpoch)
 
@@ -1319,7 +1321,7 @@ describe("watchdog plugin runtime", () => {
     expect(calls.create).toHaveLength(0)
   })
 
-  test("plan suppression blocks request-local advisory installation", async () => {
+  test("plan suppression blocks advisory delivery to tool output", async () => {
     const { runtime } = makeRuntime({ midRunDelivery: true }, { foreignContinuationSettleMs: 0 })
     await realTurn(runtime)
     const state = runtime.states.get("root")!
@@ -1332,11 +1334,9 @@ describe("watchdog plugin runtime", () => {
       installedAtEpoch: state.turnEpoch,
       findingHash: "hash-1",
     }
-    const messages = [
-      { info: { sessionID: "root" }, parts: [{ id: "tool-1", type: "tool", state: { status: "completed", output: "clean" } }] },
-    ]
-    await runtime.transformMessages({ messages: messages as never })
-    expect(String(messages[0]!.parts[0]!.state.output)).toBe("clean")
+    const output = { output: "clean" }
+    runtime.deliverPendingAdvisory("root", "bash", output)
+    expect(output.output).toBe("clean")
   })
 
   test("a build turn after a plan turn restores idle review", async () => {

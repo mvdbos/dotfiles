@@ -6,12 +6,10 @@ import {
   countWorkSince,
   findTodoWriteBaseline,
   formatTodoNudge,
-  isNudgePart,
-  makeNudgePart,
-  nudgePartID,
+  isEligibleNudgeTool,
+  NUDGE_MARKER,
   shouldNudge,
   visibleTodoWritePart,
-  NUDGE_LIST_HEADING,
   type NudgeConfig,
   type NudgeWindow,
 } from "./nudge"
@@ -80,7 +78,7 @@ export type LifecycleDeps = {
 
 export type TodoReconcileHooks = Pick<
   Hooks,
-  "experimental.chat.messages.transform" | "experimental.session.compacting" | "event" | "dispose"
+  "experimental.chat.messages.transform" | "experimental.session.compacting" | "tool.execute.after" | "event" | "dispose"
 >
 
 type TransformOutput = Parameters<NonNullable<Hooks["experimental.chat.messages.transform"]>>[1]
@@ -101,23 +99,13 @@ type TodoUpdate = {
   fingerprint: string
 }
 
-type Coverage =
-  | { kind: "snapshot"; boundaryID: string; fingerprint: string; complete: boolean }
-  | { kind: "native"; boundaryID: string; fingerprint: string }
-  | { kind: "empty"; boundaryID: string; fingerprint: string }
-  | { kind: "none"; boundaryID: string; fingerprint: string }
-  | { kind: "pending"; boundaryID: string; fingerprint: string }
-
 type SessionState = {
   boundaryID?: string
-  targetID?: string
-  todos?: TodoItem[]
-  fingerprint?: string
-  coverage?: Coverage
-  validated: boolean
-  invalidated: boolean
   readInFlight?: Promise<ReadTodosResult>
-  nudge?: NudgeWindow
+  sealed?: boolean
+  nudge?: NudgeWindow & { nudged: boolean; hasTodos: boolean }
+  nudgeAllowed?: boolean
+  pendingProjection?: string
 }
 
 function isAfter(current: HistoryInfo, other: HistoryInfo): boolean {
@@ -127,10 +115,6 @@ function isAfter(current: HistoryInfo, other: HistoryInfo): boolean {
 
 function compareHistory(current: HistoryInfo, other: HistoryInfo): number {
   return isAfter(current, other) ? 1 : isAfter(other, current) ? -1 : 0
-}
-
-function chronologicalMessages(messages: readonly MessageWithParts[]): MessageWithParts[] {
-  return [...messages].sort((left, right) => compareHistory(left.info, right.info))
 }
 
 /**
@@ -293,34 +277,6 @@ function snapshotRecords(messages: readonly MessageWithParts[]): Array<SnapshotR
   return result
 }
 
-function latestMatchingSnapshot(
-  records: ReadonlyArray<SnapshotRecord & { message: MessageWithParts }>,
-  boundaryID: string,
-  fingerprint: string,
-): (SnapshotRecord & { message: MessageWithParts }) | undefined {
-  return records
-    .filter((record) => record.metadata.boundaryID === boundaryID && record.metadata.fingerprint === fingerprint)
-    .sort((left, right) => compareHistory(left.message.info, right.message.info) || left.part.id.localeCompare(right.part.id))
-    .at(-1)
-}
-
-function stripPluginSnapshots(
-  messages: MessageWithParts[],
-  keep?: SnapshotRecord & { message: MessageWithParts },
-): void {
-  for (const message of messages) {
-    message.parts = message.parts.filter((part) => {
-      if (isNudgePart(part)) return false
-      if (!isPluginSnapshotPart(part)) return true
-      return keep?.part.id === part.id && keep.message.info.id === message.info.id
-    })
-  }
-}
-
-function utf8Bytes(value: string): number {
-  return new TextEncoder().encode(value).byteLength
-}
-
 function validatePersistedPart(
   part: Extract<Part, { type: "text" }>,
   input: PersistSnapshotInput,
@@ -363,16 +319,8 @@ function describeError(error: unknown): string {
 function resetState(state: SessionState, boundaryID: string): void {
   if (state.boundaryID === boundaryID) return
   state.boundaryID = boundaryID
-  state.targetID = undefined
-  state.todos = undefined
-  state.fingerprint = undefined
-  state.coverage = undefined
-  state.validated = false
-  state.invalidated = false
-}
-
-function stateCoverageMatches(state: SessionState, boundaryID: string): boolean {
-  return state.coverage?.boundaryID === boundaryID && state.fingerprint !== undefined
+  state.sealed = false
+  state.pendingProjection = undefined
 }
 
 export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHooks {
@@ -385,7 +333,7 @@ export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHook
   const stateFor = (sessionID: string): SessionState => {
     const existing = states.get(sessionID)
     if (existing) return existing
-    const state: SessionState = { validated: false, invalidated: false }
+    const state: SessionState = {}
     states.set(sessionID, state)
     return state
   }
@@ -428,7 +376,6 @@ export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHook
   }
 
   const addProjection = async (input: {
-    state: SessionState
     target: MessageWithParts
     boundary: Boundary
     todos: TodoItem[]
@@ -440,7 +387,6 @@ export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHook
       todowriteAvailable: todowriteAvailable(input.target),
     })
     if (!projection) {
-      input.state.coverage = { kind: "none", boundaryID: input.boundary.summary.id, fingerprint: input.fingerprint }
       return
     }
 
@@ -469,110 +415,21 @@ export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHook
       ? await persist(persistInput)
       : { ok: false as const, reason: "target is a compaction marker" }
     if (!result.ok) {
-      log("todo snapshot deferred; the next request retries the write", {
+      log("todo snapshot persistence failed; compaction boundary sealed", {
         sessionID: input.target.info.sessionID,
         reason: result.reason,
       })
-      input.state.coverage = {
-        kind: "pending",
-        boundaryID: input.boundary.summary.id,
-        fingerprint: input.fingerprint,
-      }
       return
     }
 
     if (!validatePersistedPart(result.part, persistInput)) {
-      log("todo snapshot persistence returned an invalid part; the next request retries", {
+      log("todo snapshot persistence returned an invalid part; compaction boundary sealed", {
         sessionID: input.target.info.sessionID,
       })
-      input.state.coverage = {
-        kind: "pending",
-        boundaryID: input.boundary.summary.id,
-        fingerprint: input.fingerprint,
-      }
       return
     }
 
     appendPart(input.target, result.part)
-    input.state.coverage = {
-      kind: "snapshot",
-      boundaryID: input.boundary.summary.id,
-      fingerprint: input.fingerprint,
-      complete: projection.complete,
-    }
-  }
-
-  /**
-   * Request-local stale-todo nudge. The part is appended to the newest user
-   * message for this provider request only; nothing is persisted, so the
-   * one-shot window state can safely live in memory.
-   */
-  const addNudge = async (input: {
-    messages: MessageWithParts[]
-    target: MessageWithParts
-    sessionID: string
-    state: SessionState
-    nowMs: number
-  }): Promise<void> => {
-    const config = deps.nudge
-    if (!config?.enabled) return
-    const target = input.target
-    if (target.info.role !== "user") return
-    if (target.info.agent === "plan") return
-    if (todowriteAvailable(target) === false) return
-    if (target.parts.some((part) => isNudgePart(part))) return
-
-    const baseline = findTodoWriteBaseline(input.messages)
-    if (!baseline) return
-    const baselineKey = baselineKeyOf(baseline)
-    const toolCalls = countWorkSince(input.messages, baseline)
-    const elapsedMs = Math.max(0, input.nowMs - baseline.atMs)
-    if (
-      !shouldNudge({
-        config,
-        baselineKey,
-        toolCalls,
-        elapsedMs,
-        nowMs: input.nowMs,
-        ...(input.state.nudge ? { last: input.state.nudge } : {}),
-      })
-    ) {
-      return
-    }
-
-    const result = await read(input.sessionID, input.state)
-    if (!result.ok) {
-      log("todo read failed; stale reminder skipped", { sessionID: input.sessionID, reason: result.reason })
-      return
-    }
-    if (result.todos.length === 0) return
-
-    const listText = config.includeList
-      ? formatTodoReminder(result.todos, {
-          maxBytes: config.maxListBytes,
-          todowriteAvailable: true,
-          heading: NUDGE_LIST_HEADING,
-        })?.text
-      : undefined
-    const text = formatTodoNudge({ toolCalls, elapsedMs, ...(listText ? { listText } : {}) })
-    target.parts.push(
-      makeNudgePart({
-        sessionID: input.sessionID,
-        messageID: target.info.id,
-        partID: nudgePartID({
-          sessionID: input.sessionID,
-          messageID: target.info.id,
-          baselineKey,
-          atMs: input.nowMs,
-        }),
-        text,
-        baselineKey,
-        toolCalls,
-        elapsedMs,
-      }),
-    )
-    input.state.nudge = { baselineKey, toolCalls, atMs: input.nowMs }
-    log("stale todo reminder injected", { sessionID: input.sessionID, toolCalls, elapsedMs })
   }
 
   const transform = async (_input: {}, output: TransformOutput): Promise<void> => {
@@ -580,145 +437,86 @@ export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHook
       const messages = output.messages as MessageWithParts[]
       const target = lastUserMessage(messages)
       const sessionID = target?.info.sessionID ?? messages.find((message) => message.info.sessionID)?.info.sessionID
-      const persistSafe = persistTargetAllowed(target)
-      const nowMs = now()
 
       // `experimental.session.compacting` arms this immediately before the
       // summarizer transform; skip every mutation for that request.
-      if (sessionID && compactionSkips.consume(sessionID)) {
-        stripPluginSnapshots(messages)
-        return
+      if (sessionID && compactionSkips.consume(sessionID)) return
+
+      if (sessionID) {
+        const state = stateFor(sessionID)
+        state.nudgeAllowed =
+          target?.info.role !== "user" ||
+          (target.info.agent !== "plan" && todowriteAvailable(target) !== false)
+        const baseline = findTodoWriteBaseline(messages)
+        if (baseline) {
+          const baselineKey = baselineKeyOf(baseline)
+          const native = findLatestNativeTodoUpdate(messages)
+          const hasDeliveredNudge = messages.some((message) => {
+            const relation = compareHistory(message.info, baseline.key)
+            const parts = relation > 0
+              ? message.parts
+              : relation === 0
+                ? message.parts.slice(baseline.partIndex + 1)
+                : []
+            return parts.some(
+              (part) =>
+                part.type === "tool" &&
+                part.state.status === "completed" &&
+                typeof part.state.output === "string" &&
+                part.state.output.includes(NUDGE_MARKER),
+            )
+          })
+          if (state.nudge?.baselineKey !== baselineKey) {
+            state.nudge = {
+              baselineKey,
+              toolCalls: countWorkSince(messages, baseline),
+              atMs: baseline.atMs,
+              nudged: hasDeliveredNudge,
+              hasTodos: (native?.todos.length ?? 0) > 0,
+            }
+          } else {
+            state.nudge.toolCalls = countWorkSince(messages, baseline)
+            state.nudge.nudged ||= hasDeliveredNudge
+            state.nudge.hasTodos = (native?.todos.length ?? 0) > 0
+          }
+        }
       }
 
-      // A verified summarizer payload has no completed compaction pair. Strip
-      // persisted plugin parts independently of restoration eligibility.
       const boundary = findCompactionBoundary(messages)
-      if (!boundary) {
-        stripPluginSnapshots(messages)
-        if (sessionID && target) {
-          await addNudge({ messages, target, sessionID, state: stateFor(sessionID), nowMs })
-        }
-        return
-      }
-      if (hasNewerUnsuccessfulCompaction(messages, boundary)) {
-        stripPluginSnapshots(messages)
-        return
-      }
+      if (!boundary || hasNewerUnsuccessfulCompaction(messages, boundary)) return
       if (!target || target.info.sessionID !== boundary.summary.sessionID) return
 
       const state = stateFor(target.info.sessionID)
-      const boundaryChanged = state.boundaryID !== boundary.summary.id
-      if (boundaryChanged) resetState(state, boundary.summary.id)
-
-      const targetChanged = state.targetID !== target.info.id
-      if (targetChanged) {
-        state.targetID = target.info.id
-        state.validated = false
-        state.invalidated = false
-      }
-
+      if (state.boundaryID !== boundary.summary.id) resetState(state, boundary.summary.id)
+      if (state.sealed) return
+      state.sealed = true
       const records = snapshotRecords(messages)
       const native = findNativeTodoCoverage(messages, boundary)
-      const matchingCached =
-        state.fingerprint === undefined
-          ? undefined
-          : latestMatchingSnapshot(records, boundary.summary.id, state.fingerprint)
-
-      // A successful native update is authoritative inside the uninterrupted
-      // loop. It replaces plugin text without another SDK read.
-      if (!state.invalidated && state.validated && native) {
-        state.fingerprint = native.fingerprint
-        state.todos = native.todos
-        state.coverage = { kind: "native", boundaryID: boundary.summary.id, fingerprint: native.fingerprint }
-        stripPluginSnapshots(messages)
-        return
-      }
-
-      if (!state.invalidated && state.validated && stateCoverageMatches(state, boundary.summary.id)) {
-        if (state.coverage?.kind === "empty" || state.coverage?.kind === "none") {
-          stripPluginSnapshots(messages)
-          return
-        }
-        if (matchingCached) {
-          if (utf8Bytes(matchingCached.part.text) <= DEFAULT_REMINDER_MAX_BYTES) {
-            stripPluginSnapshots(messages, matchingCached)
-            return
-          }
-        }
-        if (state.todos) {
-          stripPluginSnapshots(messages)
-          await addProjection({
-            state,
-            target,
-            boundary,
-            todos: state.todos,
-            fingerprint: state.fingerprint!,
-            persistSafe,
-          })
-          return
-        }
-      }
-
-      // A successful native update can establish coverage on a fresh boundary
-      // when no persisted plugin snapshot needs restart validation.
-      if (!state.invalidated && !state.validated && native && records.length === 0) {
-        state.validated = true
-        state.fingerprint = native.fingerprint
-        state.todos = native.todos
-        state.coverage = { kind: "native", boundaryID: boundary.summary.id, fingerprint: native.fingerprint }
-        stripPluginSnapshots(messages)
+      if (records.some((record) => record.metadata.boundaryID === boundary.summary.id) || native) return
+      if (messages.some((message) => message.info.role === "assistant" && isAfter(message.info, target.info))) {
+        log("todo snapshot target was already sent; compaction boundary sealed", {
+          sessionID: target.info.sessionID,
+        })
         return
       }
 
       const result = await read(target.info.sessionID, state)
       if (!result.ok) {
-        log("todo read failed; snapshot remains eligible", {
+        log("todo read failed; compaction boundary sealed without a snapshot", {
           sessionID: target.info.sessionID,
           reason: result.reason,
         })
-        state.validated = false
-        state.invalidated = false
         return
       }
 
       const fingerprint = canonicalTodoFingerprint(result.todos)
-      state.todos = result.todos
-      state.fingerprint = fingerprint
-      state.validated = true
-      state.invalidated = false
-
-      if (result.todos.length === 0) {
-        state.coverage = { kind: "empty", boundaryID: boundary.summary.id, fingerprint }
-        stripPluginSnapshots(messages)
-        return
-      }
-
-      if (native && native.fingerprint === fingerprint) {
-        state.coverage = { kind: "native", boundaryID: boundary.summary.id, fingerprint }
-        stripPluginSnapshots(messages)
-        return
-      }
-
-      const current = latestMatchingSnapshot(records, boundary.summary.id, fingerprint)
-      if (current && utf8Bytes(current.part.text) <= DEFAULT_REMINDER_MAX_BYTES) {
-        state.coverage = {
-          kind: "snapshot",
-          boundaryID: boundary.summary.id,
-          fingerprint,
-          complete: current.metadata.complete,
-        }
-        stripPluginSnapshots(messages, current)
-        return
-      }
-
-      stripPluginSnapshots(messages)
+      if (result.todos.length === 0) return
       await addProjection({
-        state,
         target,
         boundary,
         todos: result.todos,
         fingerprint,
-        persistSafe,
+        persistSafe: persistTargetAllowed(target),
       })
     } catch (error) {
       log("todo reconciliation hook failed; request left unchanged", { reason: describeError(error) })
@@ -730,14 +528,61 @@ export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHook
       compactionSkips.arm(input.sessionID)
     },
     "experimental.chat.messages.transform": transform,
+    "tool.execute.after": async (input, output) => {
+      const state = states.get(input.sessionID)
+      if (!state?.nudgeAllowed) return
+
+      if (input.tool === "todowrite") {
+        state.pendingProjection = undefined
+        const config = deps.nudge
+        if (!config?.enabled) return
+        const values = todosFromUnknown((input.args as { todos?: unknown } | undefined)?.todos)
+        state.nudge = {
+          baselineKey: `call:${input.callID}`,
+          toolCalls: 0,
+          atMs: now(),
+          nudged: false,
+          hasTodos: Boolean(values?.length),
+        }
+        return
+      }
+      if (!isEligibleNudgeTool(input.tool)) return
+      if (state.pendingProjection) {
+        output.output += `\n\n${state.pendingProjection}`
+        state.pendingProjection = undefined
+      }
+
+      const config = deps.nudge
+      if (!config?.enabled) return
+      if (!state.nudge || state.nudge.nudged || !state.nudge.hasTodos) return
+
+      state.nudge.toolCalls += 1
+      const elapsedMs = Math.max(0, now() - state.nudge.atMs)
+      if (
+        !shouldNudge({
+          config,
+          baselineKey: state.nudge.baselineKey,
+          toolCalls: state.nudge.toolCalls,
+          elapsedMs,
+          nowMs: now(),
+        })
+      ) return
+
+      output.output += `\n\n${formatTodoNudge({ toolCalls: state.nudge.toolCalls, elapsedMs })}`
+      state.nudge.nudged = true
+      log("stale todo reminder appended to tool output", { sessionID: input.sessionID })
+    },
     event: async ({ event }: { event: Event }) => {
       if (event.type !== "todo.updated") return
       const sessionID = event.properties.sessionID
       const state = states.get(sessionID)
       if (!state) return
-      state.invalidated = true
-      state.validated = false
-      state.coverage = undefined
+      const todos = todosFromUnknown(event.properties.todos)
+      if (!state.boundaryID || !todos?.length) return
+      state.pendingProjection = formatTodoReminder(todos, {
+        maxBytes: DEFAULT_REMINDER_MAX_BYTES,
+        heading: "Todo state update after compaction",
+      })?.text
     },
     dispose: async () => {
       states.clear()

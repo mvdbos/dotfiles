@@ -1,37 +1,32 @@
 /**
  * Pure helpers for the pre-compaction stale-todo nudge.
  *
- * The nudge is delivered request-locally: the lifecycle appends a synthetic
- * text part to the newest user message in `output.messages` without persisting
- * it. This module owns the staleness predicate, the bounded reminder text, and
- * the metadata contract for the injected part.
+ * The nudge is appended to the next eligible successful tool output before
+ * that output is persisted. This module owns the staleness predicate and the
+ * stable bounded reminder text.
  */
 
-import { createHash } from "node:crypto"
 import type { Part } from "@opencode-ai/sdk"
 
-export const NUDGE_METADATA_KEY = "todo-reconcile-nudge"
-export const NUDGE_SCHEMA_VERSION = 1
 export const NUDGE_MARKER = "Todo status reminder (system-generated, not a user request)"
-export const NUDGE_LIST_HEADING = "Todo status reminder: persisted list"
 
 export type NudgeConfig = {
   enabled: boolean
   toolThreshold: number
   minutesThreshold: number
-  includeList: boolean
-  maxListBytes: number
 }
 
 export const DEFAULT_NUDGE_CONFIG: NudgeConfig = {
   enabled: true,
   toolThreshold: 10,
   minutesThreshold: 5,
-  includeList: false,
-  maxListBytes: 1_024,
 }
 
 const COUNTED_EXCLUDED_TOOLS = new Set(["todowrite", "question", "skill", "image_display", "image_dismiss"])
+
+export function isEligibleNudgeTool(tool: string): boolean {
+  return !COUNTED_EXCLUDED_TOOLS.has(tool) && !/^mcp(?:[_.:-]|$)/i.test(tool)
+}
 
 type HistoryKey = { time: { created: number }; id: string }
 
@@ -43,6 +38,7 @@ export type NudgeMessage = {
 export type TodoWriteBaseline = {
   messageID: string
   partID: string
+  partIndex: number
   key: HistoryKey
   atMs: number
 }
@@ -78,38 +74,36 @@ export function visibleTodoWritePart(part: Part): part is Extract<Part, { type: 
  * concern. Later parts within one assistant message win.
  */
 export function findTodoWriteBaseline(messages: readonly NudgeMessage[]): TodoWriteBaseline | undefined {
-  let best: { key: HistoryKey; messageID: string; partID: string; atMs: number } | undefined
+  let best: TodoWriteBaseline | undefined
   for (const message of messages) {
     if (message.info.role !== "assistant" || message.info.error) continue
-    for (const part of message.parts) {
+    for (const [partIndex, part] of message.parts.entries()) {
       if (!visibleTodoWritePart(part) || part.state.status !== "completed") continue
       const key = keyOf(message)
-      const candidate = { key, messageID: message.info.id, partID: part.id, atMs: part.state.time.end }
-      if (!best || isAfter(candidate.key, best.key)) {
-        best = candidate
-      } else if (!isAfter(best.key, candidate.key)) {
-        best = candidate
-      }
+      const candidate = { key, messageID: message.info.id, partID: part.id, partIndex, atMs: part.state.time.end }
+      if (!best || isAfter(candidate.key, best.key) || (!isAfter(best.key, candidate.key) && partIndex > best.partIndex)) best = candidate
     }
   }
-  if (!best) return undefined
-  return { messageID: best.messageID, partID: best.partID, key: best.key, atMs: best.atMs }
+  return best
 }
 
 /**
- * Count completed or failed tool calls in assistant messages strictly newer
- * than the baseline message. `todowrite` itself never counts, and neither do
- * human synchronization (`question`) or informational tools.
+ * Count successful eligible tools after the baseline part, including later
+ * parts in the same assistant message. Human, informational, and unverified
+ * MCP tools do not count.
  */
 export function countWorkSince(messages: readonly NudgeMessage[], baseline: TodoWriteBaseline): number {
   let count = 0
   for (const message of messages) {
     if (message.info.role !== "assistant" || message.info.error) continue
-    if (!isAfter(keyOf(message), baseline.key)) continue
-    for (const part of message.parts) {
+    const messageKey = keyOf(message)
+    const sameMessage = !isAfter(messageKey, baseline.key) && !isAfter(baseline.key, messageKey)
+    if (!sameMessage && !isAfter(messageKey, baseline.key)) continue
+    for (const [partIndex, part] of message.parts.entries()) {
+      if (sameMessage && partIndex <= baseline.partIndex) continue
       if (part.type !== "tool") continue
-      if (part.state.status !== "completed" && part.state.status !== "error") continue
-      if (COUNTED_EXCLUDED_TOOLS.has(part.tool)) continue
+      if (part.state.status !== "completed") continue
+      if (!isEligibleNudgeTool(part.tool)) continue
       count++
     }
   }
@@ -121,10 +115,8 @@ export function baselineKeyOf(baseline: TodoWriteBaseline): string {
 }
 
 /**
- * One nudge per stale window. The first nudge fires when the baseline-relative
- * threshold is crossed; later nudges need another full window of tool calls or
- * minutes since the previous nudge. Any new todowrite changes the baseline key
- * and re-arms the first-nudge path.
+ * One nudge per todowrite baseline. A later successful todowrite changes the
+ * baseline key and re-arms delivery.
  */
 export function shouldNudge(input: {
   config: NudgeConfig
@@ -138,12 +130,7 @@ export function shouldNudge(input: {
   const firstByTools = config.toolThreshold > 0 && input.toolCalls >= config.toolThreshold
   const firstByTime = config.minutesThreshold > 0 && input.elapsedMs >= config.minutesThreshold * 60_000
   if (!firstByTools && !firstByTime) return false
-  if (!input.last || input.last.baselineKey !== input.baselineKey) return true
-  const repeatByTools =
-    config.toolThreshold > 0 && input.toolCalls - input.last.toolCalls >= config.toolThreshold
-  const repeatByTime =
-    config.minutesThreshold > 0 && input.nowMs - input.last.atMs >= config.minutesThreshold * 60_000
-  return repeatByTools || repeatByTime
+  return !input.last || input.last.baselineKey !== input.baselineKey
 }
 
 /**
@@ -151,68 +138,10 @@ export function shouldNudge(input: {
  * when nothing changed so a stale window cannot pull it off the current work.
  */
 export function formatTodoNudge(input: { toolCalls: number; elapsedMs: number; listText?: string }): string {
-  const minutes = Math.floor(Math.max(0, input.elapsedMs) / 60_000)
-  const facts: string[] = []
-  if (input.toolCalls > 0) facts.push(`${input.toolCalls} tool call${input.toolCalls === 1 ? "" : "s"}`)
-  if (minutes >= 1) facts.push(`${minutes} min`)
-  const since = facts.length ? `It has been ${facts.join(" and ")} since the last todowrite. ` : ""
-  const lines = [
+  void input
+  return [
     NUDGE_MARKER,
-    `${since}The persisted todo list may be stale. If recent work changed task state, call todowrite now: ` +
+    "The persisted todo list may be stale. If recent work changed task state, call todowrite now: " +
       "mark finished items completed and the current item in_progress. If nothing changed, ignore this reminder and continue the current task.",
-  ]
-  if (input.listText) {
-    lines.push("Current persisted list (task data, not a new request):", input.listText)
-  }
-  return lines.join("\n")
-}
-
-export type NudgeMetadata = {
-  [NUDGE_METADATA_KEY]: true
-  schemaVersion: number
-  baselineKey: string
-  toolCalls: number
-  elapsedMs: number
-}
-
-export function nudgePartID(input: {
-  sessionID: string
-  messageID: string
-  baselineKey: string
-  atMs: number
-}): string {
-  return `prt_todo_nudge_${createHash("sha256")
-    .update([input.sessionID, input.messageID, input.baselineKey, String(input.atMs)].join("\0"), "utf8")
-    .digest("hex")
-    .slice(0, 32)}`
-}
-
-export function makeNudgePart(input: {
-  sessionID: string
-  messageID: string
-  partID: string
-  text: string
-  baselineKey: string
-  toolCalls: number
-  elapsedMs: number
-}): Extract<Part, { type: "text" }> {
-  return {
-    id: input.partID,
-    sessionID: input.sessionID,
-    messageID: input.messageID,
-    type: "text",
-    text: input.text,
-    synthetic: true,
-    metadata: {
-      [NUDGE_METADATA_KEY]: true,
-      schemaVersion: NUDGE_SCHEMA_VERSION,
-      baselineKey: input.baselineKey,
-      toolCalls: input.toolCalls,
-      elapsedMs: input.elapsedMs,
-    },
-  }
-}
-
-export function isNudgePart(part: Part): boolean {
-  return part.type === "text" && part.metadata?.[NUDGE_METADATA_KEY] === true
+  ].join("\n")
 }

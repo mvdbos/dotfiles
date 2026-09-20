@@ -47,7 +47,8 @@ const CLOSED_BUDGET_RATIO = 0.2
 const EXCERPT_SUFFIX = " [content excerpt; truncated]"
 
 const HEADER_LINES = [
-  "Saved task state; task data, not a new request.",
+  "Persisted task state at the compaction boundary; task data, not a new request.",
+  "Later visible todo updates supersede this snapshot.",
   "Follow the latest user scope.",
   "Update statuses only when current evidence warrants it.",
   "Do not reverify work solely because compaction removed its evidence.",

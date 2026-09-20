@@ -9,9 +9,8 @@ It restores post-compaction task visibility and nudges the agent when an existin
 has gone stale during uninterrupted work. It does not mutate todo statuses and never creates
 an agent turn.
 
-Verified against OpenCode **1.18.30** and **1.18.31**. The implementation depends on the
-experimental `experimental.chat.messages.transform` hook; the nudge additionally uses
-`experimental.session.compacting` as a one-shot summarizer guard. See
+Verified against OpenCode **1.18.30** and **1.18.31**. Snapshot installation depends on
+`experimental.chat.messages.transform`; active-loop reminders use `tool.execute.after`. See
 `docs/delivery-contract.md` for the frozen hook contract and `docs/integration-report.md`
 for captured-request evidence.
 
@@ -90,35 +89,30 @@ repository instead.
 
 Post-compaction reconciliation:
 
-- One durable snapshot per successful compaction and todo fingerprint, written onto the
-  newest user turn (generated continuations included) and reused on retries and later
-  requests until a successful native todo update provides newer coverage. A failed write, or
-  a compaction-marker target, defers the snapshot to the next request.
+- One durable snapshot per successful compaction boundary, written before that boundary's
+  first provider request. Once visible, it remains byte-identical until ordinary compaction.
+  A failed read/write seals the boundary; the plugin never retries by rewriting old history.
 - Uses a 2 KiB UTF-8 ceiling and prioritizes active items; omitted data is reported explicitly.
 - Includes pending, in-progress, completed, and cancelled items when they fit, with statuses
   presented as claims rather than verified evidence.
 - Empty lists are skipped. Read failures are logged and skipped; the agent request is never
   failed.
-- Restart-safe, retry-safe, isolated per session, nothing to clean up.
+- Restart-safe when the snapshot was installed, isolated per session, nothing to clean up.
 - When the target prompt explicitly disables `todowrite`, the guidance to correct statuses
   is omitted.
 
 Stale-todo nudge (pre-compaction):
 
-- When a visible successful `todowrite` exists and no todowrite has happened for
-  `toolThreshold` tool calls or `minutesThreshold` minutes, one short reminder is appended
-  to the newest user message for that provider request only. Nothing is persisted, so the
-  nudge never accumulates in history or reaches the compaction summarizer.
-- One injection per stale window: the first crossing fires once; another injection needs
-  another full window (tool count or minutes) since the previous one. Any native
-  `todowrite` resets the baseline and window.
-- The default reminder carries counts only; set `includeList` to append the bounded
-  persisted list using `maxListBytes`.
+- When a visible successful `todowrite` baseline becomes stale, one short reminder is
+  appended synchronously to the next eligible successful tool output before persistence.
+  Later requests therefore retain exactly the same bytes.
+- One reminder per baseline. Another reminder requires a later successful `todowrite`.
+- The reminder contains no dynamic counts or persisted todo list.
 - Only existing non-empty lists are nudged. Sessions with no list, plan-agent turns, and
   prompts with `todowrite: false` are skipped.
-- The compaction summarizer is excluded with a one-shot guard armed by
-  `experimental.session.compacting` (the same pattern as the trajectory watchdog). See
-  `docs/delivery-contract.md`.
+- Time staleness is evaluated only when an eligible tool completes; no timer creates a model
+  request. Plan turns, disabled `todowrite`, human/informational tools, and unverified MCP
+  paths are excluded.
 
 ## Configuration
 
@@ -131,9 +125,7 @@ fall back to the documented defaults and log one warning.
   "nudge": {
     "enabled": true,
     "toolThreshold": 10,
-    "minutesThreshold": 5,
-    "includeList": false,
-    "maxListBytes": 1024
+    "minutesThreshold": 5
   }
 }
 ```
@@ -158,10 +150,10 @@ bun run typecheck         # tsc --noEmit against pinned @opencode-ai/plugin@1.18
 Layout:
 
 - `src/reminder.ts` — pure bounded todo-list formatter
-- `src/nudge.ts` — pure stale-todo predicate, window policy, reminder text, part metadata
+- `src/nudge.ts` — pure stale-todo predicate, baseline policy, and reminder text
 - `src/guard.ts` — one-shot compaction-summarizer skip guard
 - `src/config.ts` — optional `todo-reconcile.json` loader with defaults and warnings
-- `src/lifecycle.ts` — boundary detector, fail-open todo read, transform/nudge hook
+- `src/lifecycle.ts` — boundary detector, fail-open todo read, snapshot transform, tool-output delivery
 - `src/plugin.ts` — plugin entry point (single export, bundled to `dist/`)
 - `test/` — formatter, nudge, and lifecycle tests
 - `test/integration/` — OpenCode+mock-provider integration checks

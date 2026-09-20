@@ -15,7 +15,7 @@ import {
   type TodoResponse,
   type TodoReconcileHooks,
 } from "../src/lifecycle"
-import { DEFAULT_NUDGE_CONFIG, isNudgePart, type NudgeConfig } from "../src/nudge"
+import { DEFAULT_NUDGE_CONFIG, type NudgeConfig } from "../src/nudge"
 import { formatTodoReminder } from "../src/reminder"
 import {
   canonicalTodoFingerprint,
@@ -272,21 +272,21 @@ describe("createTodoReconcileHooks", () => {
     expect(part.metadata?.boundaryID).toBe("a1")
   })
 
-  test("does not restore without a successful boundary and strips summarizer snapshots", async () => {
+  test("does not restore without a successful boundary and leaves visible snapshots unchanged", async () => {
     const { deps, reads } = fakeDeps(async () => ({ ok: true, todos }))
     const messages = [user("u0", 1, [snapshotPart("old", "u0")])]
     await transformWith(deps, messages)
     expect(reads).toEqual([])
-    expect(hasReminderPart(messages[0]!)).toBe(false)
+    expect(hasReminderPart(messages[0]!)).toBe(true)
   })
 
-  test("does not use terminal completion as proof that memory was delivered", async () => {
+  test("does not hot-patch a target with a later assistant response", async () => {
     const { deps, reads, writes } = fakeDeps(async () => ({ ok: true, todos }))
     const messages = boundaryFixture()
     messages.push(assistant("a2", 30, { parentID: "u2", finish: "stop" }))
     await transformWith(deps, messages)
-    expect(reads).toEqual(["s1"])
-    expect(writes).toHaveLength(1)
+    expect(reads).toEqual([])
+    expect(writes).toHaveLength(0)
   })
 
   test("reuses durable coverage across repeated transforms without rereading", async () => {
@@ -299,7 +299,7 @@ describe("createTodoReconcileHooks", () => {
     expect(writes).toHaveLength(1)
   })
 
-  test("keeps retry eligibility after a failed read and a successful answer", async () => {
+  test("does not retry a failed read after an answer proves the target was sent", async () => {
     let attempt = 0
     const { deps, reads, writes } = fakeDeps(async () => {
       attempt++
@@ -309,11 +309,11 @@ describe("createTodoReconcileHooks", () => {
     await transformWith(deps, messages)
     messages.push(assistant("a2", 30, { parentID: "u2", finish: "stop" }))
     await transformWith(deps, messages)
-    expect(reads).toEqual(["s1", "s1"])
-    expect(writes).toHaveLength(1)
+    expect(reads).toEqual(["s1"])
+    expect(writes).toHaveLength(0)
   })
 
-  test("defers the snapshot when persistence fails and retries on the next transform", async () => {
+  test("seals the boundary when initial snapshot persistence fails", async () => {
     let attempt = 0
     const { deps, reads, writes } = fakeDeps(
       async () => ({ ok: true, todos }),
@@ -339,8 +339,8 @@ describe("createTodoReconcileHooks", () => {
 
     await hooks["experimental.chat.messages.transform"]!({}, { messages: pending } as never)
     expect(reads).toEqual(["s1"])
-    expect(writes).toHaveLength(2)
-    expect(hasReminderPart(pending[2]!)).toBe(true)
+    expect(writes).toHaveLength(1)
+    expect(hasReminderPart(pending[2]!)).toBe(false)
   })
 
   test("reconstructs durable coverage after restart without rewriting it", async () => {
@@ -350,11 +350,11 @@ describe("createTodoReconcileHooks", () => {
 
     const secondDeps = fakeDeps(async () => ({ ok: true, todos }))
     await transformWith(secondDeps.deps, messages)
-    expect(secondDeps.reads).toEqual(["s1"])
+    expect(secondDeps.reads).toEqual([])
     expect(secondDeps.writes).toEqual([])
   })
 
-  test("restores from cached todos when an authoritative snapshot was pruned", async () => {
+  test("does not hot-patch a snapshot removed after first delivery", async () => {
     const { deps, reads, writes } = fakeDeps(async () => ({ ok: true, todos }))
     const messages = boundaryFixture()
     const hooks = createTodoReconcileHooks(deps)
@@ -362,10 +362,10 @@ describe("createTodoReconcileHooks", () => {
     messages[2]!.parts = messages[2]!.parts.filter((part) => !hasReminderPart({ info: messages[2]!.info, parts: [part] }))
     await hooks["experimental.chat.messages.transform"]!({}, { messages } as never)
     expect(reads).toEqual(["s1"])
-    expect(writes).toHaveLength(2)
+    expect(writes).toHaveLength(1)
   })
 
-  test("retires plugin text after a successful native update", async () => {
+  test("keeps plugin text byte-identical after a successful native update", async () => {
     const { deps, reads, writes } = fakeDeps(async () => ({ ok: true, todos }))
     const messages = boundaryFixture()
     const hooks = createTodoReconcileHooks(deps)
@@ -378,7 +378,7 @@ describe("createTodoReconcileHooks", () => {
     await hooks["experimental.chat.messages.transform"]!({}, { messages } as never)
     expect(reads).toEqual(["s1"])
     expect(writes).toHaveLength(1)
-    expect(messages.some((message) => hasReminderPart(message))).toBe(false)
+    expect(messages.some((message) => hasReminderPart(message))).toBe(true)
   })
 
   test("does not retire memory for a failed todo write", async () => {
@@ -396,7 +396,7 @@ describe("createTodoReconcileHooks", () => {
     expect(writes).toHaveLength(1)
   })
 
-  test("invalidates cached state on an external todo update", async () => {
+  test("keeps the snapshot and appends an external todo update at a future tool boundary", async () => {
     let current = todos
     const next = [{ content: "new task", status: "pending", priority: "high" }]
     const { deps, reads, writes } = fakeDeps(async () => ({ ok: true, todos: current }))
@@ -406,9 +406,13 @@ describe("createTodoReconcileHooks", () => {
     current = next
     await hooks.event!({ event: { type: "todo.updated", properties: { sessionID: "s1", todos: next } } } as never)
     await hooks["experimental.chat.messages.transform"]!({}, { messages } as never)
-    expect(reads).toEqual(["s1", "s1"])
-    expect(writes).toHaveLength(2)
-    expect(messages.some((message) => message.parts.some((part) => part.type === "text" && part.text.includes("new task")))).toBe(true)
+    expect(reads).toEqual(["s1"])
+    expect(writes).toHaveLength(1)
+    expect(messages.some((message) => message.parts.some((part) => part.type === "text" && part.text.includes("new task")))).toBe(false)
+    const output = { title: "glob", output: "ok", metadata: {} }
+    await hooks["tool.execute.after"]!({ sessionID: "s1", callID: "next", tool: "glob", args: {} }, output)
+    expect(output.output).toContain("Todo state update after compaction")
+    expect(output.output).toContain("new task")
   })
 
   test("caches a successful empty result without repeated reads", async () => {
@@ -421,7 +425,7 @@ describe("createTodoReconcileHooks", () => {
     expect(writes).toEqual([])
   })
 
-  test("does not let an older native update suppress newer persisted state", async () => {
+  test("does not rewrite the boundary snapshot when later state differs", async () => {
     const newer = [{ content: "newer", status: "pending", priority: "high" }]
     let current = todos
     const { deps, reads, writes } = fakeDeps(async () => ({ ok: true, todos: current }))
@@ -436,9 +440,9 @@ describe("createTodoReconcileHooks", () => {
     current = newer
     await hooks.event!({ event: { type: "todo.updated", properties: { sessionID: "s1", todos: newer } } } as never)
     await hooks["experimental.chat.messages.transform"]!({}, { messages } as never)
-    expect(reads).toEqual(["s1", "s1"])
-    expect(writes).toHaveLength(2)
-    expect(messages.some((message) => message.parts.some((part) => part.type === "text" && part.text.includes("newer")))).toBe(true)
+    expect(reads).toEqual(["s1"])
+    expect(writes).toHaveLength(1)
+    expect(messages.some((message) => message.parts.some((part) => part.type === "text" && part.text.includes("newer")))).toBe(false)
   })
 
   test("persists onto the newest user turn even when it is a generated continuation", async () => {
@@ -453,7 +457,7 @@ describe("createTodoReconcileHooks", () => {
     expect(hasReminderPart(messages[3]!)).toBe(true)
   })
 
-  test("defers a compaction-marker target and writes once a newer user turn arrives", async () => {
+  test("seals a failed compaction-marker target instead of hot-patching it later", async () => {
     const { deps, reads, writes } = fakeDeps(async () => ({ ok: true, todos }))
     const messages = [
       user("u1", 10, [compaction()]),
@@ -466,11 +470,10 @@ describe("createTodoReconcileHooks", () => {
 
     messages.push(user("u2", 20, [textPart("p2", "resume")]))
     await hooks["experimental.chat.messages.transform"]!({}, { messages } as never)
-    expect(reads).toEqual(["s1", "s1"])
-    expect(writes).toHaveLength(1)
-    expect(writes[0]!.target.info.id).toBe("u2")
+    expect(reads).toEqual([])
+    expect(writes).toHaveLength(0)
     expect(hasReminderPart(messages[0]!)).toBe(false)
-    expect(hasReminderPart(messages[2]!)).toBe(true)
+    expect(hasReminderPart(messages[2]!)).toBe(false)
   })
 
   test("keeps sessions isolated", async () => {
@@ -580,8 +583,6 @@ const nudgePolicy: NudgeConfig = {
   enabled: true,
   toolThreshold: 3,
   minutesThreshold: 0,
-  includeList: false,
-  maxListBytes: 1_024,
 }
 
 function workPart(
@@ -655,153 +656,81 @@ async function runTransform(hooks: TodoReconcileHooks, messages: MessageWithPart
   await hooks["experimental.chat.messages.transform"]!({}, { messages } as never)
 }
 
-function nudgeParts(messages: MessageWithParts[]): Array<Extract<Part, { type: "text" }>> {
-  const parts: Array<Extract<Part, { type: "text" }>> = []
-  for (const message of messages) {
-    for (const part of message.parts) {
-      if (part.type === "text" && isNudgePart(part)) parts.push(part)
-    }
-  }
-  return parts
-}
-
 describe("stale todo nudges", () => {
-  test("injects one request-local reminder once the tool window is crossed", async () => {
-    const { hooks, reads } = nudgeHarness()
-    const messages = staleMessages(2)
-    await runTransform(hooks, messages)
-    expect(nudgeParts(messages)).toHaveLength(0)
+  async function complete(hooks: TodoReconcileHooks, callID: string, tool = "glob") {
+    const output = { title: tool, output: '{"ok":true}', metadata: {} }
+    await hooks["tool.execute.after"]!({ sessionID: "s1", callID, tool, args: {} }, output)
+    return output.output
+  }
 
-    messages.push(workAssistant("w3", NUDGE_BASE + 40))
-    await runTransform(hooks, messages)
-    const injected = nudgeParts(messages)
-    expect(injected).toHaveLength(1)
-    expect(injected[0]!.synthetic).toBe(true)
-    expect(injected[0]!.messageID).toBe("u1")
-    expect(injected[0]!.text).toContain("3 tool calls")
-    expect(reads).toEqual(["s1"])
+  test("appends one immutable reminder to the threshold-crossing tool output", async () => {
+    const { hooks } = nudgeHarness()
+    await runTransform(hooks, staleMessages(0))
+    expect(await complete(hooks, "w1")).toBe('{"ok":true}')
+    expect(await complete(hooks, "w2")).toBe('{"ok":true}')
+    const delivered = await complete(hooks, "w3")
+    expect(delivered.startsWith('{"ok":true}\n\nTodo status reminder')).toBe(true)
+    expect(await complete(hooks, "w4")).toBe('{"ok":true}')
   })
 
-  test("holds the one-shot window and fires again after another full window", async () => {
+  test("re-arms only after a later successful todowrite", async () => {
     const { hooks } = nudgeHarness()
-    const messages = staleMessages(3)
-    await runTransform(hooks, messages)
-    expect(nudgeParts(messages)).toHaveLength(1)
-
-    await runTransform(hooks, messages)
-    expect(nudgeParts(messages)).toHaveLength(0)
-
-    messages.push(
-      workAssistant("w4", NUDGE_BASE + 40),
-      workAssistant("w5", NUDGE_BASE + 50),
-      workAssistant("w6", NUDGE_BASE + 60),
+    await runTransform(hooks, staleMessages(0))
+    await complete(hooks, "w1")
+    await complete(hooks, "w2")
+    expect(await complete(hooks, "w3")).toContain("Todo status reminder")
+    await hooks["tool.execute.after"]!(
+      { sessionID: "s1", callID: "todo-2", tool: "todowrite", args: { todos } },
+      { title: "todowrite", output: "written", metadata: {} },
     )
-    await runTransform(hooks, messages)
-    expect(nudgeParts(messages)).toHaveLength(1)
+    await complete(hooks, "w4")
+    await complete(hooks, "w5")
+    expect(await complete(hooks, "w6")).toContain("Todo status reminder")
   })
 
-  test("a newer native todowrite resets the baseline", async () => {
-    const { hooks } = nudgeHarness()
-    const messages = staleMessages(3)
-    await runTransform(hooks, messages)
-    expect(nudgeParts(messages)).toHaveLength(1)
-
-    messages.push(
-      assistant("a2", NUDGE_BASE + 100, { parentID: "u1", finish: "tool-calls" }, [
-        toolPart({ id: "tool-todo-2", messageID: "a2", todos, start: NUDGE_BASE + 100, end: NUDGE_BASE + 102 }),
-      ]),
-      workAssistant("w4", NUDGE_BASE + 110),
-    )
-    await runTransform(hooks, messages)
-    expect(nudgeParts(messages)).toHaveLength(0)
+  test("checks elapsed time only when an eligible tool completes", async () => {
+    const harness = nudgeHarness({ policy: { toolThreshold: 0, minutesThreshold: 5 } })
+    await runTransform(harness.hooks, staleMessages(0))
+    harness.setNow(NUDGE_BASE + 2 + 5 * 60_000)
+    expect(await complete(harness.hooks, "w1")).toContain("Todo status reminder")
   })
 
-  test("the compaction guard suppresses exactly one transform", async () => {
-    const { hooks } = nudgeHarness()
-    const messages = staleMessages(3)
-    await hooks["experimental.session.compacting"]!({ sessionID: "s1" }, { context: [] })
-    await runTransform(hooks, messages)
-    expect(nudgeParts(messages)).toHaveLength(0)
-
-    await runTransform(hooks, messages)
-    expect(nudgeParts(messages)).toHaveLength(1)
-  })
-
-  test("skips plan turns and requests that disable todowrite", async () => {
-    const plan = nudgeHarness()
-    const planMessages = staleMessages(3, { agent: "plan" })
-    await runTransform(plan.hooks, planMessages)
-    expect(nudgeParts(planMessages)).toHaveLength(0)
-    expect(plan.reads).toEqual([])
-
-    const disabled = nudgeHarness()
-    const disabledMessages = staleMessages(3, { tools: { todowrite: false } })
-    await runTransform(disabled.hooks, disabledMessages)
-    expect(nudgeParts(disabledMessages)).toHaveLength(0)
-    expect(disabled.reads).toEqual([])
-  })
-
-  test("skips empty lists and retries after a failed read", async () => {
-    const empty = nudgeHarness({ read: async () => ({ ok: true, todos: [] }) })
-    const emptyMessages = staleMessages(3)
-    await runTransform(empty.hooks, emptyMessages)
-    expect(nudgeParts(emptyMessages)).toHaveLength(0)
-
-    let attempt = 0
-    const flaky = nudgeHarness({
-      read: async () => {
-        attempt++
-        return attempt === 1 ? { ok: false, reason: "offline" } : { ok: true, todos }
-      },
-    })
-    const flakyMessages = staleMessages(3)
-    await runTransform(flaky.hooks, flakyMessages)
-    expect(nudgeParts(flakyMessages)).toHaveLength(0)
-    await runTransform(flaky.hooks, flakyMessages)
-    expect(nudgeParts(flakyMessages)).toHaveLength(1)
-  })
-
-  test("the time threshold fires without tool calls", async () => {
-    const { hooks } = nudgeHarness({
-      policy: { toolThreshold: 0, minutesThreshold: 5 },
-      nowMs: NUDGE_BASE + 2 + 5 * 60_000,
-    })
-    const messages = staleMessages(0)
-    await runTransform(hooks, messages)
-    const injected = nudgeParts(messages)
-    expect(injected).toHaveLength(1)
-    expect(injected[0]!.text).toContain("5 min")
-    expect(injected[0]!.text).not.toContain("tool call")
-  })
-
-  test("includeList appends the bounded persisted list", async () => {
-    const { hooks } = nudgeHarness({ policy: { includeList: true, maxListBytes: 1_024 } })
-    const messages = staleMessages(3)
-    await runTransform(hooks, messages)
-    const injected = nudgeParts(messages)
-    expect(injected).toHaveLength(1)
-    expect(injected[0]!.text).toContain("Investigate crash")
-    expect(injected[0]!.text).toContain("Todo status reminder: persisted list")
-  })
-
-  test("targets the newest user turn without needing a compaction boundary", async () => {
-    const { hooks } = nudgeHarness()
-    const messages = staleMessages(3)
-    messages.push(user("u2", NUDGE_BASE + 200, [textPart("p2", "next")]))
-    await runTransform(hooks, messages)
-    const injected = nudgeParts(messages)
-    expect(injected).toHaveLength(1)
-    expect(injected[0]!.messageID).toBe("u2")
-  })
-
-  test("does not nudge without a visible todowrite baseline", async () => {
-    const { hooks, reads } = nudgeHarness()
-    const messages: MessageWithParts[] = [user("u1", NUDGE_BASE, [textPart("p1", "task")])]
-    for (let index = 0; index < 5; index++) {
-      messages.push(workAssistant(`w${index}`, NUDGE_BASE + 10 + index))
+  test("preserves exclusions for plan, disabled todowrite, informational tools, and MCP tools", async () => {
+    for (const messages of [staleMessages(0, { agent: "plan" }), staleMessages(0, { tools: { todowrite: false } })]) {
+      const { hooks } = nudgeHarness()
+      await runTransform(hooks, messages)
+      expect(await complete(hooks, "w1")).toBe('{"ok":true}')
     }
+
+    const { hooks } = nudgeHarness({ policy: { toolThreshold: 1 } })
+    await runTransform(hooks, staleMessages(0))
+    expect(await complete(hooks, "q1", "question")).toBe('{"ok":true}')
+    expect(await complete(hooks, "m1", "mcp_server_tool")).toBe('{"ok":true}')
+    expect(await complete(hooks, "w1")).toContain("Todo status reminder")
+  })
+
+  test("reconstructs a stale baseline after restart but waits for an unseen tool output", async () => {
+    const { hooks } = nudgeHarness()
+    const history = staleMessages(3)
+    await runTransform(hooks, history)
+    expect(history.some((message) => message.parts.some((part) => part.type === "text" && part.text.includes("Todo status reminder")))).toBe(false)
+    expect(await complete(hooks, "w4")).toContain("Todo status reminder")
+  })
+
+  test("restart reconstruction recognizes a reminder later in the baseline message", async () => {
+    const { hooks } = nudgeHarness({ policy: { toolThreshold: 1 } })
+    const reminder = "Todo status reminder (system-generated, not a user request)"
+    const work = workPart("same-message-work", "a1")
+    if (work.type !== "tool" || work.state.status !== "completed") throw new Error("unreachable")
+    work.state.output += `\n\n${reminder}`
+    const messages = [
+      user("u1", NUDGE_BASE, [textPart("p-text", "keep working")]),
+      assistant("a1", NUDGE_BASE + 1, { parentID: "u1", finish: "tool-calls" }, [
+        toolPart({ id: "tool-todo", messageID: "a1", todos }),
+        work,
+      ]),
+    ]
     await runTransform(hooks, messages)
-    expect(nudgeParts(messages)).toHaveLength(0)
-    expect(reads).toEqual([])
+    expect(await complete(hooks, "w2")).toBe('{"ok":true}')
   })
 })

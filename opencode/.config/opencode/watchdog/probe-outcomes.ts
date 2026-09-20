@@ -5,9 +5,9 @@ export const PROBE_OUTCOMES: Record<string, { status: ProbeStatus; evidence: str
     status: "passed",
     evidence: "watchdog/integration/critic-probe.integration.test.ts",
   },
-  requestLocalFeedback: {
+  cachePreservingFeedback: {
     status: "passed",
-    evidence: "watchdog/integration/midrun-feedback.integration.test.ts",
+    evidence: "watchdog/integration/guarded-idle.integration.test.ts",
   },
   idleGoalArbitration: {
     status: "passed",
@@ -20,7 +20,7 @@ export const PROBE_OUTCOMES: Record<string, { status: ProbeStatus; evidence: str
   },
 }
 
-export const MID_RUN_DELIVERY_ENABLED = PROBE_OUTCOMES.requestLocalFeedback.status === "passed"
+export const MID_RUN_DELIVERY_ENABLED = PROBE_OUTCOMES.cachePreservingFeedback.status === "passed"
 
 export const IDLE_GOAL_PROBE_PASSED = PROBE_OUTCOMES.idleGoalArbitration.status === "passed"
 

@@ -51,12 +51,8 @@ _Avoid_: goal message, external prompt
 ## Feedback
 
 **Advisory**:
-An accepted concern retained for delivery, as a request-local annotation on a tool result or as part of an idle follow-up.
+An accepted concern retained for delivery as an immutable tool-result trailer or guarded idle follow-up.
 _Avoid_: annotation, steering message
-
-**Concern toast**:
-A TUI toast carrying an accepted concern's message. Visible regardless of diagnostic mode.
-_Avoid_: warning toast, notification
 
 **Idle follow-up**:
 A marker-tagged root prompt that makes the main agent reconsider an accepted concern before stopping.

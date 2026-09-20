@@ -184,19 +184,6 @@ export const IdleGoalProbePlugin: Plugin = async ({ client }) => {
         return
       }
 
-      for (const variant of ["info", "warning", "error"] as const) {
-        if (!text.includes(`__watchdog_probe_toast_${variant}__`)) continue
-        void (async () => {
-          try {
-            const result = await client.tui.showToast({
-              body: { title: "Watchdog", message: `${variant} probe toast`, variant, duration: 4000 },
-            })
-            debug(`toast ${variant} ok=${JSON.stringify(result)}`)
-          } catch (error) {
-            debug(`toast ${variant} error=${String(error)}`)
-          }
-        })()
-      }
     },
   }
 }
