@@ -156,6 +156,8 @@ export type Instance = {
 type StartOptions = {
   home?: string
   pluginBundle?: string
+  /** Extra files written verbatim into the config `plugins/` directory. */
+  extraPlugins?: Record<string, string>
   mockBaseURL: string
   configExtra?: Record<string, unknown>
 }
@@ -240,10 +242,15 @@ export async function startInstance(options: StartOptions): Promise<Instance> {
   await mkdir(configDir, { recursive: true })
   await mkdir(workdir, { recursive: true })
 
-  if (options.pluginBundle) {
+  if (options.pluginBundle || options.extraPlugins) {
     const pluginsDir = path.join(configDir, "plugins")
     await mkdir(pluginsDir, { recursive: true })
-    await Bun.write(path.join(pluginsDir, "todo-reconcile.js"), Bun.file(options.pluginBundle))
+    if (options.pluginBundle) {
+      await Bun.write(path.join(pluginsDir, "todo-reconcile.js"), Bun.file(options.pluginBundle))
+    }
+    for (const [name, contents] of Object.entries(options.extraPlugins ?? {})) {
+      await Bun.write(path.join(pluginsDir, name), contents)
+    }
   }
 
   await writeFile(

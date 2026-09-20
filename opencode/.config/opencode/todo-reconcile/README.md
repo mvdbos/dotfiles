@@ -84,8 +84,11 @@ repository instead.
 
 ## Behaviour summary
 
-- One durable snapshot per successful compaction and todo fingerprint, reused on retries and
-  later requests until a successful native todo update provides newer coverage.
+- One durable snapshot per successful compaction and todo fingerprint, written onto the
+  newest user turn (generated continuations included) and reused on retries and later
+  requests until a successful native todo update provides newer coverage. A failed write, or
+  a compaction-marker target, defers the snapshot to the next request. There is no
+  per-request injection (see `docs/delivery-contract.md`).
 - Uses a 2 KiB UTF-8 ceiling and prioritizes active items; omitted data is reported explicitly.
 - Includes pending, in-progress, completed, and cancelled items when they fit, with statuses
   presented as claims rather than verified evidence.

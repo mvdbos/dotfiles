@@ -116,13 +116,14 @@ input can therefore never contain a completed pair, and the detector requires on
 also asserted by the integration capture in `test/integration/` (summarizer request must
 not contain the reminder).
 
-## 4. Chosen algorithm (durable snapshot, history-derived eligibility)
+## 4. Chosen algorithm (one durable write per boundary)
 
 For each transform invocation:
 
 1. `messages` empty or has no user message → no-op.
-2. Session key = `messages.at(-1).info.sessionID`; target = last user message in the array
-   (same selection as `SessionReminders.apply`).
+2. Session key = `messages.at(-1).info.sessionID`; target = chronologically newest user
+   message in the array, whatever produced it (real prompt, generated continuation,
+   synthetic autocontinue).
 3. Find the latest completed compaction boundary pair by scanning for the assistant `A`
    that satisfies the §3 test, comparing candidates with `isAfter`.
 4. Skip if no boundary exists.
@@ -131,17 +132,35 @@ For each transform invocation:
    request eligible for a later retry.
 6. Format an active-first projection with the fixed byte ceiling in `src/reminder.ts`.
    Omitted items and excerpts are explicitly marked.
-7. Persist one synthetic text part on the existing target user message through
+7. Persist one synthetic text part on the newest user message through
    `session.prompt({ messageID, noReply: true })`. This creates no new user message or
    model turn. A stable session/boundary/target/fingerprint ID makes retries idempotent.
+   The write is skipped for a compaction marker and deferred to the next transform; the
+   marker is excluded because OpenCode's `createUserMessage` always rewrites `time.created`
+   on an existing `messageID`, and a marker bumped ahead of the finished summary re-arms
+   `latest().tasks`, which reruns `SessionCompaction.process` (an unbounded compaction loop
+   under generated continuations). Rewriting the newest user message keeps it newest, so it
+   cannot reorder history.
+   The request body mirrors the target's existing text parts verbatim (same part IDs, flags,
+   and metadata) ahead of the snapshot part. OpenCode fires `chat.message` for this write
+   with only the supplied parts; a synthetic-only payload would classify the turn as an
+   empty real turn, resetting watchdog's foreign-continuation epoch, task, advisory, and
+   idle-admission state. Mirroring makes classification identical to the original prompt.
+   Upserts are by part ID, so stored parts, model-visible payloads, part order, and prefix
+   caching are unchanged; the only new provider-visible content remains the snapshot part.
 8. Remove plugin snapshots from summarizer payloads. A successful model-visible native
    `todowrite` update invalidates plugin coverage and removes the snapshot from later requests.
 
 Properties:
 
+- One write per boundary; later requests keep the persisted part as ordinary history
+  (`stripPluginSnapshots(messages, matchingCached)`), so there is no per-request injection
+  and no per-request plugin work beyond the keep/strip decision.
 - In-memory state avoids repeated reads during one process; persisted snapshot metadata
   recovers coverage after restart.
-- Retry-safe: the stable part ID and `noReply` persistence prevent duplicate snapshot parts.
+- Retry-safe: a failed write leaves coverage `pending`; the next transform retries the same
+  write (deterministic part ID) without re-reading todos. The request that saw the failure
+  goes out without the reminder.
 - A later compaction introduces a new boundary, even with byte-identical todo text.
 
 ## 5. Todo-read semantics
@@ -195,8 +214,15 @@ process-local cache and is not required for restart recovery.
 - No acknowledgement mechanism exists, so strict exactly-once provider delivery cannot be
   promised. The stable persisted part provides retry and restart recovery, not provider
   acknowledgement.
-- The snapshot is persisted on the target user message and remains available until newer
-  native todo coverage or a newer compaction supersedes it.
+- The snapshot is persisted on the newest user message and remains available until newer
+  native todo coverage or a newer compaction supersedes it. In goal sessions this places the
+  snapshot on the generated continuation that resumed the session, which is also where the
+  model needs it.
+- There is no in-request fallback. If the write fails, or the only candidate is a compaction
+  marker, the reminder is deferred to the next transform; the intervening request runs
+  without it. Reads stay cached, so the retry is a single SDK write attempt, not a re-read.
+- A failed transform invocation (thrown hook error) leaves the request unchanged and the
+  state untouched; the next request retries from the same state.
 - Cache invalidation is event-driven for `todo.updated` and history-driven for native
   `todowrite` parts.
 - `lastUser.info.tools?.todowrite` is the only availability signal at this hook; dynamic

@@ -9,7 +9,6 @@ import {
 import {
   canonicalTodoFingerprint,
   isPluginSnapshotPart,
-  makeSnapshotPart,
   parseSnapshotMetadata,
   snapshotMetadata,
   snapshotPartID,
@@ -50,15 +49,13 @@ export type PersistSnapshotInput = {
 }
 
 export type PersistSnapshotResult =
-  | { ok: true; durable: boolean; part: Extract<Part, { type: "text" }> }
+  | { ok: true; part: Extract<Part, { type: "text" }> }
   | { ok: false; reason: string }
 
 export type LifecycleDeps = {
   readTodos(sessionID: string): Promise<ReadTodosResult>
   /** Persisting is supplied by the plugin through `session.prompt(noReply)`. */
   persistSnapshot?(input: PersistSnapshotInput): Promise<PersistSnapshotResult>
-  /** Shared classifier input: plugin-generated user turns are not projection targets. */
-  isEligibleUserMessage?(message: MessageWithParts): boolean
   log?(message: string, detail?: unknown): void
 }
 
@@ -87,6 +84,7 @@ type Coverage =
   | { kind: "native"; boundaryID: string; fingerprint: string }
   | { kind: "empty"; boundaryID: string; fingerprint: string }
   | { kind: "none"; boundaryID: string; fingerprint: string }
+  | { kind: "pending"; boundaryID: string; fingerprint: string }
 
 type SessionState = {
   boundaryID?: string
@@ -97,7 +95,6 @@ type SessionState = {
   validated: boolean
   invalidated: boolean
   readInFlight?: Promise<ReadTodosResult>
-  ephemeralPartID?: string
 }
 
 function isAfter(current: HistoryInfo, other: HistoryInfo): boolean {
@@ -153,18 +150,28 @@ function hasNewerUnsuccessfulCompaction(messages: readonly MessageWithParts[], b
   return !summary || !!summary.info.error || !summary.info.finish
 }
 
-/** Select the chronologically newest eligible user message, not the retained-tail slot. */
-export function lastUserMessage(
-  messages: readonly MessageWithParts[],
-  isEligible: (message: MessageWithParts) => boolean = () => true,
-): MessageWithParts | undefined {
+/** Select the chronologically newest user message, not the retained-tail slot. */
+export function lastUserMessage(messages: readonly MessageWithParts[]): MessageWithParts | undefined {
   let best: MessageWithParts | undefined
   for (const message of messages) {
     if (message.info.role !== "user") continue
-    if (!isEligible(message)) continue
     if (!best || isAfter(message.info, best.info)) best = message
   }
   return best
+}
+
+/**
+ * The snapshot is written onto the newest user message. Persistence goes through
+ * `session.prompt({ messageID })`, and OpenCode's `createUserMessage` always
+ * replaces `time.created` with the persist time. Rewriting the newest user turn
+ * keeps the message the newest one, so the write cannot reorder history or re-arm
+ * `latest().tasks` compaction processing. Compaction markers are excluded: they
+ * are never the write target, because their timestamp orders the retained-tail
+ * boundary.
+ */
+export function persistTargetAllowed(target: MessageWithParts | undefined): boolean {
+  if (!target) return false
+  return !target.parts.some((part) => part.type === "compaction")
 }
 
 export function hasReminderPart(message: MessageWithParts): boolean {
@@ -328,7 +335,6 @@ function resetState(state: SessionState, boundaryID: string): void {
   state.coverage = undefined
   state.validated = false
   state.invalidated = false
-  state.ephemeralPartID = undefined
 }
 
 function stateCoverageMatches(state: SessionState, boundaryID: string): boolean {
@@ -365,19 +371,12 @@ export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHook
     const existing = persistInFlight.get(key)
     if (existing) return existing
 
-    const fallback = (): PersistSnapshotResult => ({
-      ok: true,
-      durable: false,
-      part: makeSnapshotPart({
-        sessionID: input.sessionID,
-        messageID: input.target.info.id,
-        partID: input.partID,
-        text: input.text,
-        metadata: input.metadata,
-      }),
-    })
     const pending = Promise.resolve()
-      .then(() => (deps.persistSnapshot ? deps.persistSnapshot(input) : fallback()))
+      .then(() =>
+        deps.persistSnapshot
+          ? deps.persistSnapshot(input)
+          : ({ ok: false as const, reason: "no persistSnapshot dependency configured" }),
+      )
       .catch((error): PersistSnapshotResult => ({ ok: false, reason: describeError(error) }))
       .finally(() => {
         if (persistInFlight.get(key) === pending) persistInFlight.delete(key)
@@ -398,6 +397,7 @@ export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHook
     boundary: Boundary
     todos: TodoItem[]
     fingerprint: string
+    persistSafe: boolean
   }): Promise<void> => {
     const projection = formatTodoReminder(input.todos, {
       maxBytes: DEFAULT_REMINDER_MAX_BYTES,
@@ -405,7 +405,6 @@ export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHook
     })
     if (!projection) {
       input.state.coverage = { kind: "none", boundaryID: input.boundary.summary.id, fingerprint: input.fingerprint }
-      input.state.ephemeralPartID = undefined
       return
     }
 
@@ -430,61 +429,48 @@ export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHook
       }),
       metadata,
     }
-      const result = await persist(persistInput)
-      if (!result.ok) {
-        log("todo snapshot persistence failed; current request remains eligible", {
-          sessionID: input.target.info.sessionID,
-          reason: result.reason,
-        })
-        // Preserve delivery for this request, but do not claim durable coverage.
-      const ephemeral = makeSnapshotPart({
-        sessionID: persistInput.sessionID,
-        messageID: input.target.info.id,
-        partID: persistInput.partID,
-        text: projection.text,
-        metadata,
+    const result = input.persistSafe
+      ? await persist(persistInput)
+      : { ok: false as const, reason: "target is a compaction marker" }
+    if (!result.ok) {
+      log("todo snapshot deferred; the next request retries the write", {
+        sessionID: input.target.info.sessionID,
+        reason: result.reason,
       })
-      appendPart(input.target, ephemeral)
-      input.state.coverage = { kind: "none", boundaryID: input.boundary.summary.id, fingerprint: input.fingerprint }
-      input.state.ephemeralPartID = ephemeral.id
+      input.state.coverage = {
+        kind: "pending",
+        boundaryID: input.boundary.summary.id,
+        fingerprint: input.fingerprint,
+      }
       return
     }
 
     if (!validatePersistedPart(result.part, persistInput)) {
-      log("todo snapshot persistence returned an invalid part; current request remains eligible", {
+      log("todo snapshot persistence returned an invalid part; the next request retries", {
         sessionID: input.target.info.sessionID,
       })
-      appendPart(input.target, makeSnapshotPart({
-        sessionID: persistInput.sessionID,
-        messageID: input.target.info.id,
-        partID: persistInput.partID,
-        text: projection.text,
-        metadata,
-      }))
-      input.state.coverage = { kind: "none", boundaryID: input.boundary.summary.id, fingerprint: input.fingerprint }
-      input.state.ephemeralPartID = persistInput.partID
+      input.state.coverage = {
+        kind: "pending",
+        boundaryID: input.boundary.summary.id,
+        fingerprint: input.fingerprint,
+      }
       return
     }
 
     appendPart(input.target, result.part)
-    if (result.durable) {
-      input.state.coverage = {
-        kind: "snapshot",
-        boundaryID: input.boundary.summary.id,
-        fingerprint: input.fingerprint,
-        complete: projection.complete,
-      }
-      input.state.ephemeralPartID = undefined
-    } else {
-      input.state.coverage = { kind: "none", boundaryID: input.boundary.summary.id, fingerprint: input.fingerprint }
-      input.state.ephemeralPartID = result.part.id
+    input.state.coverage = {
+      kind: "snapshot",
+      boundaryID: input.boundary.summary.id,
+      fingerprint: input.fingerprint,
+      complete: projection.complete,
     }
   }
 
   const transform = async (_input: {}, output: TransformOutput): Promise<void> => {
     try {
     const messages = output.messages as MessageWithParts[]
-      const target = lastUserMessage(messages, deps.isEligibleUserMessage)
+      const target = lastUserMessage(messages)
+      const persistSafe = persistTargetAllowed(target)
 
       // A verified summarizer payload has no completed compaction pair. Strip
       // persisted plugin parts independently of restoration eligibility.
@@ -523,18 +509,14 @@ export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHook
         state.fingerprint = native.fingerprint
         state.todos = native.todos
         state.coverage = { kind: "native", boundaryID: boundary.summary.id, fingerprint: native.fingerprint }
-        state.ephemeralPartID = undefined
         stripPluginSnapshots(messages)
         return
       }
 
       if (!state.invalidated && state.validated && stateCoverageMatches(state, boundary.summary.id)) {
-        if (state.coverage?.kind === "empty" || state.coverage?.kind === "native" || state.coverage?.kind === "none") {
-          if (state.ephemeralPartID && matchingCached?.part.id === state.ephemeralPartID) return
-          if (!state.ephemeralPartID) {
-            stripPluginSnapshots(messages)
-            return
-          }
+        if (state.coverage?.kind === "empty" || state.coverage?.kind === "none") {
+          stripPluginSnapshots(messages)
+          return
         }
         if (matchingCached) {
           if (utf8Bytes(matchingCached.part.text) <= DEFAULT_REMINDER_MAX_BYTES) {
@@ -550,6 +532,7 @@ export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHook
             boundary,
             todos: state.todos,
             fingerprint: state.fingerprint!,
+            persistSafe,
           })
           return
         }
@@ -582,7 +565,6 @@ export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHook
       state.fingerprint = fingerprint
       state.validated = true
       state.invalidated = false
-      state.ephemeralPartID = undefined
 
       if (result.todos.length === 0) {
         state.coverage = { kind: "empty", boundaryID: boundary.summary.id, fingerprint }
@@ -615,6 +597,7 @@ export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHook
         boundary,
         todos: result.todos,
         fingerprint,
+        persistSafe,
       })
     } catch (error) {
       log("todo reconciliation hook failed; request left unchanged", { reason: describeError(error) })
@@ -631,7 +614,6 @@ export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHook
       state.invalidated = true
       state.validated = false
       state.coverage = undefined
-      state.ephemeralPartID = undefined
     },
     dispose: async () => {
       states.clear()
