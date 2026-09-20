@@ -55,3 +55,17 @@ Run `./validate_setup.sh` after editing `bash/.bashrc`, `zsh/.zshrc`, `shell/.pr
 - `setup.sh` performs full machine provisioning (Homebrew bundle, SDKMan, stow all, bat theme, gh-copilot) and pulls submodules; do not run it just to test config edits.
 - Ignored/generated files that must stay uncommitted: `service.json` (contains a credential), `*.bak*`, `node_modules/`, lockfiles under `opencode/.config/opencode/`, `Brewfile.lock.json`.
 - Existing instruction sources: `.github/copilot-instructions.md` (validation rules), `COPILOT_SETUP.md` (manual test procedures), `TROUBLESHOOTING.md`, `MIGRATION.md`, `opencode/README.md`.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs are tracked as local Markdown under `.scratch/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Triage uses the five canonical role names as status strings. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Domain documentation uses a single-context layout, with relevant scoped context documents also honored. See `docs/agents/domain.md`.
