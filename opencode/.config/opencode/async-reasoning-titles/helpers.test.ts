@@ -5,6 +5,7 @@ import {
   hasReasoningSignature,
   isCompleteReasoning,
   isEligible,
+  isParticipleTitle,
   parseModelRef,
   reasoningTitle,
   requestTitle,
@@ -90,6 +91,23 @@ describe("cleanTitle", () => {
     expect(cleanTitle("   \n  ")).toBeUndefined()
     expect(cleanTitle("a".repeat(121))).toBeUndefined()
     expect(cleanTitle("one two three four five six seven eight nine ten eleven twelve thirteen")).toBeUndefined()
+  })
+})
+
+describe("isParticipleTitle", () => {
+  test("accepts a present participle lead", () => {
+    expect(isParticipleTitle("Checking pixel-grid alignment")).toBe(true)
+    expect(isParticipleTitle("Updating findings.md with the final conclusion")).toBe(true)
+    expect(isParticipleTitle("Re-checking alignment")).toBe(true)
+  })
+
+  test("rejects other leads and non-participle lookalikes", () => {
+    expect(isParticipleTitle("Check alignment")).toBe(false)
+    expect(isParticipleTitle("Fixed the parser")).toBe(false)
+    expect(isParticipleTitle("Analysis of crash logs")).toBe(false)
+    expect(isParticipleTitle("The parser")).toBe(false)
+    expect(isParticipleTitle("Everything looks fine")).toBe(false)
+    expect(isParticipleTitle("")).toBe(false)
   })
 })
 
@@ -283,6 +301,10 @@ describe("titlePrompt", () => {
     expect(prompt).toContain("ONLY one line")
     expect(prompt).toContain("Never continue with more lines")
   })
+
+  test("asks for a present participle lead", () => {
+    expect(titlePrompt("Some reasoning", 100)).toContain("present participle verb ending in -ing")
+  })
 })
 
 describe("responseTitle", () => {
@@ -297,6 +319,11 @@ describe("responseTitle", () => {
     expect(responseTitle({})).toBeUndefined()
     expect(responseTitle({ choices: [] })).toBeUndefined()
     expect(responseTitle({ choices: [{ message: { content: 5 } }] })).toBeUndefined()
+  })
+
+  test("returns undefined when the lead is not a present participle", () => {
+    expect(responseTitle({ choices: [{ message: { content: "Check alignment" } }] })).toBeUndefined()
+    expect(responseTitle({ choices: [{ message: { content: "Analysis of the logs" } }] })).toBeUndefined()
   })
 })
 
@@ -338,6 +365,41 @@ describe("requestTitle", () => {
     expect(
       await requestTitle({ settings, text: "x", signal: new AbortController().signal, fetch: invalid }),
     ).toBeUndefined()
+  })
+
+  test("retries once when the reply is not a present participle", async () => {
+    let calls = 0
+    const fetchImpl = (async () => {
+      calls += 1
+      const content = calls === 1 ? "Check alignment" : '"Checking alignment."'
+      return new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    }) as unknown as typeof fetch
+    const title = await requestTitle({
+      settings,
+      text: "reasoning",
+      signal: new AbortController().signal,
+      fetch: fetchImpl,
+    })
+    expect(title).toBe("Checking alignment")
+    expect(calls).toBe(2)
+  })
+
+  test("gives up after one retry", async () => {
+    let calls = 0
+    const fetchImpl = (async () => {
+      calls += 1
+      return new Response(JSON.stringify({ choices: [{ message: { content: "Check alignment" } }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    }) as unknown as typeof fetch
+    expect(
+      await requestTitle({ settings, text: "reasoning", signal: new AbortController().signal, fetch: fetchImpl }),
+    ).toBeUndefined()
+    expect(calls).toBe(2)
   })
 })
 
