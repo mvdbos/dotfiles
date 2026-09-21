@@ -25,18 +25,26 @@ export function annotateDisplayedImages(text: string, paths: readonly string[]):
 }
 
 const ANNOTATION_PATTERN = new RegExp(`\\n\\n${DISPLAY_OUTPUT_PREFIX}[^\\n]*${ANNOTATION_MARKER}`, "g")
+const DISPLAY_OUTPUT_LINE = new RegExp(`^${DISPLAY_OUTPUT_PREFIX}(.+)$`, "gm")
 
 export function stripDisplayAnnotations(text: string): string {
   return text.replace(ANNOTATION_PATTERN, "")
 }
 
-export function displayedImagePath(tool: string, output: string | undefined, metadata: unknown): string | undefined {
-  if (tool !== "image_display") return undefined
+// A completed image_display call resolves one or more paths. Metadata is the
+// preferred contract (`paths`, with `path` kept for parts recorded by older
+// versions); the output lines are the fallback.
+export function displayedImagePaths(tool: string, output: string | undefined, metadata: unknown): string[] {
+  if (tool !== "image_display") return []
   const text = output ?? ""
-  if (!text.startsWith(DISPLAY_OUTPUT_PREFIX)) return undefined
+  if (!text.startsWith(DISPLAY_OUTPUT_PREFIX)) return []
   if (typeof metadata === "object" && metadata !== null) {
-    const path = (metadata as Record<string, unknown>).path
-    if (typeof path === "string" && path) return path
+    const record = metadata as Record<string, unknown>
+    if (Array.isArray(record.paths)) {
+      const paths = record.paths.filter((path): path is string => typeof path === "string" && path.length > 0)
+      if (paths.length) return paths
+    }
+    if (typeof record.path === "string" && record.path) return [record.path]
   }
-  return text.slice(DISPLAY_OUTPUT_PREFIX.length).trim() || undefined
+  return [...text.matchAll(DISPLAY_OUTPUT_LINE)].map((match) => match[1]!.trim()).filter(Boolean)
 }

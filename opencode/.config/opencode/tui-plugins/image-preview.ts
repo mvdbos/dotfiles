@@ -7,24 +7,30 @@ const DISMISS_TOOL = "image_dismiss"
 
 // iTerm2 draws graphics behind terminal text and the bundled OpenTUI has no
 // image renderable, so in-pane overlays always collide with the TUI. Show the
-// image in a native Quick Look panel (ESC closes it) instead; the resolved
-// path is already visible in the TUI as the tool title and output.
+// images in native viewer windows instead; the resolved paths are already
+// visible in the TUI as the tool title and output.
+//
+// macOS: Preview groups several images opened together into one window (the
+// thumbnail sidebar; View > Contact Sheet turns it into a grid). Preview
+// windows are real app windows, so they stay open until the user closes them;
+// there is no reliable way to dismiss only our windows, and killing Preview
+// would close the user's other documents.
+//
 // OPENCODE_IMAGE_PREVIEW_VIEWER / OPENCODE_IMAGE_PREVIEW_DISMISS override the
 // viewer and dismiss commands (used by integration tests).
-function viewerCommand(path: string): { command: string; args: string[] } | undefined {
+function viewerCommands(paths: string[]): Array<{ command: string; args: string[] }> {
   if (process.env.OPENCODE_IMAGE_PREVIEW_VIEWER) {
-    return { command: process.env.OPENCODE_IMAGE_PREVIEW_VIEWER, args: [path] }
+    return [{ command: process.env.OPENCODE_IMAGE_PREVIEW_VIEWER, args: paths }]
   }
-  if (process.platform === "darwin") return { command: "qlmanage", args: ["-p", path] }
-  if (process.platform === "linux") return { command: "xdg-open", args: [path] }
-  return undefined
+  if (process.platform === "darwin") return [{ command: "open", args: ["-a", "Preview", ...paths] }]
+  if (process.platform === "linux") return paths.map((path) => ({ command: "xdg-open", args: [path] }))
+  return []
 }
 
 function dismissCommand(): { command: string; args: string[] } | undefined {
   if (process.env.OPENCODE_IMAGE_PREVIEW_DISMISS) {
     return { command: process.env.OPENCODE_IMAGE_PREVIEW_DISMISS, args: [] }
   }
-  if (process.platform === "darwin") return { command: "killall", args: ["QLManage"] }
   return undefined
 }
 
@@ -34,14 +40,21 @@ function run(command: string, args: string[]): void {
   } catch {}
 }
 
-// Preferred contract: resolved path in tool metadata. Fallback: the output line
-// of parts recorded by older versions.
-function resolvedPath(part: ToolPart): string | undefined {
-  if (part.state.status !== "completed") return undefined
-  const metadataPath = part.state.metadata?.path
-  if (typeof metadataPath === "string" && metadataPath) return metadataPath
-  const match = /^Displayed image: (.+)$/m.exec(part.state.output)
-  return match?.[1]?.trim() || undefined
+// Preferred contract: resolved paths in tool metadata. Fallback: the output
+// lines of parts recorded by older versions (single path in `metadata.path`).
+function resolvedPaths(part: ToolPart): string[] {
+  if (part.state.status !== "completed") return []
+  const metadata = part.state.metadata
+  if (metadata) {
+    if (Array.isArray(metadata.paths)) {
+      const paths = metadata.paths.filter((path): path is string => typeof path === "string" && path.length > 0)
+      if (paths.length) return paths
+    }
+    if (typeof metadata.path === "string" && metadata.path) return [metadata.path]
+  }
+  return [...part.state.output.matchAll(/^Displayed image: (.+)$/gm)]
+    .map((match) => match[1]!.trim())
+    .filter(Boolean)
 }
 
 const tui: TuiPlugin = async (api) => {
@@ -52,9 +65,8 @@ const tui: TuiPlugin = async (api) => {
     if (command) run(command.command, command.args)
   }
 
-  const display = (path: string) => {
-    const command = viewerCommand(path)
-    if (command) run(command.command, command.args)
+  const display = (paths: string[]) => {
+    for (const command of viewerCommands(paths)) run(command.command, command.args)
   }
 
   api.event.on("message.part.updated", (event) => {
@@ -70,10 +82,10 @@ const tui: TuiPlugin = async (api) => {
         return
       }
       if (toolPart.tool !== DISPLAY_TOOL) return
-      const path = resolvedPath(toolPart)
-      if (!path) return
+      const paths = resolvedPaths(toolPart)
+      if (!paths.length) return
       lastPartID = part.id
-      display(path)
+      display(paths)
     } catch {}
   })
 

@@ -30,8 +30,11 @@ async function transform(instance: Hooks, messages: Array<{ parts: TextPart[] }>
   await instance["experimental.chat.messages.transform"]?.({}, { messages: messages as never })
 }
 
-function displayOutput(path: string): { output: string; metadata: unknown } {
-  return { output: `Displayed image: ${path}`, metadata: { path, format: "png" } }
+function displayOutput(...paths: string[]): { output: string; metadata: unknown } {
+  return {
+    output: paths.map((path) => `Displayed image: ${path}`).join("\n"),
+    metadata: { paths, formats: paths.map(() => "png") },
+  }
 }
 
 describe("image display annotation plugin", () => {
@@ -49,6 +52,15 @@ describe("image display annotation plugin", () => {
 
     expect(await completeText(instance, "s1", "Here they are.")).toBe(
       `Here they are.${displayAnnotation("/a.png")}${displayAnnotation("/b.png")}`,
+    )
+  })
+
+  test("annotates every path of a grouped display in order", async () => {
+    const instance = await hooks()
+    await afterTool(instance, { tool: "image_display", sessionID: "s1" }, displayOutput("/a.png", "/b.png"))
+
+    expect(await completeText(instance, "s1", "Contact sheet.")).toBe(
+      `Contact sheet.${displayAnnotation("/a.png")}${displayAnnotation("/b.png")}`,
     )
   })
 

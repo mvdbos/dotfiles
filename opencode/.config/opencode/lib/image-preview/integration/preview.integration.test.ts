@@ -20,9 +20,29 @@ const script: MockStep[] = [
   { kind: "tool", name: "image_display", args: { path: "sub/relative.png" } },
   { kind: "tool", name: "image_display", args: { path: "/tmp/image-preview-does-not-exist.png" } },
   { kind: "tool", name: "image_display", args: { path: `${FIXTURES}/big-screenshot.png` } },
+  {
+    kind: "tool",
+    name: "image_display",
+    args: { path: [`${FIXTURES}/landscape.png`, `${FIXTURES}/big-screenshot.png`] },
+  },
   { kind: "tool", name: "image_dismiss", args: {} },
   { kind: "text", text: "Done." },
 ]
+
+// The viewer wrapper writes one file per spawn containing that spawn's
+// arguments, one per line. Detached viewers run concurrently, so a shared
+// append-only log interleaves lines; per-spawn files keep grouped viewers
+// (multiple paths in one spawn) distinguishable from repeated single spawns.
+async function viewerSpawnGroups(dir: string): Promise<string[][]> {
+  const entries = await fs.readdir(dir).catch(() => [])
+  const groups: string[][] = []
+  for (const entry of entries.sort()) {
+    const content = await readFile(path.join(dir, entry), "utf8")
+    const lines = content.split("\n").filter(Boolean)
+    if (lines.length) groups.push(lines)
+  }
+  return groups
+}
 
 type Bundle = { info: Record<string, any>; parts: Array<Record<string, any>> }
 
@@ -54,24 +74,27 @@ async function createSession(instance: Instance, title: string): Promise<string>
 describe("image preview end-to-end (viewer spawner)", () => {
   let instance: Instance | undefined
   let sessionID: string
-  let viewerLog: string
+  let viewerDir: string
   let dismissLog: string
 
   beforeAll(async () => {
     instance = await startInstance(script)
     await copyFile(`${FIXTURES}/spaces source (1).png`, path.join(instance.workdir, "sub", "relative.png"))
-    viewerLog = path.join(instance.home, "viewer.log")
+    viewerDir = path.join(instance.home, "viewer.spawns")
     dismissLog = path.join(instance.home, "dismiss.log")
     const viewerScript = path.join(instance.home, "record-viewer.sh")
     const dismissScript = path.join(instance.home, "record-dismiss.sh")
-    await writeFile(viewerScript, "#!/bin/sh\necho \"$1\" >> \"$VIEWER_LOG\"\n")
+    await writeFile(
+      viewerScript,
+      "#!/bin/sh\ndir=\"$VIEWER_DIR\"\nmkdir -p \"$dir\"\nfile=$(mktemp \"$dir/spawn.XXXXXX\")\nfor arg in \"$@\"; do echo \"$arg\" >> \"$file\"; done\n",
+    )
     await writeFile(dismissScript, "#!/bin/sh\necho DISMISS >> \"$DISMISS_LOG\"\n")
     await chmod(viewerScript, 0o755)
     await chmod(dismissScript, 0o755)
     await startTui(instance, {
       OPENCODE_IMAGE_PREVIEW_VIEWER: viewerScript,
       OPENCODE_IMAGE_PREVIEW_DISMISS: dismissScript,
-      VIEWER_LOG: viewerLog,
+      VIEWER_DIR: viewerDir,
       DISMISS_LOG: dismissLog,
     })
     sessionID = await createSession(instance, "image preview e2e")
@@ -97,7 +120,7 @@ describe("image preview end-to-end (viewer spawner)", () => {
     expect(names).toContain("image_dismiss")
   })
 
-  test("tool returns expected outputs in order (abs, relative, missing, big, dismiss)", async () => {
+  test("tool returns expected outputs in order (abs, relative, missing, big, grouped, dismiss)", async () => {
     const parts = await toolParts(instance!, sessionID)
     const ours = parts.filter((part) => part.tool === "image_display" || part.tool === "image_dismiss")
     // The server resolves the session directory through /var -> /private/var.
@@ -107,41 +130,53 @@ describe("image preview end-to-end (viewer spawner)", () => {
       `Displayed image: ${path.join(realWorkdir, "sub", "relative.png")}`,
       "Image not found: /tmp/image-preview-does-not-exist.png",
       `Displayed image: ${FIXTURES}/big-screenshot.png`,
+      `Displayed image: ${FIXTURES}/landscape.png\nDisplayed image: ${FIXTURES}/big-screenshot.png`,
       "Dismissed displayed image",
     ])
   })
 
-  test("completed displays expose resolved path as title and metadata", async () => {
+  test("completed displays expose resolved paths as title and metadata", async () => {
     const parts = await toolParts(instance!, sessionID)
     const displays = parts.filter((part) => part.tool === "image_display" && part.state?.status === "completed")
     const realWorkdir = await fs.realpath(instance!.workdir)
-    const shown = displays.filter((part) => typeof part.state.metadata?.path === "string")
-    expect(displays).toHaveLength(4)
+    const shown = displays.filter((part) => Array.isArray(part.state.metadata?.paths))
+    expect(displays).toHaveLength(5)
     expect(shown.map((part) => part.state.title)).toEqual([
       `${FIXTURES}/landscape.png`,
       "sub/relative.png",
       `${FIXTURES}/big-screenshot.png`,
+      `${FIXTURES}/landscape.png (+1 more)`,
     ])
-    expect(shown.map((part) => part.state.metadata.path)).toEqual([
-      `${FIXTURES}/landscape.png`,
-      path.join(realWorkdir, "sub", "relative.png"),
-      `${FIXTURES}/big-screenshot.png`,
+    expect(shown.map((part) => part.state.metadata.paths)).toEqual([
+      [`${FIXTURES}/landscape.png`],
+      [path.join(realWorkdir, "sub", "relative.png")],
+      [`${FIXTURES}/big-screenshot.png`],
+      [`${FIXTURES}/landscape.png`, `${FIXTURES}/big-screenshot.png`],
     ])
     const failed = displays.find((part) => part.state.input?.path === "/tmp/image-preview-does-not-exist.png")
-    expect(failed?.state.metadata?.path).toBeUndefined()
+    expect(failed?.state.metadata?.paths).toBeUndefined()
   })
 
-  test("viewer is spawned once per successful display with resolved paths", async () => {
+  test("viewer is spawned once per display, with all paths of a grouped display in one spawn", async () => {
     const realWorkdir = await fs.realpath(instance!.workdir)
-    // Viewers are spawned detached, so their shell wrappers write to the log in
-    // OS scheduling order; the set of spawns is the contract, not the order.
-    const opened = (await readFile(viewerLog, "utf8")).split("\n").filter(Boolean).sort()
-    expect(opened).toEqual(
+    // Viewers are spawned detached, so their shell wrappers write their spawn
+    // files in OS scheduling order; the set of spawns is the contract, not the
+    // order, and a spawn file may still be mid-write when its sibling exists.
+    const groups = await waitFor("viewer spawns", async () => {
+      const found = await viewerSpawnGroups(viewerDir)
+      const paths = found.reduce((count, group) => count + group.length, 0)
+      return found.length >= 4 && paths >= 5 ? found : undefined
+    })
+    const normalized = (group: string[]) => [...group].sort()
+    expect(groups.map(normalized).sort()).toEqual(
       [
-        `${FIXTURES}/landscape.png`,
-        path.join(realWorkdir, "sub", "relative.png"),
-        `${FIXTURES}/big-screenshot.png`,
-      ].sort(),
+        [`${FIXTURES}/landscape.png`],
+        [path.join(realWorkdir, "sub", "relative.png")],
+        [`${FIXTURES}/big-screenshot.png`],
+        [`${FIXTURES}/landscape.png`, `${FIXTURES}/big-screenshot.png`],
+      ]
+        .map(normalized)
+        .sort(),
     )
   })
 
@@ -168,6 +203,8 @@ describe("image preview end-to-end (viewer spawner)", () => {
     expect(parts.text).toBe(
       `Done.${displayAnnotation(`${FIXTURES}/landscape.png`)}${displayAnnotation(
         path.join(realWorkdir, "sub", "relative.png"),
+      )}${displayAnnotation(`${FIXTURES}/big-screenshot.png`)}${displayAnnotation(
+        `${FIXTURES}/landscape.png`,
       )}${displayAnnotation(`${FIXTURES}/big-screenshot.png`)}`,
     )
 

@@ -1,10 +1,10 @@
 import type { Plugin } from "@opencode-ai/plugin"
-import { annotateDisplayedImages, displayedImagePath, stripDisplayAnnotations } from "../image-display-annotation/helpers"
+import { annotateDisplayedImages, displayedImagePaths, stripDisplayAnnotations } from "../image-display-annotation/helpers"
 
 // Transcript half of the image preview feature. Successful `image_display`
-// calls queue their resolved path; the next assistant text part that completes
-// gets a marker-suffixed "Displayed image: <path>" line appended, so the path
-// is visible even when the TUI hides completed tool calls. The server-side
+// calls queue their resolved paths; the next assistant text part that completes
+// gets one marker-suffixed "Displayed image: <path>" line per image appended,
+// so the paths are visible even when the TUI hides completed tool calls. The server-side
 // half of the async-reasoning-titles pattern applies: the marker-verified
 // annotation is stored in the transcript but stripped from outgoing provider
 // requests by `experimental.chat.messages.transform`, so provider context and
@@ -19,11 +19,11 @@ export const ImageDisplayAnnotationPlugin: Plugin = async () => {
       pending.delete(input.sessionID)
     },
     "tool.execute.after": async (input, output) => {
-      const path = displayedImagePath(input.tool, output.output, output.metadata)
-      if (!path) return
+      const displayed = displayedImagePaths(input.tool, output.output, output.metadata)
+      if (!displayed.length) return
       const paths = pending.get(input.sessionID)
-      if (paths) paths.push(path)
-      else pending.set(input.sessionID, [path])
+      if (paths) paths.push(...displayed)
+      else pending.set(input.sessionID, [...displayed])
     },
     "experimental.text.complete": async (input, output) => {
       const paths = pending.get(input.sessionID)

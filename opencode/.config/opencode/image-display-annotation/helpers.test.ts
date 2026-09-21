@@ -3,7 +3,7 @@ import {
   ANNOTATION_MARKER,
   annotateDisplayedImages,
   displayAnnotation,
-  displayedImagePath,
+  displayedImagePaths,
   stripDisplayAnnotations,
 } from "./helpers"
 
@@ -38,21 +38,31 @@ describe("image display annotation helpers", () => {
     expect(stripDisplayAnnotations(text)).toBe(`Done.\n\n${modelAuthored}`)
   })
 
-  test("prefers the metadata path", () => {
-    expect(displayedImagePath("image_display", "Displayed image: /output.png", { path: "/meta.png" })).toBe(
-      "/meta.png",
-    )
+  test("prefers the metadata paths", () => {
+    expect(displayedImagePaths("image_display", "Displayed image: /output.png", { paths: ["/a.png", "/b.png"] })).toEqual([
+      "/a.png",
+      "/b.png",
+    ])
   })
 
-  test("falls back to the output line", () => {
-    expect(displayedImagePath("image_display", "Displayed image: /out.png", {})).toBe("/out.png")
+  test("accepts the legacy single metadata path", () => {
+    expect(displayedImagePaths("image_display", "Displayed image: /output.png", { path: "/meta.png" })).toEqual([
+      "/meta.png",
+    ])
+  })
+
+  test("falls back to every output line", () => {
+    expect(displayedImagePaths("image_display", "Displayed image: /a.png\nDisplayed image: /b c.png", {})).toEqual([
+      "/a.png",
+      "/b c.png",
+    ])
   })
 
   test("rejects other tools and failed displays", () => {
-    expect(displayedImagePath("bash", "Displayed image: /out.png", { path: "/meta.png" })).toBeUndefined()
-    expect(displayedImagePath("image_display", "Image not found: /missing.png", {})).toBeUndefined()
-    expect(displayedImagePath("image_display", "Dismissed displayed image", {})).toBeUndefined()
-    expect(displayedImagePath("image_display", undefined, {})).toBeUndefined()
-    expect(displayedImagePath("image_display", "Displayed image: ", { path: "" })).toBeUndefined()
+    expect(displayedImagePaths("bash", "Displayed image: /out.png", { paths: ["/meta.png"] })).toEqual([])
+    expect(displayedImagePaths("image_display", "Image not found: /missing.png", {})).toEqual([])
+    expect(displayedImagePaths("image_display", "Dismissed displayed image", {})).toEqual([])
+    expect(displayedImagePaths("image_display", undefined, {})).toEqual([])
+    expect(displayedImagePaths("image_display", "Displayed image: ", { path: "" })).toEqual([])
   })
 })
