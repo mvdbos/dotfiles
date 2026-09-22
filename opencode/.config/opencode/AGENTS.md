@@ -26,3 +26,11 @@ Primary agents MUST delegate investigation through the `task` tool before doing 
 
 Example: "map how one sync run flows through this codebase" → call `task` with `subagent_type: "explore"` immediately, then synthesize its findings.
 Do NOT read through many files yourself first and then decide to continue alone; that is what `explore` is for. NEVER send reviews, audits, or research to `explore`; it only finds and reads code. Give each delegated task one focused objective plus enough context to proceed without clarification. When an explore report leaves unresolved discovery gaps, launch a new focused `explore` task before doing that discovery yourself, even when candidate files are already known. Brief it with only the unresolved gaps and relevant evidence from the prior report. Resume the prior task only when it was interrupted before producing a usable report.
+
+## Visual verification
+
+When a change affects rendered output — game visuals, UI, charts, images — render it and inspect the result yourself before declaring success, then display the image in the transcript. Code-only changes need no capture.
+
+## Commits
+
+Commit once a requested unit of work is complete and verified: stage only intended files, keep one completed unit per commit, and follow the repo's message style. Do not batch a run's finished work into one late commit.
