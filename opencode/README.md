@@ -1,14 +1,16 @@
 # OpenCode Configuration
 
-This package contains OpenCode configuration and custom skills.
+This package contains the global OpenCode harness: configuration, commands, plugins, and workflow skills.
 
 ## Contents
 
 - `opencode.json` - OpenCode permissions and settings
 - `package.json` - OpenCode plugin dependencies (@opencode-ai/plugin)
-- `skills/` - Custom OpenCode skills
-  - `commit/` - Guides proper git commit formatting with user approval
-  - `skill-creator/` - Guide for creating new OpenCode skills
+- `.config/opencode/skills/` - 19 locally maintained workflow skills, installed globally by Stow
+- `.config/opencode/references/` - Shared skill references (including `grilling.md`)
+- `.config/opencode/command/afk.md` - Autonomous implementation command
+
+`hf-cli` is installed independently under `~/.agents/skills/` and is not a harness dependency. The suite was migrated from `mvdbos/dotagents` at commit `4955cfc`, with the previously uncommitted triage changes preserved and its grilling pointer repaired during import. Most skills derive from `mattpocock/skills`; `audit-opencode-session` was authored locally. See [the ownership decision](../docs/adr/0001-opencode-owns-workflow-skills.md).
 
 ## Configuration Highlights
 
@@ -64,12 +66,7 @@ Edit `opencode.json` to change permission settings. Changes take effect immediat
 
 ### Adding Skills
 
-Add new skill directories to `skills/`. Each skill should have:
-- `SKILL.md` - Main skill definition
-- `LICENSE.txt` - License information
-- Optional: `references/` and `scripts/` directories
-
-Refer to the `skill-creator` skill for guidance on creating new skills.
+Add a complete skill directory under `.config/opencode/skills/`, with a `SKILL.md` and its support files. Put shared, non-discoverable references under `.config/opencode/references/`; update callers and run `bun test ./skills/closure.test.js` from `.config/opencode/` to check Stow installation and dependency closure.
 
 ### Updating Dependencies
 
