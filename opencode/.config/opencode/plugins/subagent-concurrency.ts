@@ -89,6 +89,20 @@ export const SubagentConcurrencyPlugin: Plugin = async ({ client }) => {
   const children = new Map<string, Admission>()
   const direct = new Map<string, Admission>()
 
+  const rejectNestedTask = async (sessionID: string) => {
+    let isChildSession = false
+    try {
+      const response = await client.session.get({ path: { id: sessionID } })
+      const info = record((response as { data?: unknown }).data)
+      isChildSession = typeof info?.parentID === "string"
+    } catch {
+      // Session lookup failure should not disable the existing admission controls.
+    }
+    if (isChildSession) {
+      throw new Error("Subagents cannot spawn further subagents. Keep this task focused and report findings to the parent.")
+    }
+  }
+
   const queueFor = (agent: string) => {
     const existing = queues.get(agent)
     if (existing) return existing
@@ -176,6 +190,7 @@ export const SubagentConcurrencyPlugin: Plugin = async ({ client }) => {
       output: { args: unknown },
     ) => {
       if (input.tool !== TASK_TOOL) return
+      await rejectNestedTask(input.sessionID)
       const agent = controlledAgentFromArgs(output.args)
       if (!agent) return
       const admission = await acquire(input.sessionID, input.callID, agent)

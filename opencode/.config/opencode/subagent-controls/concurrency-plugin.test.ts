@@ -10,9 +10,11 @@ afterEach(() => {
   else process.env.OPENCODE_SUBAGENT_QUEUE_PATH = originalPath
 })
 
-async function hooks() {
+async function hooks(sessionInfo?: Record<string, unknown>) {
   process.env.OPENCODE_SUBAGENT_QUEUE_PATH ??= `/tmp/opencode-subagent-plugin-${crypto.randomUUID()}.sqlite`
-  return SubagentConcurrencyPlugin({ client: {} } as never)
+  return SubagentConcurrencyPlugin({
+    client: { session: { get: async () => ({ data: sessionInfo ?? { id: "parent" } }) } },
+  } as never)
 }
 
 async function beforeTask(
@@ -38,6 +40,14 @@ async function afterTask(
 }
 
 describe("SubagentConcurrencyPlugin", () => {
+  test("blocks task calls from any child session", async () => {
+    const plugin = await hooks({ id: "child", parentID: "root", agent: "explore" })
+
+    await expect(beforeTask(plugin, "custom-worker", "nested-task")).rejects.toThrow(
+      "Subagents cannot spawn further subagents",
+    )
+  })
+
   test("serializes the same agent while admitting another controlled agent", async () => {
     const first = await hooks()
     const second = await hooks()
