@@ -226,6 +226,13 @@ export class WatchdogRuntime {
     if (state.inFlight) void this.cancelInFlight(state, "plan")
   }
 
+  async handleGoalPause(sessionID: string): Promise<void> {
+    const state = this.states.get(sessionID)
+    if (!state) return
+    suppressWatchdog(state)
+    if (state.inFlight) await this.cancelInFlight(state, "goal_paused")
+  }
+
   recordTerminalTool(sessionID: string, part: Record<string, unknown>): void {
     if (this.disposed) return
     const state = this.states.get(sessionID)
@@ -915,6 +922,11 @@ export function createWatchdogHooks(runtime: WatchdogRuntime): Hooks {
     },
     "tool.execute.after": async (input, output) => {
       if (runtime.activeCriticSessions.has(input.sessionID)) return
+      const goalStatus = (input.args as { status?: unknown } | undefined)?.status
+      if (input.tool === "update_goal_status" && goalStatus === "paused") {
+        await runtime.handleGoalPause(input.sessionID)
+        return
+      }
       runtime.deliverPendingAdvisory(input.sessionID, input.tool, output)
       if (input.tool !== "task") return
       const args = input.args as { subagent_type?: unknown; background?: unknown } | undefined

@@ -1297,6 +1297,33 @@ describe("watchdog plugin runtime", () => {
     expect(calls.prompts).toHaveLength(0)
   })
 
+  test("a successful goal pause suppresses idle review until the next real turn", async () => {
+    const { runtime, calls } = makeRuntime({}, { foreignContinuationSettleMs: 0 })
+    await realTurn(runtime)
+    const hooks = createWatchdogHooks(runtime)
+
+    await hooks["tool.execute.after"]?.(
+      { sessionID: "root", tool: "update_goal_status", callID: "pause-1", args: { status: "paused" } } as never,
+      { title: "Goal paused", output: "Goal paused.", metadata: {} } as never,
+    )
+
+    const state = runtime.states.get("root")!
+    expect(state.suppressed).toBe(true)
+    runtime.handleIdle("root")
+    await Bun.sleep(20)
+    expect(calls.create).toHaveLength(0)
+
+    await runtime.handleChatMessage(
+      { sessionID: "root", agent: "build", messageID: "u1" },
+      { parts: [{ type: "text", text: "Continue without the goal." }] },
+    )
+    runtime.recordAssistantText("root", "a2", "Continuing normally.")
+    expect(state.suppressed).toBe(false)
+    runtime.handleIdle("root")
+    await Bun.sleep(20)
+    expect(calls.create).toHaveLength(1)
+  })
+
   test("a plan-agent foreign continuation suppresses idle and cadence admission", async () => {
     const { runtime, calls } = makeRuntime({}, { everyTools: 5, foreignContinuationSettleMs: 0 })
     runtime.observeSessionCreated({ id: "root" })
