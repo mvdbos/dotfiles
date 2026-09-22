@@ -258,7 +258,7 @@ export function materializePacket(
   baselines: PacketBaselines,
   candidate?: RevalidationCandidate,
 ): WatchdogPacket {
-  const tools = [...evidence.tools].sort((left, right) => right.seq - left.seq)
+  const tools = [...evidence.tools].sort((left, right) => left.seq - right.seq)
   const failures: Array<{ tool: string; evidence: string }> = []
   const failureEvidence = evidence.failureCandidates ?? []
   const fresh = failureEvidence.filter((failure) => failure.seq > baselines.lastCheckToolSeq).sort((a, b) => b.seq - a.seq)
@@ -337,8 +337,8 @@ export function fitUserPrompt(packet: WatchdogPacket, options: { maxBytes?: numb
       {
         name: "tools",
         apply: () => {
-          const index = current.tools.findLastIndex((tool) => tool.status === "completed")
-          const target = index >= 0 ? index : current.tools.length - 1
+          const index = current.tools.findIndex((tool) => tool.status === "completed")
+          const target = index >= 0 ? index : current.tools.length > 0 ? 0 : -1
           if (target < 0) return false
           current.tools.splice(target, 1)
           return true

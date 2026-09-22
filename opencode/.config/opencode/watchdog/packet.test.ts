@@ -166,12 +166,34 @@ describe("packet bounds", () => {
 })
 
 describe("materialization", () => {
+  test("presents the newest bounded tools in chronological order", () => {
+    const evidence = boundEvidence(
+      claimed({
+        tools: [1, 2, 3, 4].map((seq) => ({
+          seq,
+          name: "bash",
+          status: "completed" as const,
+          input: `run-${seq}`,
+          result: seq === 2 ? "test failed" : seq === 4 ? "tests passed" : "ok",
+        })),
+      }),
+      { maxRecentTools: 3 },
+    )
+
+    const materialized = materializePacket(evidence, "cadence", {
+      lastCheckToolSeq: 0,
+      previousChangeHashes: new Map(),
+    })
+
+    expect(materialized.tools.map((tool) => tool.seq)).toEqual([2, 3, 4])
+  })
+
   test("marks freshness against the previous sequence baseline and prioritizes fresh failures", () => {
     const materialized = materializePacket(claimed(), "cadence", {
       lastCheckToolSeq: 6,
       previousChangeHashes: new Map([["src/a.ts", "hash-a"]]),
     })
-    expect(materialized.tools[0]!.seq).toBe(9)
+    expect(materialized.tools.map((tool) => tool.seq)).toEqual([1, 5, 9])
     expect(materialized.tools.find((tool) => tool.seq === 9)!.sincePreviousCheck).toBe(true)
     expect(materialized.tools.find((tool) => tool.seq === 5)!.sincePreviousCheck).toBe(false)
     expect(materialized.failures!.map((failure) => failure.evidence)).toEqual(["new failure", "old failure"])
