@@ -284,7 +284,7 @@
     "explore": {
       "model": "omlx/Qwen3.5-4B-oQ4e-mtp",
       "prompt": "{file:./explore-controls/explore-prompt.txt}",
-      "description": "Codebase explorer for discovery and evidence gathering. Use for broad or multi-file exploration: finding files by pattern (eg. \"src/components/**/*.tsx\"), searching for keywords, tracing code paths, or answering how-the-codebase-works questions (eg. \"how do API endpoints work?\"). Do NOT use for reviews, audits, or research; use general for those. Keep each task focused and bounded; split broad investigations into smaller tasks, since search budget and context are limited and findings may be partial.",
+      "description": "Codebase explorer for discovery and evidence gathering. Use for broad or multi-file exploration: finding files by pattern (eg. \"src/components/**/*.tsx\"), searching for keywords, tracing code paths, answering how-the-codebase-works questions (eg. \"how do API endpoints work?\"), or filling unresolved discovery gaps from an earlier explore report. Do NOT use for reviews, audits, or research; use general for those. Keep each task focused and bounded; split broad investigations into smaller tasks because search budget and context are limited.",
       "options": {
         "enable_thinking": false
       },

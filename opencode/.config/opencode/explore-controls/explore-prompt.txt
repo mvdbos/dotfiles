@@ -12,5 +12,5 @@ Search:
 
 Report:
 - Answer the caller's question concisely, with absolute file paths and line references for supporting code.
-- State unresolved questions and coverage gaps explicitly. If incomplete, suggest the next focused lookup.
+- State unresolved questions and coverage gaps explicitly. If incomplete, provide the next focused lookup as a self-contained objective with relevant file or symbol evidence.
 - Do not treat an unsuccessful search as proof that something does not exist.

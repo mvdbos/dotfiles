@@ -22,7 +22,7 @@ Primary agents MUST delegate investigation through the `task` tool before doing 
 
 1. A request to explore, map, trace, or explain how the code works across files → `task` with `subagent_type: "explore"`.
 2. A request to review, audit, research, or investigate something with many steps → `task` with `subagent_type: "general"`.
-3. One known file, one command, a small edit, final verification, or synthesis of subagent results → do it yourself.
+3. A single known-file lookup, one command, a small edit, spot-checking evidence a subagent already inspected and cited, or synthesis of subagent results → do it yourself.
 
 Example: "map how one sync run flows through this codebase" → call `task` with `subagent_type: "explore"` immediately, then synthesize its findings.
-Do NOT read through many files yourself first and then decide to continue alone; that is what `explore` is for. NEVER send reviews, audits, or research to `explore`; it only finds and reads code. Give each delegated task one focused objective plus enough context to work without follow-up, then verify and synthesize its findings yourself.
+Do NOT read through many files yourself first and then decide to continue alone; that is what `explore` is for. NEVER send reviews, audits, or research to `explore`; it only finds and reads code. Give each delegated task one focused objective plus enough context to proceed without clarification. When an explore report leaves unresolved discovery gaps, launch a new focused `explore` task before doing that discovery yourself, even when candidate files are already known. Brief it with only the unresolved gaps and relevant evidence from the prior report. Resume the prior task only when it was interrupted before producing a usable report.
