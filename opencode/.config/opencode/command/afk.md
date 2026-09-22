@@ -26,4 +26,4 @@ Approved scope:
 $ARGUMENTS
 </afk_goal>
 
-4. After `create_goal` succeeds, begin implementation in this turn. Do not stop after announcing that the goal is active. The goal plugin owns persistence, idle continuation, compaction recovery, limits, and evidence-based closure.
+4. After `create_goal` succeeds, load the `implement` skill and use it for every implementation unit, beginning implementation in this turn. Do not stop after announcing that the goal is active. The goal plugin owns persistence, idle continuation, compaction recovery, limits, and evidence-based closure.
