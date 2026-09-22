@@ -1,6 +1,7 @@
 import type { AcceptedConcern } from "./noise"
 import { DUPLICATE_HISTORY_LIMIT, newDeliveryBudget, type DeliveryBudget } from "./noise"
 import type { SubagentLease } from "../subagent-controls/concurrency-queue"
+import { failureFromTool } from "./collect"
 import {
   boundEvidence,
   type ChangeFingerprint,
@@ -264,8 +265,9 @@ export function recordTool(
   state.terminalCallIDs.add(observation.callID)
   state.recentTools.push(observation)
   state.unclaimedSignificantTools += 1
-  if (observation.status === "error" && observation.result.trim()) {
-    state.failureCandidates.push({ seq: observation.seq, tool: observation.name, evidence: `${observation.name}: ${observation.result}` })
+  const failure = failureFromTool(observation)
+  if (failure) {
+    state.failureCandidates.push(failure)
     if (state.failureCandidates.length > 64) state.failureCandidates.splice(0, state.failureCandidates.length - 64)
   }
   if (change) {

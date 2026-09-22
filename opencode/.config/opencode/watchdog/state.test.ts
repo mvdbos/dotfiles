@@ -35,6 +35,18 @@ describe("tool accounting", () => {
     expect(state.recentTools.size).toBe(1)
   })
 
+  test("records non-zero shell exits as failure candidates", () => {
+    const state = createSessionState()
+    recordTool(state, tool(1))
+    recordTool(state, { ...tool(2), exitCode: 1 })
+    expect(state.failureCandidates).toEqual([{ seq: 2, tool: "bash", evidence: "bash: result-2" }])
+    recordTool(state, tool(3, "call-3", "error"))
+    expect(state.failureCandidates).toEqual([
+      { seq: 2, tool: "bash", evidence: "bash: result-2" },
+      { seq: 3, tool: "bash", evidence: "bash: result-3" },
+    ])
+  })
+
   test("claims at the threshold and freezes absolute evidence", () => {
     const state = createSessionState()
     for (let seq = 1; seq <= 3; seq += 1) recordTool(state, tool(seq))

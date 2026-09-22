@@ -12,6 +12,7 @@ export type ToolObservation = {
   status: "completed" | "error"
   input: string
   result: string
+  exitCode?: number
 }
 
 export type FailureCandidate = {

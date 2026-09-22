@@ -58,7 +58,7 @@ describe("significant tool classification", () => {
     expect(terminalToolObservation(toolPart({ tool: "todowrite" }), 6)).toBeUndefined()
   })
 
-  test("derives bounded failure evidence from error calls only", () => {
+  test("derives bounded failure evidence from error calls and non-zero exits", () => {
     const failed = terminalToolObservation(
       toolPart({ state: { status: "error", input: { command: "false" }, error: "exit 1" } }),
       4,
@@ -66,6 +66,26 @@ describe("significant tool classification", () => {
     expect(failureFromTool(failed)).toEqual({ seq: 4, tool: "bash", evidence: "bash: exit 1" })
     const completed = terminalToolObservation(toolPart(), 3)!
     expect(failureFromTool(completed)).toBeUndefined()
+    const exited = terminalToolObservation(
+      toolPart({ state: { status: "completed", input: { command: "false" }, output: "boom\n", metadata: { exit: 1 } } }),
+      7,
+    )!
+    expect(exited).toMatchObject({ seq: 7, status: "completed", exitCode: 1 })
+    expect(failureFromTool(exited)).toEqual({ seq: 7, tool: "bash", evidence: "bash: boom\n" })
+    const healthy = terminalToolObservation(
+      toolPart({ state: { status: "completed", input: { command: "true" }, output: "", metadata: { exit: 0 } } }),
+      8,
+    )!
+    expect(healthy.exitCode).toBe(0)
+    expect(failureFromTool(healthy)).toBeUndefined()
+  })
+
+  test("treats non-zero exits with no output as failures from the command input", () => {
+    const exited = terminalToolObservation(
+      toolPart({ state: { status: "completed", input: { command: "rtk ls missing/" }, output: "", metadata: { exitCode: 2 } } }),
+      9,
+    )!
+    expect(failureFromTool(exited)).toEqual({ seq: 9, tool: "bash", evidence: 'bash: {"command":"rtk ls missing/"}' })
   })
 })
 

@@ -142,4 +142,40 @@ describe("live watchdog evaluation (opt-in)", () => {
     },
     30 * 60_000,
   )
+
+  maybe(
+    "does not call listed published artifacts missing",
+    async () => {
+      const fixture = EVALUATION_CORPUS.find((candidate) => candidate.id === "published-artifacts-present")
+      expect(fixture).toBeDefined()
+      const fitted = fitUserPrompt(fixture!.packet)
+      if ("error" in fitted) throw new Error(fitted.error)
+
+      const client = httpCriticClient(instance.baseUrl)
+      const runner = new CriticRunner({ client })
+      const root = await createSession(instance, "watchdog-published-artifacts-eval")
+      const model = { providerID: LIVE_MODEL.split("/")[0]!, modelID: LIVE_MODEL.split("/")[1]! }
+      const outcomes: string[] = []
+      let correct = 0
+
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const result = await runner.run({
+          rootSessionID: root,
+          agent: "watchdog-critic",
+          model,
+          prompt: fitted.prompt,
+          timeoutMs: 30_000,
+        })
+        if (result.kind === "ok") correct += 1
+        outcomes.push(
+          result.kind === "ok" || result.kind === "concern" || result.kind === "malformed"
+            ? `${result.kind}:${result.raw ?? ""}`
+            : result.kind,
+        )
+      }
+
+      if (correct < 4) throw new Error(`Expected at least 4/5 ok responses, got ${correct}: ${JSON.stringify(outcomes)}`)
+    },
+    5 * 60_000,
+  )
 })

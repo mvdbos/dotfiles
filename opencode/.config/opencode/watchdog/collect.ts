@@ -55,6 +55,9 @@ export function terminalToolObservation(
   if (!isSignificantTool(part.tool, exclusions)) return undefined
   const callID = typeof part.callID === "string" && part.callID ? part.callID : `seq-${seq}`
   const result = status === "error" ? serializeCompact(part.state?.error) : serializeCompact(part.state?.output)
+  const metadata = recordValue(part.state?.metadata)
+  const rawExit = metadata?.exit ?? metadata?.exitCode
+  const exitCode = typeof rawExit === "number" && Number.isFinite(rawExit) ? Math.round(rawExit) : undefined
   return {
     seq,
     callID,
@@ -62,11 +65,13 @@ export function terminalToolObservation(
     status,
     input: serializeCompact(part.state?.input),
     result,
+    ...(exitCode === undefined ? {} : { exitCode }),
   }
 }
 
 export function failureFromTool(observation: ToolObservation): FailureCandidate | undefined {
-  if (observation.status !== "error") return undefined
+  const failed = observation.status === "error" || (observation.exitCode !== undefined && observation.exitCode !== 0)
+  if (!failed) return undefined
   const evidence = observation.result || observation.input
   if (!evidence.trim()) return undefined
   return { seq: observation.seq, tool: observation.name, evidence: `${observation.name}: ${evidence}` }
