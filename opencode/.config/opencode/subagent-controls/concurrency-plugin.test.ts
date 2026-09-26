@@ -10,10 +10,16 @@ afterEach(() => {
   else process.env.OPENCODE_SUBAGENT_QUEUE_PATH = originalPath
 })
 
-async function hooks(sessionInfo?: Record<string, unknown>) {
+async function hooks(sessionInfo?: Record<string, unknown>, sessions: Record<string, Record<string, unknown>> = {}) {
   process.env.OPENCODE_SUBAGENT_QUEUE_PATH ??= `/tmp/opencode-subagent-plugin-${crypto.randomUUID()}.sqlite`
   return SubagentConcurrencyPlugin({
-    client: { session: { get: async () => ({ data: sessionInfo ?? { id: "parent" } }) } },
+    client: {
+      session: {
+        get: async ({ path }: { path: { id: string } }) => ({
+          data: sessions[path.id] ?? sessionInfo ?? { id: "parent" },
+        }),
+      },
+    },
   } as never)
 }
 
@@ -65,6 +71,44 @@ describe("SubagentConcurrencyPlugin", () => {
     await waiting
     expect(secondExploreStarted).toBe(true)
     await afterTask(second, "explore-b", "second-explore-child")
+  })
+
+  test("does not direct-admit an uncorrelated child session", async () => {
+    process.env.OPENCODE_SUBAGENT_EXPLORE_TIMEOUT_MS = "200"
+    const plugin = await hooks(
+      { id: "shared-parent" },
+      { "child-b": { id: "child-b", parentID: "shared-parent", agent: "explore" } },
+    )
+    try {
+      await beforeTask(plugin, "explore", "explore-a")
+      const waiting = beforeTask(plugin, "explore", "explore-b")
+      await plugin.event?.({
+        event: {
+          type: "session.created",
+          properties: { info: { id: "child-b", parentID: "shared-parent", agent: "explore" } },
+        },
+      } as never)
+
+      const childMessage = Promise.resolve(
+        plugin["chat.message"]?.(
+          { sessionID: "child-b", agent: "explore" },
+          { message: { agent: "explore" } } as never,
+        ),
+      ).catch(() => {})
+
+      const outcome = await Promise.race([
+        childMessage.then(() => "settled"),
+        Bun.sleep(150).then(() => "blocked"),
+      ])
+
+      await afterTask(plugin, "explore-a", "child-a")
+      await waiting
+      await afterTask(plugin, "explore-b", "child-b")
+      await childMessage
+      expect(outcome).toBe("settled")
+    } finally {
+      delete process.env.OPENCODE_SUBAGENT_EXPLORE_TIMEOUT_MS
+    }
   })
 
   test("correlates parallel children by parent and agent", async () => {

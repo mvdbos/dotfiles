@@ -143,19 +143,20 @@ export const SubagentConcurrencyPlugin: Plugin = async ({ client }) => {
     return matches.length === 1 ? matches[0] : undefined
   }
 
-  const linkExistingChild = async (sessionID: string, agent: string) => {
+  const classifySession = async (sessionID: string, agent: string): Promise<"root" | "child"> => {
     try {
       const response = await client.session.get({ path: { id: sessionID } })
       const info = record((response as { data?: unknown }).data)
       const parentID = typeof info?.parentID === "string" ? info.parentID : undefined
+      if (!parentID) return "root"
       const childAgent = typeof info?.agent === "string" ? info.agent : agent
-      if (!parentID || childAgent !== agent) return false
-      const admission = findParentAdmission(parentID, agent)
-      if (!admission || !isAdmission(admission)) return false
-      linkChild(admission, sessionID)
-      return true
+      if (childAgent === agent) {
+        const admission = findParentAdmission(parentID, agent)
+        if (admission && isAdmission(admission)) linkChild(admission, sessionID)
+      }
+      return "child"
     } catch {
-      return false
+      return "root"
     }
   }
 
@@ -218,7 +219,8 @@ export const SubagentConcurrencyPlugin: Plugin = async ({ client }) => {
     ) => {
       const agent = input.agent ?? output.message.agent
       if (!agent || !controlledSubagent(agent)) return
-      if (children.has(input.sessionID) || (await linkExistingChild(input.sessionID, agent))) return
+      if (children.has(input.sessionID)) return
+      if ((await classifySession(input.sessionID, agent)) === "child") return
 
       const admission = await acquire(input.sessionID, `direct:${input.sessionID}`, agent)
       if (!admission) return
