@@ -175,9 +175,6 @@ ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=20
 # ----------------------------------------------------------------------------
 true
 
-# opencode
-export PATH=/Users/matthijs/.opencode/bin:$PATH
-
 source /opt/homebrew/opt/git-extras/share/git-extras/git-extras-completion.zsh
 
 # Hermes Agent — ensure ~/.local/bin is on PATH
