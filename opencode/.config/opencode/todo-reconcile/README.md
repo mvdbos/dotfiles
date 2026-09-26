@@ -1,16 +1,15 @@
-# OpenCode todo reconciliation plugin
+# OpenCode post-compaction todo snapshots
 
 After a successful compaction, OpenCode resumes with a summarized history while the
 session's persisted todo list stays in the database. This plugin persists a compact snapshot
-on the resumed user message and asks the agent to reconcile the saved statuses against the
-summary and the user's latest instructions.
+on the resumed user message so the agent can see saved statuses alongside the summary and
+the user's latest instructions.
 
-It restores post-compaction task visibility and nudges the agent when an existing todo list
-has gone stale during uninterrupted work. It does not mutate todo statuses and never creates
+It restores post-compaction task visibility. It does not mutate todo statuses or create
 an agent turn.
 
 Verified against OpenCode **1.18.30** and **1.18.31**. Snapshot installation depends on
-`experimental.chat.messages.transform`; active-loop reminders use `tool.execute.after`. See
+`experimental.chat.messages.transform` and `experimental.session.compacting`. See
 `docs/delivery-contract.md` for the frozen hook contract and `docs/integration-report.md`
 for captured-request evidence.
 
@@ -76,7 +75,6 @@ plugin.** Plugins are loaded once at startup.
 rm ~/.config/opencode/plugins/todo-reconcile.ts      # config-dir layout
 rm ~/.config/opencode/plugins/todo-reconcile.js      # standalone bundle
 rm /path/to/project/.opencode/plugins/todo-reconcile.js  # project-local bundle
-rm ~/.config/opencode/todo-reconcile.json            # optional configuration
 ```
 
 or delete the `plugin` array entry, then restart OpenCode.
@@ -87,7 +85,7 @@ repository instead.
 
 ## Behaviour summary
 
-Post-compaction reconciliation:
+Post-compaction snapshots:
 
 - One durable snapshot per successful compaction boundary, written before that boundary's
   first provider request. Once visible, it remains byte-identical until ordinary compaction.
@@ -101,38 +99,6 @@ Post-compaction reconciliation:
 - When the target prompt explicitly disables `todowrite`, the guidance to correct statuses
   is omitted.
 
-Stale-todo nudge (pre-compaction):
-
-- When a visible successful `todowrite` baseline becomes stale, one short reminder is
-  appended synchronously to the next eligible successful tool output before persistence.
-  Later requests therefore retain exactly the same bytes.
-- One reminder per baseline. Another reminder requires a later successful `todowrite`.
-- The reminder contains no dynamic counts or persisted todo list.
-- Only existing non-empty lists are nudged. Sessions with no list, plan-agent turns, and
-  prompts with `todowrite: false` are skipped.
-- Time staleness is evaluated only when an eligible tool completes; no timer creates a model
-  request. Plan turns, disabled `todowrite`, human/informational tools, and unverified MCP
-  paths are excluded.
-
-## Configuration
-
-An optional `todo-reconcile.json` next to `opencode.json` (or the built bundle) configures
-the nudge. `OPENCODE_TODO_RECONCILE_CONFIG` overrides the path. Missing or invalid files
-fall back to the documented defaults and log one warning.
-
-```json
-{
-  "nudge": {
-    "enabled": true,
-    "toolThreshold": 10,
-    "minutesThreshold": 5
-  }
-}
-```
-
-`toolThreshold: 0` or `minutesThreshold: 0` disables that trigger; both zero disables
-nudging.
-
 ## Development
 
 Requirements: Bun, plus a local OpenCode binary for integration tests
@@ -142,24 +108,21 @@ Requirements: Bun, plus a local OpenCode binary for integration tests
 bun install
 bun run build             # dist/todo-reconcile.js
 bun test                  # all tests (unit + integration)
-bun run test:unit         # formatter, nudge, and lifecycle tests, no model, no server
+bun run test:unit         # formatter, snapshot lifecycle, and plugin tests, no model or server
 bun run test:integration  # real OpenCode instances + deterministic mock provider
 bun run typecheck         # tsc --noEmit against pinned @opencode-ai/plugin@1.18.30
 ```
 
 Layout:
 
-- `src/reminder.ts` — pure bounded todo-list formatter
-- `src/nudge.ts` — pure stale-todo predicate, baseline policy, and reminder text
+- `src/reminder.ts` — pure bounded, active-first snapshot formatter
 - `src/guard.ts` — one-shot compaction-summarizer skip guard
-- `src/config.ts` — optional `todo-reconcile.json` loader with defaults and warnings
-- `src/lifecycle.ts` — boundary detector, fail-open todo read, snapshot transform, tool-output delivery
+- `src/lifecycle.ts` — boundary detector, fail-open todo read, snapshot transform
 - `src/plugin.ts` — plugin entry point (single export, bundled to `dist/`)
-- `test/` — formatter, nudge, and lifecycle tests
+- `test/` — formatter, snapshot lifecycle, and plugin tests
 - `test/integration/` — OpenCode+mock-provider integration checks
 - `docs/delivery-contract.md` — verified hook contract and limitations
 - `docs/integration-report.md` — tested versions and captured-request evidence
-- `PLAN.md`, `tasks/` — original design plan and task briefs
 
 Installed on this machine as `~/.config/opencode/plugins/todo-reconcile.ts` (re-export
 wrapper); the build output `dist/todo-reconcile.js` is only for standalone installation.

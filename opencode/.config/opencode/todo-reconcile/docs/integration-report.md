@@ -8,7 +8,7 @@
 - Runtime: Bun 1.3.14
 
 The tested hook dependencies are `experimental.chat.messages.transform` for initial
-post-compaction installation and `tool.execute.after` for unseen tool-output trailers.
+post-compaction installation and `experimental.session.compacting` for summarizer exclusion.
 
 ## How to reproduce
 
@@ -32,34 +32,32 @@ is used.
 
 The integration suite covers the following scenarios (see `test/integration/reconcile.integration.test.ts`):
 
-1. **Manual compaction, then user input** — the summarizer request carries no reminder; the
-   first post-compaction user prompt carries exactly one reminder with all four todo
+1. **Manual compaction, then user input** — the summarizer request carries no snapshot; the
+   first post-compaction user prompt carries exactly one snapshot with all four todo
    statuses and the full items; later requests reuse that persisted snapshot.
 2. **Automatic continuation** — with `summarize(auto=true)`, the synthetic
-    "Continue if you have next steps" request carries the reminder; summarizer input is clean;
-    later user turns reuse the persisted snapshot.
- 3. **Failed compaction** — the summarizer request fails with a non-retryable error; the
-   compaction assistant message is persisted with an error, no reminder is attached to the
+   "Continue if you have next steps" request carries the snapshot; summarizer input is clean;
+   later user turns reuse the persisted snapshot.
+3. **Failed compaction** — the summarizer request fails with a non-retryable error; the
+   compaction assistant message is persisted with an error, no snapshot is attached to the
    next user prompt, and the session keeps answering normally.
- 4. **First-resumed-request retry** — the first post-compaction request gets a retryable 500;
-   both the failed attempt and the retry contain the reminder, proving a retried/rebuilt
+4. **First-resumed-request retry** — the first post-compaction request gets a retryable 500;
+   both the failed attempt and the retry contain the snapshot, proving a retried/rebuilt
    request cannot lose it.
- 5. **Restart after compaction** — server killed and restarted against the same
-   `OPENCODE_DB`; the first prompt after restart carries the reminder, proving eligibility
-    is recovered from persisted history after the process-local cache is gone.
- 6. **Empty list** — compaction with no persisted todos produces no reminder on the next
+5. **Restart after compaction** — server killed and restarted against the same
+   `OPENCODE_DB`; the first prompt after restart carries the snapshot, proving eligibility
+   is recovered from persisted history after the process-local cache is gone.
+6. **Empty list** — compaction with no persisted todos produces no snapshot on the next
    prompt (ordinary requests still happen).
- 7. **All-completed list** — a list whose items are already `completed` is represented by
-    closed-item counts.
- 8. **Stale todo baseline** — the threshold-crossing successful tool output stores one
-    stable reminder; later requests include it and the same baseline never repeats it.
+7. **All-completed list** — a list whose items are already `completed` is represented by
+   closed-item counts.
 
 Additional assertions in the same suite:
 
 - The persisted session history contains the `metadata["todo-reconcile"]` part after
-  reminder delivery, proving restart recovery and stable persistence.
+  snapshot delivery, proving restart recovery and stable persistence.
 - `session.todo` returns exactly the items written by `todowrite` before and after a
-  reminder delivery — the plugin never mutates todos.
+  snapshot delivery — the plugin never mutates todos.
 - Every scenario distinguishes the summarizer by request content and asserts the recipient
   (summarizer vs resumed agent).
 

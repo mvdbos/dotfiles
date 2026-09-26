@@ -1,9 +1,8 @@
 # Delivery contract: post-compaction todo reconciliation
 
 Status: verified against OpenCode v1.18.30 (`anomalyco/opencode` tag `v1.18.30`, commit `3104c14`).
-Verification method: source inspection of the pinned tag. End-to-end delivery (recipient,
-timing, dedup) is exercised by the integration checks specified in
-`tasks/004-integration-checks-and-install-guide.md`.
+Verification method: source inspection of the pinned tag and captured requests in
+`test/integration/reconcile.integration.test.ts`.
 
 This note freezes the hook contract that `src/plugin.ts` is built on. It records what was
 verified, the chosen algorithm, and the honest limitations. Line references are to the
@@ -15,7 +14,8 @@ Plugin type surface: `packages/plugin/src/index.ts`:
 
 - `experimental.chat.messages.transform` (line 282): input `{}` (no session ID), output
   `{ messages: { info: Message; parts: Part[] }[] }`. Hooks mutate `output.messages` in place.
-- `event` (line 224): optional event listener used to invalidate the in-memory todo cache.
+- `experimental.session.compacting` skips the summarizer transform; snapshots attach only
+  to a resumed request.
 
 SDK todo surface, pinned `@opencode-ai/sdk@1.18.30` (v1 client):
 
@@ -101,7 +101,7 @@ created; the loop continues with the replay:
 ```
 
 Failed compaction: `compaction.process` sets `error` and `finish="error"` and returns
-`"stop"` (`compaction.ts:450-458`); no reminder, because `A.error` disqualifies the pair
+`"stop"` (`compaction.ts:450-458`); no snapshot, because `A.error` disqualifies the pair
 and `session.compacted` is never published (`compaction.ts:552-555`).
 
 Ordering caveat: `filterCompacted` reorders model history to
@@ -114,7 +114,7 @@ removed before selection (`compaction.ts:364-368` filters `hidden`), and the cur
 compaction's user message is excluded from `history` (`compaction.ts:363`). The summarizer
 input can therefore never contain a completed pair, and the detector requires one. This is
 also asserted by the integration capture in `test/integration/` (summarizer request must
-not contain the reminder).
+not contain the snapshot).
 
 ## 4. Chosen algorithm (one durable write per boundary)
 
@@ -142,9 +142,8 @@ For each transform invocation:
    cannot reorder history.
    The request body mirrors the target's existing text parts verbatim (same part IDs, flags,
    and metadata) ahead of the snapshot part. OpenCode fires `chat.message` for this write
-   with only the supplied parts; a synthetic-only payload would classify the turn as an
-   empty real turn, resetting watchdog's foreign-continuation epoch, task, advisory, and
-   idle-admission state. Mirroring makes classification identical to the original prompt.
+    with only the supplied parts; a synthetic-only payload would hide the original prompt
+    from other `chat.message` hooks. Mirroring preserves the original text and metadata.
    Upserts are by part ID, so stored parts, model-visible payloads, part order, and prefix
    caching are unchanged; the only new provider-visible content remains the snapshot part.
 8. Never remove, replace, or hide a provider-visible snapshot. A later model-visible native
@@ -153,7 +152,7 @@ For each transform invocation:
 Properties:
 
 - One attempted write per boundary; later requests keep the persisted part as ordinary
-  history. Active-loop feedback is appended only to unseen successful tool output (§9).
+  history.
 - In-memory state avoids repeated reads during one process; persisted snapshot metadata
   recovers coverage after restart.
 - Fail-closed at the cache frontier: a failed initial read/write is never retried against an
@@ -165,7 +164,7 @@ Properties:
 - Fetch lazily, only when the boundary has no matching cache or persisted snapshot.
 - Success with `[]` → ordinary empty list → skip.
 - HTTP `{ error }` or missing `data` or thrown error → read failure → fail open, no
-  reminder, concise log (`console.warn`), no todo content in logs.
+  snapshot, concise log, no todo content in logs.
 - One SDK attempt is allowed before the first request at a boundary. Failure seals it.
 
 ## 6. Size bound
@@ -181,7 +180,7 @@ The transform hook does not expose the resolved agent tool set. The plugin reads
 `lastUser.info.tools?.todowrite`:
 
 - `false` → `todowrite` was explicitly disabled for that prompt; guidance to use it is
-  omitted (replaced with a report-instead instruction).
+  omitted.
 - `true` or absent → the plan's conditional wording ("If todowrite is available, ...")
   is used.
 
@@ -195,46 +194,16 @@ conditional wording covers that case. This limitation is intentional and documen
 including manual compaction. An event-only in-memory flag was rejected:
 
 - it is lost on OpenCode restart, after which the resumed agent would silently lose the
-  reminder;
+  snapshot;
 - it can race the continuation request (the hook and the event are different pipelines);
 - `experimental.compaction.autocontinue` does not run for manual compaction, so it is not a
   usable sole trigger;
 - the event also does not prove delivery to the model, which is the property that matters.
 
-History-derived eligibility remains the source of truth; the event only invalidates the
-process-local cache and is not required for restart recovery.
+History-derived eligibility remains the source of truth; no event hook is needed for restart
+recovery.
 
-## 9. Stale-todo nudge (pre-compaction)
-
-Status: verified against OpenCode v1.18.31 (`anomalyco/opencode` tag `v1.18.31`) with unit,
-lifecycle, and mock-provider integration tests. Delivery uses `tool.execute.after`, before
-OpenCode persists a successful tool result.
-
-The plugin appends one bounded text trailer to the next eligible successful tool output.
-That output is then persisted normally, so every later provider request sees identical bytes.
-
-Eligibility, in order:
-
-1. The latest user message is not a plan-agent turn and does not disable `todowrite`.
-3. A baseline exists: the newest successful, model-visible, uncompacted `todowrite` part
-   (`visibleTodoWritePart`). No baseline means no nudge, so a list the model never wrote
-   stays the boundary path's concern.
-4. The baseline is stale: `toolThreshold` successful eligible tool completions after it
-   (excluding `todowrite`, `question`, `skill`, and image tools), or `minutesThreshold`
-   elapsed since the baseline part's `time.end`.
-5. The baseline has not already produced a reminder. A later successful `todowrite` creates
-   a new baseline and re-arms delivery.
-
-The reminder text is short, stable, and framed as system-generated task data. It includes no
-dynamic counts or persisted list. Time is checked only in the successful tool hook; no timer
-creates a provider request.
-
-Config: optional `todo-reconcile.json` (`OPENCODE_TODO_RECONCILE_CONFIG` overrides) with
-`nudge.enabled`, `nudge.toolThreshold`, and `nudge.minutesThreshold`; defaults are
-`true`, `10`, and `5`. Invalid fields fall
-back per field and log one warning.
-
-## 10. Limitations (stated honestly)
+## 9. Limitations (stated honestly)
 
 - No acknowledgement mechanism exists, so strict exactly-once provider delivery cannot be
   promised. The stable persisted part provides retry and restart recovery, not provider
@@ -245,15 +214,10 @@ back per field and log one warning.
   model needs it.
 - There is no hot-patch fallback. If initial installation fails, the request runs unchanged
   and the boundary remains sealed.
-- External todo updates are appended at a future unseen eligible tool boundary; old visible
-  snapshots are never rewritten.
+- Later native todo updates supersede old snapshots without rewriting them.
 - `lastUser.info.tools?.todowrite` is the only availability signal at this hook; dynamic
   agent permissions are not visible.
-- Restart reconstruction can recover a visible `todowrite` baseline from history. A stale
-  reconstructed baseline waits for a future unseen eligible tool output.
-- An armed compaction guard that is never consumed (an aborted compaction) suppresses one
-  subsequent nudge; the count is dropped on the next consume.
-- The transform has no session parent information, so subagent sessions with their own todo
-  lists are nudged like root sessions.
+- An armed compaction guard that is never consumed (an aborted compaction) skips the next
+  transform in that session; a later eligible resumed request can still install a snapshot.
 - Experimental hooks may change in later OpenCode versions. This contract applies to
   v1.18.30/v1.18.31; re-verify the two call sites before upgrading.

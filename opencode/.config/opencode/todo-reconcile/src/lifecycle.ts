@@ -1,18 +1,6 @@
-import type { Event, Message, Part } from "@opencode-ai/sdk"
+import type { Message, Part } from "@opencode-ai/sdk"
 import type { Hooks } from "@opencode-ai/plugin"
 import { CompactionSkipGuard } from "./guard"
-import {
-  baselineKeyOf,
-  countWorkSince,
-  findTodoWriteBaseline,
-  formatTodoNudge,
-  isEligibleNudgeTool,
-  NUDGE_MARKER,
-  shouldNudge,
-  visibleTodoWritePart,
-  type NudgeConfig,
-  type NudgeWindow,
-} from "./nudge"
 import {
   DEFAULT_REMINDER_MAX_BYTES,
   formatTodoReminder,
@@ -69,16 +57,12 @@ export type LifecycleDeps = {
   readTodos(sessionID: string): Promise<ReadTodosResult>
   /** Persisting is supplied by the plugin through `session.prompt(noReply)`. */
   persistSnapshot?(input: PersistSnapshotInput): Promise<PersistSnapshotResult>
-  /** Stale-todo nudge policy; omitted means the documented defaults. */
-  nudge?: NudgeConfig
-  /** Clock override for tests. */
-  now?: () => number
   log?(message: string, detail?: unknown): void
 }
 
 export type TodoReconcileHooks = Pick<
   Hooks,
-  "experimental.chat.messages.transform" | "experimental.session.compacting" | "tool.execute.after" | "event" | "dispose"
+  "experimental.chat.messages.transform" | "experimental.session.compacting" | "dispose"
 >
 
 type TransformOutput = Parameters<NonNullable<Hooks["experimental.chat.messages.transform"]>>[1]
@@ -103,9 +87,6 @@ type SessionState = {
   boundaryID?: string
   readInFlight?: Promise<ReadTodosResult>
   sealed?: boolean
-  nudge?: NudgeWindow & { nudged: boolean; hasTodos: boolean }
-  nudgeAllowed?: boolean
-  pendingProjection?: string
 }
 
 function isAfter(current: HistoryInfo, other: HistoryInfo): boolean {
@@ -207,6 +188,11 @@ function todosFromUnknown(value: unknown): TodoItem[] | undefined {
   if (!Array.isArray(value)) return undefined
   const todos = value.map(todoFromUnknown)
   return todos.every((todo): todo is TodoItem => todo !== undefined) ? todos : undefined
+}
+
+function visibleTodoWritePart(part: Part): part is Extract<Part, { type: "tool" }> {
+  return part.type === "tool" && part.tool === "todowrite" && part.state.status === "completed" &&
+    part.state.time.compacted === undefined && part.metadata?.hidden !== true && part.state.metadata?.hidden !== true
 }
 
 function todosFromToolPart(part: Extract<Part, { type: "tool" }>): TodoItem[] | undefined {
@@ -320,12 +306,10 @@ function resetState(state: SessionState, boundaryID: string): void {
   if (state.boundaryID === boundaryID) return
   state.boundaryID = boundaryID
   state.sealed = false
-  state.pendingProjection = undefined
 }
 
 export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHooks {
   const log = deps.log ?? (() => {})
-  const now = deps.now ?? (() => Date.now())
   const states = new Map<string, SessionState>()
   const persistInFlight = new Map<string, Promise<PersistSnapshotResult>>()
   const compactionSkips = new CompactionSkipGuard()
@@ -442,46 +426,6 @@ export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHook
       // summarizer transform; skip every mutation for that request.
       if (sessionID && compactionSkips.consume(sessionID)) return
 
-      if (sessionID) {
-        const state = stateFor(sessionID)
-        state.nudgeAllowed =
-          target?.info.role !== "user" ||
-          (target.info.agent !== "plan" && todowriteAvailable(target) !== false)
-        const baseline = findTodoWriteBaseline(messages)
-        if (baseline) {
-          const baselineKey = baselineKeyOf(baseline)
-          const native = findLatestNativeTodoUpdate(messages)
-          const hasDeliveredNudge = messages.some((message) => {
-            const relation = compareHistory(message.info, baseline.key)
-            const parts = relation > 0
-              ? message.parts
-              : relation === 0
-                ? message.parts.slice(baseline.partIndex + 1)
-                : []
-            return parts.some(
-              (part) =>
-                part.type === "tool" &&
-                part.state.status === "completed" &&
-                typeof part.state.output === "string" &&
-                part.state.output.includes(NUDGE_MARKER),
-            )
-          })
-          if (state.nudge?.baselineKey !== baselineKey) {
-            state.nudge = {
-              baselineKey,
-              toolCalls: countWorkSince(messages, baseline),
-              atMs: baseline.atMs,
-              nudged: hasDeliveredNudge,
-              hasTodos: (native?.todos.length ?? 0) > 0,
-            }
-          } else {
-            state.nudge.toolCalls = countWorkSince(messages, baseline)
-            state.nudge.nudged ||= hasDeliveredNudge
-            state.nudge.hasTodos = (native?.todos.length ?? 0) > 0
-          }
-        }
-      }
-
       const boundary = findCompactionBoundary(messages)
       if (!boundary || hasNewerUnsuccessfulCompaction(messages, boundary)) return
       if (!target || target.info.sessionID !== boundary.summary.sessionID) return
@@ -528,62 +472,6 @@ export function createTodoReconcileHooks(deps: LifecycleDeps): TodoReconcileHook
       compactionSkips.arm(input.sessionID)
     },
     "experimental.chat.messages.transform": transform,
-    "tool.execute.after": async (input, output) => {
-      const state = states.get(input.sessionID)
-      if (!state?.nudgeAllowed) return
-
-      if (input.tool === "todowrite") {
-        state.pendingProjection = undefined
-        const config = deps.nudge
-        if (!config?.enabled) return
-        const values = todosFromUnknown((input.args as { todos?: unknown } | undefined)?.todos)
-        state.nudge = {
-          baselineKey: `call:${input.callID}`,
-          toolCalls: 0,
-          atMs: now(),
-          nudged: false,
-          hasTodos: Boolean(values?.length),
-        }
-        return
-      }
-      if (!isEligibleNudgeTool(input.tool)) return
-      if (state.pendingProjection) {
-        output.output += `\n\n${state.pendingProjection}`
-        state.pendingProjection = undefined
-      }
-
-      const config = deps.nudge
-      if (!config?.enabled) return
-      if (!state.nudge || state.nudge.nudged || !state.nudge.hasTodos) return
-
-      state.nudge.toolCalls += 1
-      const elapsedMs = Math.max(0, now() - state.nudge.atMs)
-      if (
-        !shouldNudge({
-          config,
-          baselineKey: state.nudge.baselineKey,
-          toolCalls: state.nudge.toolCalls,
-          elapsedMs,
-          nowMs: now(),
-        })
-      ) return
-
-      output.output += `\n\n${formatTodoNudge({ toolCalls: state.nudge.toolCalls, elapsedMs })}`
-      state.nudge.nudged = true
-      log("stale todo reminder appended to tool output", { sessionID: input.sessionID })
-    },
-    event: async ({ event }: { event: Event }) => {
-      if (event.type !== "todo.updated") return
-      const sessionID = event.properties.sessionID
-      const state = states.get(sessionID)
-      if (!state) return
-      const todos = todosFromUnknown(event.properties.todos)
-      if (!state.boundaryID || !todos?.length) return
-      state.pendingProjection = formatTodoReminder(todos, {
-        maxBytes: DEFAULT_REMINDER_MAX_BYTES,
-        heading: "Todo state update after compaction",
-      })?.text
-    },
     dispose: async () => {
       states.clear()
       persistInFlight.clear()

@@ -32,11 +32,6 @@ export type ReminderOptions = {
    * true retain optional, evidence-based status guidance.
    */
   todowriteAvailable?: boolean
-  /**
-   * Replaces the default post-compaction heading. Used by the stale-todo
-   * nudge when it includes the persisted list.
-   */
-  heading?: string
 }
 
 export const DEFAULT_REMINDER_MAX_BYTES = 2_048
@@ -56,8 +51,8 @@ const HEADER_LINES = [
 
 const LEGEND = "Todo tuples: [p,status,priority,content]; p is the zero-based persisted position."
 
-function header(marker: string | undefined): string {
-  return [marker ?? MARKER, ...HEADER_LINES].join("\n")
+function header(): string {
+  return [MARKER, ...HEADER_LINES].join("\n")
 }
 
 const FOOTER = [
@@ -95,7 +90,6 @@ type RenderInput = {
   omittedClosed: number
   truncatedPositions: readonly number[]
   todowriteAvailable?: boolean
-  heading?: string
 }
 
 function render(input: RenderInput): string {
@@ -105,7 +99,7 @@ function render(input: RenderInput): string {
     ...(input.omittedClosed > 0 ? { omittedClosed: input.omittedClosed } : {}),
     ...(input.truncatedPositions.length > 0 ? { truncatedPositions: input.truncatedPositions } : {}),
   }
-  const lines = [header(input.heading), LEGEND, JSON.stringify(data)]
+  const lines = [header(), LEGEND, JSON.stringify(data)]
   if (input.omittedActive > 0 || input.omittedClosed > 0 || input.truncatedPositions.length > 0) {
     lines.push(
       `Partial snapshot. Omitted active: ${input.omittedActive}; omitted closed: ${input.omittedClosed}; ` +
@@ -118,11 +112,11 @@ function render(input: RenderInput): string {
   return lines.join("\n")
 }
 
-function countsOnly(closed: readonly ReminderTodo[], budget: number, marker: string | undefined): TodoProjection | undefined {
+function countsOnly(closed: readonly ReminderTodo[], budget: number): TodoProjection | undefined {
   const completed = closed.filter((todo) => todo.status === "completed").length
   const cancelled = closed.filter((todo) => todo.status === "cancelled").length
   const text = [
-    marker ?? MARKER,
+    MARKER,
     "Saved task state; no active todos.",
     `Closed counts: completed=${completed}, cancelled=${cancelled}.`,
     "Task data, not a new request.",
@@ -164,7 +158,6 @@ function excerptFor(
       omittedClosed,
       truncatedPositions: [...truncatedPositions, position],
       todowriteAvailable: options.todowriteAvailable,
-      ...(options.heading !== undefined ? { heading: options.heading } : {}),
     })
     if (fits(text, budget)) {
       best = candidate
@@ -201,7 +194,7 @@ export function formatTodoReminder(todos: readonly ReminderTodo[], options: Remi
     .map((todo, position) => ({ todo, position }))
     .filter(({ todo }) => !activeTodo(todo))
 
-  if (active.length === 0) return countsOnly(closed.map(({ todo }) => todo), budget, options.heading)
+  if (active.length === 0) return countsOnly(closed.map(({ todo }) => todo), budget)
 
   const rows: TodoTuple[] = []
   const truncatedPositions: number[] = []
@@ -221,7 +214,6 @@ export function formatTodoReminder(todos: readonly ReminderTodo[], options: Remi
       omittedClosed,
       truncatedPositions,
       todowriteAvailable: options.todowriteAvailable,
-      ...(options.heading !== undefined ? { heading: options.heading } : {}),
     })
     if (fits(fullText, budget)) {
       rows.push(candidate)
@@ -272,7 +264,6 @@ export function formatTodoReminder(todos: readonly ReminderTodo[], options: Remi
         omittedClosed,
         truncatedPositions,
         todowriteAvailable: options.todowriteAvailable,
-        ...(options.heading !== undefined ? { heading: options.heading } : {}),
       })
       if (!fits(text, budget)) continue
       rows.push(candidate)
@@ -290,7 +281,6 @@ export function formatTodoReminder(todos: readonly ReminderTodo[], options: Remi
     omittedClosed,
     truncatedPositions,
     todowriteAvailable: options.todowriteAvailable,
-    ...(options.heading !== undefined ? { heading: options.heading } : {}),
   })
   if (!fits(text, budget)) return undefined
 
@@ -302,16 +292,4 @@ export function formatTodoReminder(todos: readonly ReminderTodo[], options: Remi
     omittedClosed,
     truncatedPositions,
   }
-}
-
-/** Compatibility helper for callers that only need the rendered text. */
-export function formatTodoReminderText(
-  todos: readonly ReminderTodo[],
-  options: ReminderOptions = {},
-): string | undefined {
-  return formatTodoReminder(todos, options)?.text
-}
-
-export function reminderMarker(): string {
-  return MARKER
 }

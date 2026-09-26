@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "OpenCode plugin: restore persisted todos after compaction and ask the resumed agent to reconcile them",
+  "description": "OpenCode plugin: snapshot persisted todos on the first request after compaction",
   "scripts": {
     "build": "bun build src/plugin.ts --outfile dist/todo-reconcile.js --target node --format esm",
     "test": "bun test",
-    "test:unit": "bun test test/reminder.test.ts test/nudge.test.ts test/config.test.ts test/lifecycle.test.ts test/plugin.test.ts",
+    "test:unit": "bun test test/reminder.test.ts test/lifecycle.test.ts test/plugin.test.ts",
     "test:integration": "bun test test/integration",
     "typecheck": "tsc --noEmit"
   },

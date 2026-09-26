@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test"
 import {
   DEFAULT_REMINDER_MAX_BYTES,
   formatTodoReminder,
-  formatTodoReminderText,
   type ReminderTodo,
 } from "../src/reminder"
 
@@ -130,9 +129,9 @@ describe("formatTodoReminder", () => {
   })
 
   test("uses passive optional todowrite wording only when available or unknown", () => {
-    expect(formatTodoReminderText(mixed)).toContain("If todowrite is available")
-    expect(formatTodoReminderText(mixed, { todowriteAvailable: true })).toContain("If todowrite is available")
-    expect(formatTodoReminderText(mixed, { todowriteAvailable: false })).not.toContain("todowrite")
+    expect(formatTodoReminder(mixed)!.text).toContain("If todowrite is available")
+    expect(formatTodoReminder(mixed, { todowriteAvailable: true })!.text).toContain("If todowrite is available")
+    expect(formatTodoReminder(mixed, { todowriteAvailable: false })!.text).not.toContain("todowrite")
   })
 
   test("bounds the complete rendered reminder, including notices", () => {

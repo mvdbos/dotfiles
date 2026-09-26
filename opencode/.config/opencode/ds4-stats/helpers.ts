@@ -80,8 +80,7 @@ export type ToolTime = {
 
 // Tools whose span measures user deliberation instead of agent work: the
 // question tool stays running until the user answers, so its wall time is
-// human idle and must not enter the busy totals. Same policy as watchdog's
-// DEFAULT_EXCLUDED_TOOLS.
+// human idle and must not enter the busy totals.
 export const HUMAN_WAIT_TOOLS: ReadonlySet<string> = new Set(["question"])
 
 export type Level = "good" | "warn" | "bad" | "none"

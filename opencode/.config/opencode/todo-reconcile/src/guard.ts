@@ -2,8 +2,7 @@
  * One-shot guard that keeps request-scoped injections out of the compaction
  * summarizer request. `experimental.session.compacting` arms the guard
  * immediately before OpenCode invokes the history transform for compaction;
- * the matching `experimental.chat.messages.transform` consumes it. Same
- * pattern as the trajectory watchdog.
+ * the matching `experimental.chat.messages.transform` consumes it.
  */
 export class CompactionSkipGuard {
   private readonly skips = new Map<string, number>()

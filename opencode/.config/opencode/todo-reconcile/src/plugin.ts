@@ -1,7 +1,6 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import type { Part } from "@opencode-ai/sdk"
 import type { UserMessage } from "@opencode-ai/sdk/v2"
-import { loadTodoReconcileConfig } from "./config"
 import { isPluginSnapshotPart } from "./snapshot"
 import {
   createTodoReconcileHooks,
@@ -13,11 +12,10 @@ import {
 /**
  * OpenCode fires `chat.message` for this noReply write with only the supplied
  * parts. Resend the target's existing text parts verbatim (same IDs, flags, and
- * metadata) so hooks that classify or record the turn see the same payload the
- * original prompt produced; watchdog's foreign-continuation state depends on
- * that classification, and a synthetic-only payload would look like an empty
- * real turn. Non-text parts are omitted so the server does not re-resolve files
- * or tools, and prior plugin snapshots are omitted so retries cannot duplicate.
+ * metadata) so other chat.message hooks see the original user text, not a
+ * synthetic-only replacement. Non-text parts are omitted so the server does
+ * not re-resolve files or tools, and prior snapshots are omitted to prevent
+ * duplicates on retry.
  */
 export function mirrorTextParts(target: MessageWithParts): Array<Extract<Part, { type: "text" }>> {
   return target.parts
@@ -38,9 +36,6 @@ export const TodoReconcilePlugin: Plugin = async ({ client }) => {
       })
       .catch(() => {})
   }
-
-  const config = loadTodoReconcileConfig()
-  for (const warning of config.warnings) log(warning)
 
   const persistSnapshot = async (input: PersistSnapshotInput) => {
     try {
@@ -90,7 +85,6 @@ export const TodoReconcilePlugin: Plugin = async ({ client }) => {
   return createTodoReconcileHooks({
     readTodos: (sessionID) => readTodosThroughClient(client, sessionID),
     persistSnapshot,
-    nudge: config.nudge,
     log,
   })
 }

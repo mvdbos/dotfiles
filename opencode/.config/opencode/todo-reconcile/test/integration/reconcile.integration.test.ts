@@ -1,7 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test"
 import { existsSync } from "node:fs"
 import path from "node:path"
-import { BUILT_IN_FOREIGN_PATTERNS, classifyUserMessage } from "../../../plugin-generated-user/helpers"
 import {
   cleanupAll,
   containsReminder,
@@ -66,13 +65,6 @@ async function readProbeEvents(instance: Instance): Promise<ProbeEvent[]> {
     .map((line) => JSON.parse(line) as ProbeEvent)
 }
 
-function classifyProbeEvent(event: ProbeEvent): string {
-  return classifyUserMessage(
-    { info: { role: "user" }, parts: event.parts as never },
-    BUILT_IN_FOREIGN_PATTERNS,
-  ).kind
-}
-
 async function compactionMarker(instance: Instance, sessionID: string) {
   const history = await instance.client.session.messages({ path: { id: sessionID } })
   return (history.data ?? []).find((message) => message.parts.some((part) => part.type === "compaction"))
@@ -80,10 +72,6 @@ async function compactionMarker(instance: Instance, sessionID: string) {
 
 function hasToolResult(body: Record<string, any>): boolean {
   return (body.messages ?? []).some((message: Record<string, any>) => message.role === "tool")
-}
-
-function containsNudge(body: Record<string, any>): boolean {
-  return textOf(body).includes("Todo status reminder")
 }
 
 function setDefaultHandler(): void {
@@ -271,19 +259,17 @@ describe("todo reconciliation integration", () => {
         snapshots[0]!.parts.some((part) => part.type === "text" && part.text === goalContinuationText),
       ).toBe(true)
 
-      // Proof for the watchdog interaction: the snapshot write itself triggers
-      // chat.message with only the supplied parts. The mirrored original text
-      // must be present so the turn still classifies as a foreign continuation.
+      // The noReply write must preserve the continuation's original text
+      // alongside the snapshot in the chat.message hook payload.
       const continuationID = snapshots[0]!.info.id
       const events = (await readProbeEvents(instance)).filter((event) => event.input?.messageID === continuationID)
       expect(events.length).toBeGreaterThanOrEqual(1)
-      expect(events.filter((event) => classifyProbeEvent(event) === "real")).toHaveLength(0)
 
       const mirrored = events.filter((event) => {
         const parts = event.parts ?? []
         const hasContinuationText = parts.some((part) => part.type === "text" && part.text === goalContinuationText)
         const hasSnapshot = parts.some((part) => part.type === "text" && part.metadata?.["todo-reconcile"] === true)
-        return hasContinuationText && hasSnapshot && classifyProbeEvent(event) === "foreign"
+        return hasContinuationText && hasSnapshot
       })
       expect(mirrored).toHaveLength(1)
     },
@@ -416,39 +402,4 @@ describe("todo reconciliation integration", () => {
     90_000,
   )
 
-  maybe(
-    "a stale todo list receives one persisted tool-output nudge",
-    async () => {
-      setDefaultHandler()
-      const instance = await launch()
-      const sessionID = await createSession(instance)
-      await prompt(instance, sessionID, "seed tasks")
-      expect(await readTodos(instance, sessionID)).toEqual([pending, inProgress, completed, cancelled])
-
-      mock.requests.length = 0
-      let steps = 0
-      mock.handler = (body) => {
-        if (isTitleRequest(body)) return { kind: "text", text: "Mock title" }
-        if (isSummarizerRequest(body)) return { kind: "text", text: "## Objective\n- mock summary" }
-        steps++
-        if (steps <= 10) return { kind: "tool", tool: "glob", args: { pattern: "**/*.ts" } }
-        return { kind: "text", text: "done" }
-      }
-      await prompt(instance, sessionID, "keep working")
-
-      const ordinary = mock.ordinaryRequests()
-      expect(ordinary).toHaveLength(11)
-      expect(ordinary.slice(0, 10).every((request) => !containsNudge(request.body))).toBe(true)
-      expect(containsNudge(ordinary[10]!.body)).toBe(true)
-      expect(containsReminder(ordinary[10]!.body)).toBe(false)
-      expect(containsNudge(ordinary[10]!.body) ? textOf(ordinary[10]!.body) : "").not.toContain("10 tool calls")
-
-      const history = await instance.client.session.messages({ path: { id: sessionID } })
-      const delivered = (history.data ?? []).flatMap((message) => message.parts).filter(
-        (part) => part.type === "tool" && part.state.status === "completed" && part.state.output.includes("Todo status reminder"),
-      )
-      expect(delivered).toHaveLength(1)
-    },
-    90_000,
-  )
 })

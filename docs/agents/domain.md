@@ -5,7 +5,7 @@ How engineering skills consume this repo's domain documentation.
 ## Before exploring, read these
 
 - `CONTEXT.md` at the repo root, when present.
-- Relevant scoped context documents under `docs/`, including `docs/opencode-watchdog/CONTEXT.md`.
+- Relevant scoped context documents under `docs/`, when present.
 - ADRs under `docs/adr/` that touch the area being changed.
 
 If these files do not exist, proceed silently. Domain-modeling workflows create them lazily when terms or decisions are resolved.

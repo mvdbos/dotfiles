@@ -15,7 +15,6 @@ import {
   type TodoResponse,
   type TodoReconcileHooks,
 } from "../src/lifecycle"
-import { DEFAULT_NUDGE_CONFIG, type NudgeConfig } from "../src/nudge"
 import { formatTodoReminder } from "../src/reminder"
 import {
   canonicalTodoFingerprint,
@@ -254,6 +253,15 @@ describe("native coverage", () => {
 })
 
 describe("createTodoReconcileHooks", () => {
+  test("registers only compaction snapshot hooks", () => {
+    const { deps } = fakeDeps(async () => ({ ok: true, todos }))
+    expect(Object.keys(createTodoReconcileHooks(deps)).sort()).toEqual([
+      "dispose",
+      "experimental.chat.messages.transform",
+      "experimental.session.compacting",
+    ])
+  })
+
   test("persists and injects one snapshot into the resumed request", async () => {
     const { deps, reads, writes } = fakeDeps(async () => ({ ok: true, todos }))
     const messages = boundaryFixture()
@@ -396,25 +404,6 @@ describe("createTodoReconcileHooks", () => {
     expect(writes).toHaveLength(1)
   })
 
-  test("keeps the snapshot and appends an external todo update at a future tool boundary", async () => {
-    let current = todos
-    const next = [{ content: "new task", status: "pending", priority: "high" }]
-    const { deps, reads, writes } = fakeDeps(async () => ({ ok: true, todos: current }))
-    const messages = boundaryFixture()
-    const hooks = createTodoReconcileHooks(deps)
-    await hooks["experimental.chat.messages.transform"]!({}, { messages } as never)
-    current = next
-    await hooks.event!({ event: { type: "todo.updated", properties: { sessionID: "s1", todos: next } } } as never)
-    await hooks["experimental.chat.messages.transform"]!({}, { messages } as never)
-    expect(reads).toEqual(["s1"])
-    expect(writes).toHaveLength(1)
-    expect(messages.some((message) => message.parts.some((part) => part.type === "text" && part.text.includes("new task")))).toBe(false)
-    const output = { title: "glob", output: "ok", metadata: {} }
-    await hooks["tool.execute.after"]!({ sessionID: "s1", callID: "next", tool: "glob", args: {} }, output)
-    expect(output.output).toContain("Todo state update after compaction")
-    expect(output.output).toContain("new task")
-  })
-
   test("caches a successful empty result without repeated reads", async () => {
     const { deps, reads, writes } = fakeDeps(async () => ({ ok: true, todos: [] }))
     const messages = boundaryFixture()
@@ -427,18 +416,15 @@ describe("createTodoReconcileHooks", () => {
 
   test("does not rewrite the boundary snapshot when later state differs", async () => {
     const newer = [{ content: "newer", status: "pending", priority: "high" }]
-    let current = todos
-    const { deps, reads, writes } = fakeDeps(async () => ({ ok: true, todos: current }))
+    const { deps, reads, writes } = fakeDeps(async () => ({ ok: true, todos }))
     const messages = boundaryFixture()
     const hooks = createTodoReconcileHooks(deps)
     await hooks["experimental.chat.messages.transform"]!({}, { messages } as never)
     messages.push(
       assistant("a2", 30, { parentID: "u2", finish: "tool-calls" }, [
-        toolPart({ id: "tool-old", messageID: "a2", todos }),
+        toolPart({ id: "tool-new", messageID: "a2", todos: newer }),
       ]),
     )
-    current = newer
-    await hooks.event!({ event: { type: "todo.updated", properties: { sessionID: "s1", todos: newer } } } as never)
     await hooks["experimental.chat.messages.transform"]!({}, { messages } as never)
     expect(reads).toEqual(["s1"])
     expect(writes).toHaveLength(1)
@@ -575,162 +561,5 @@ describe("readTodosThroughClient", () => {
       "s1",
     )
     expect(result).toEqual({ ok: false, reason: "offline" })
-  })
-})
-
-const NUDGE_BASE = 2_000_000
-const nudgePolicy: NudgeConfig = {
-  enabled: true,
-  toolThreshold: 3,
-  minutesThreshold: 0,
-}
-
-function workPart(
-  id: string,
-  messageID: string,
-  options: { tool?: string; status?: "completed" | "error" | "running"; start?: number; end?: number } = {},
-): Part {
-  const tool = options.tool ?? "glob"
-  const status = options.status ?? "completed"
-  const start = options.start ?? NUDGE_BASE
-  const end = options.end ?? start + 1
-  if (status === "running") {
-    return {
-      id,
-      sessionID: "s1",
-      messageID,
-      type: "tool",
-      callID: `call-${id}`,
-      tool,
-      state: { status: "running", input: {}, time: { start } },
-    } as unknown as Part
-  }
-  if (status === "error") {
-    return {
-      id,
-      sessionID: "s1",
-      messageID,
-      type: "tool",
-      callID: `call-${id}`,
-      tool,
-      state: { status: "error", input: {}, error: "boom", time: { start, end } },
-    } as unknown as Part
-  }
-  return {
-    id,
-    sessionID: "s1",
-    messageID,
-    type: "tool",
-    callID: `call-${id}`,
-    tool,
-    state: { status: "completed", input: {}, output: "ok", title: tool, metadata: {}, time: { start, end } },
-  } as unknown as Part
-}
-
-function workAssistant(id: string, created: number, options: MessageOptions = {}): MessageWithParts {
-  return assistant(id, created, { parentID: "u1", finish: "tool-calls", ...options }, [workPart(`p-${id}`, id)])
-}
-
-function staleMessages(workSteps: number, options: MessageOptions = {}): MessageWithParts[] {
-  const messages: MessageWithParts[] = [
-    user("u1", NUDGE_BASE, [textPart("p-text", "keep working")], options),
-    assistant("a1", NUDGE_BASE + 1, { parentID: "u1", finish: "tool-calls" }, [
-      toolPart({ id: "tool-todo", messageID: "a1", todos, start: NUDGE_BASE, end: NUDGE_BASE + 2 }),
-    ]),
-  ]
-  for (let index = 0; index < workSteps; index++) {
-    messages.push(workAssistant(`w${index + 1}`, NUDGE_BASE + 10 + index * 10))
-  }
-  return messages
-}
-
-function nudgeHarness(options: { policy?: Partial<NudgeConfig>; nowMs?: number; read?: LifecycleDeps["readTodos"] } = {}) {
-  const policy: NudgeConfig = { ...DEFAULT_NUDGE_CONFIG, ...nudgePolicy, ...options.policy }
-  const { deps, reads, writes } = fakeDeps(options.read ?? (async () => ({ ok: true, todos })))
-  let current = options.nowMs ?? NUDGE_BASE + 10_000
-  const hooks = createTodoReconcileHooks({ ...deps, nudge: policy, now: () => current })
-  return { hooks, reads, writes, setNow: (value: number) => void (current = value) }
-}
-
-async function runTransform(hooks: TodoReconcileHooks, messages: MessageWithParts[]): Promise<void> {
-  await hooks["experimental.chat.messages.transform"]!({}, { messages } as never)
-}
-
-describe("stale todo nudges", () => {
-  async function complete(hooks: TodoReconcileHooks, callID: string, tool = "glob") {
-    const output = { title: tool, output: '{"ok":true}', metadata: {} }
-    await hooks["tool.execute.after"]!({ sessionID: "s1", callID, tool, args: {} }, output)
-    return output.output
-  }
-
-  test("appends one immutable reminder to the threshold-crossing tool output", async () => {
-    const { hooks } = nudgeHarness()
-    await runTransform(hooks, staleMessages(0))
-    expect(await complete(hooks, "w1")).toBe('{"ok":true}')
-    expect(await complete(hooks, "w2")).toBe('{"ok":true}')
-    const delivered = await complete(hooks, "w3")
-    expect(delivered.startsWith('{"ok":true}\n\nTodo status reminder')).toBe(true)
-    expect(await complete(hooks, "w4")).toBe('{"ok":true}')
-  })
-
-  test("re-arms only after a later successful todowrite", async () => {
-    const { hooks } = nudgeHarness()
-    await runTransform(hooks, staleMessages(0))
-    await complete(hooks, "w1")
-    await complete(hooks, "w2")
-    expect(await complete(hooks, "w3")).toContain("Todo status reminder")
-    await hooks["tool.execute.after"]!(
-      { sessionID: "s1", callID: "todo-2", tool: "todowrite", args: { todos } },
-      { title: "todowrite", output: "written", metadata: {} },
-    )
-    await complete(hooks, "w4")
-    await complete(hooks, "w5")
-    expect(await complete(hooks, "w6")).toContain("Todo status reminder")
-  })
-
-  test("checks elapsed time only when an eligible tool completes", async () => {
-    const harness = nudgeHarness({ policy: { toolThreshold: 0, minutesThreshold: 5 } })
-    await runTransform(harness.hooks, staleMessages(0))
-    harness.setNow(NUDGE_BASE + 2 + 5 * 60_000)
-    expect(await complete(harness.hooks, "w1")).toContain("Todo status reminder")
-  })
-
-  test("preserves exclusions for plan, disabled todowrite, informational tools, and MCP tools", async () => {
-    for (const messages of [staleMessages(0, { agent: "plan" }), staleMessages(0, { tools: { todowrite: false } })]) {
-      const { hooks } = nudgeHarness()
-      await runTransform(hooks, messages)
-      expect(await complete(hooks, "w1")).toBe('{"ok":true}')
-    }
-
-    const { hooks } = nudgeHarness({ policy: { toolThreshold: 1 } })
-    await runTransform(hooks, staleMessages(0))
-    expect(await complete(hooks, "q1", "question")).toBe('{"ok":true}')
-    expect(await complete(hooks, "m1", "mcp_server_tool")).toBe('{"ok":true}')
-    expect(await complete(hooks, "w1")).toContain("Todo status reminder")
-  })
-
-  test("reconstructs a stale baseline after restart but waits for an unseen tool output", async () => {
-    const { hooks } = nudgeHarness()
-    const history = staleMessages(3)
-    await runTransform(hooks, history)
-    expect(history.some((message) => message.parts.some((part) => part.type === "text" && part.text.includes("Todo status reminder")))).toBe(false)
-    expect(await complete(hooks, "w4")).toContain("Todo status reminder")
-  })
-
-  test("restart reconstruction recognizes a reminder later in the baseline message", async () => {
-    const { hooks } = nudgeHarness({ policy: { toolThreshold: 1 } })
-    const reminder = "Todo status reminder (system-generated, not a user request)"
-    const work = workPart("same-message-work", "a1")
-    if (work.type !== "tool" || work.state.status !== "completed") throw new Error("unreachable")
-    work.state.output += `\n\n${reminder}`
-    const messages = [
-      user("u1", NUDGE_BASE, [textPart("p-text", "keep working")]),
-      assistant("a1", NUDGE_BASE + 1, { parentID: "u1", finish: "tool-calls" }, [
-        toolPart({ id: "tool-todo", messageID: "a1", todos }),
-        work,
-      ]),
-    ]
-    await runTransform(hooks, messages)
-    expect(await complete(hooks, "w2")).toBe('{"ok":true}')
   })
 })
