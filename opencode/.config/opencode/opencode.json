@@ -93,6 +93,35 @@
         "apiKey": "{env:OMLX_API_KEY}"
       },
       "models": {
+        "Qwen3.8-Flash-Next-oQ4e-mtp": {
+          "name": "Qwen3.8-Flash-Next-oQ4e-mtp",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "attachment": true,
+          "limit": {
+            "context": 262144,
+            "output": 32768
+          },
+          "reasoning": true,
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            }
+          }
+        },
         "Qwen3.5-0.8B-8bit": {
           "name": "Qwen3.5-0.8B-8bit",
           "modalities": {
@@ -279,12 +308,12 @@
       "model": "omlx/Qwen3.5-0.8B-8bit"
     },
     "general": {
-      "description": "Delegate substantial multi-step work here: code reviews, audits, independent research, and investigations that span many files or sources. Use when a task needs its own context and several steps. Do NOT use for simple lookups or single-file reads — keep those in the primary agent. The primary agent verifies and synthesizes the findings."
+      "description": "Delegate substantial multi-step work here: code reviews, audits, independent research, and investigations that span many files or sources. Use when a task needs its own context and several steps. Do NOT use for simple lookups or single-file reads \u2014 keep those in the primary agent. The primary agent verifies and synthesizes the findings."
     },
     "explore": {
       "model": "omlx/Qwen3.5-4B-oQ4e-mtp",
       "prompt": "{file:./explore-controls/explore-prompt.txt}",
-      "description": "Codebase explorer for discovery and evidence gathering. Use for broad or multi-file exploration: finding files by pattern (eg. \"src/components/**/*.tsx\"), searching for keywords, tracing code paths, answering how-the-codebase-works questions (eg. \"how do API endpoints work?\"), or filling unresolved discovery gaps from an earlier explore report. Do NOT use for reviews, audits, or research; use general for those. Keep each task focused and bounded; split broad investigations into smaller tasks because search budget and context are limited. The explorer has glob, grep, and read tools only — no shell, web, or nested tasks; describe what to find, not commands to run.",
+      "description": "Codebase explorer for discovery and evidence gathering. Use for broad or multi-file exploration: finding files by pattern (eg. \"src/components/**/*.tsx\"), searching for keywords, tracing code paths, answering how-the-codebase-works questions (eg. \"how do API endpoints work?\"), or filling unresolved discovery gaps from an earlier explore report. Do NOT use for reviews, audits, or research; use general for those. Keep each task focused and bounded; split broad investigations into smaller tasks because search budget and context are limited. The explorer has glob, grep, and read tools only \u2014 no shell, web, or nested tasks; describe what to find, not commands to run.",
       "options": {
         "enable_thinking": false
       },
