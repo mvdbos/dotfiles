@@ -25,7 +25,6 @@ stow_all() {
     
     # Optional packages
     stow -R vim
-    stow -R certs
     stow -R wget
     stow -R ssh
     

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Personal dotfiles managed with GNU Stow. Each top-level directory (`shell/`, `bash/`, `zsh/`, `vim/`, `git/`, `ssh/`, `wget/`, `certs/`, `opencode/`, `phoenix/`, `ideavim/`) is a stow package.
+Personal dotfiles managed with GNU Stow. Each top-level directory (`shell/`, `bash/`, `zsh/`, `vim/`, `git/`, `ssh/`, `wget/`, `opencode/`, `phoenix/`, `ideavim/`) is a stow package.
 
 ## Hard constraints
 

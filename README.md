@@ -36,7 +36,6 @@ This repository is organized into stow packages:
 - **git** - Git configuration
 - **ssh** - SSH configuration
 - **wget** - Wget configuration
-- **certs** - Certificate files
 - **phoenix** - Phoenix window manager (macOS)
 - **ideavim** - IdeaVim configuration
 
